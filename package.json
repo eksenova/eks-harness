@@ -1,0 +1,42 @@
+{
+  "name": "@eks-harness/react-native",
+  "version": "0.1.0",
+  "description": "In-app bridge for eks-harness: lets the mobile driver read the React tree, press, fill, scroll, navigate, patch the UI live, inject overlays and fake device inputs in React Native dev builds",
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./expo": "./src/expo.ts"
+  },
+  "files": ["src"],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@react-navigation/native": ">=6",
+    "expo-document-picker": "*",
+    "expo-file-system": "*",
+    "expo-image-picker": "*",
+    "react": ">=18",
+    "react-native": ">=0.74"
+  },
+  "peerDependenciesMeta": {
+    "@react-navigation/native": { "optional": false },
+    "expo-document-picker": { "optional": true },
+    "expo-file-system": { "optional": true },
+    "expo-image-picker": { "optional": true }
+  },
+  "devDependencies": {
+    "@react-navigation/native": "^7.1.0",
+    "@types/react": "^19.1.0",
+    "expo-document-picker": "^14.0.0",
+    "expo-file-system": "^19.0.0",
+    "expo-image-picker": "^17.0.0",
+    "react": "^19.1.0",
+    "react-native": "^0.81.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
