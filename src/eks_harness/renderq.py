@@ -157,18 +157,8 @@ def attach_lease(sid: str | None, ticket_id: str | None = None) -> bool:
     return True
 
 
-def lease_holder(sid: str | None, items: list[Ticket] | None = None) -> str | None:
-    if not sid:
-        return None
-    for ticket in items if items is not None else tickets():
-        if ticket.started_at is not None and sid in ticket.leases:
-            return ticket.id
-    return None
-
-
 @contextlib.contextmanager
 def render_slot(kind: str, label: str, *, session: str | None = None, inherit: str | None = None,
-                lease: str | None = None,
                 on_wait: Callable[[int, Ticket], None] | None = None) -> Iterator[Ticket | None]:
     depth = getattr(_LOCAL, "depth", 0)
     if depth:
@@ -180,7 +170,7 @@ def render_slot(kind: str, label: str, *, session: str | None = None, inherit: s
         return
     folder = queue_dir()
     current = tickets(folder)
-    if _held_by_parent(current) or holding(inherit, current) or lease_holder(lease, current):
+    if _held_by_parent(current) or holding(inherit, current):
         yield None
         return
     ticket = Ticket(id=f"{time.time_ns()}-{os.getpid()}-{secrets.token_hex(3)}", kind=kind, label=label[:200],

@@ -75,7 +75,7 @@ def test_other_process_waits_for_the_slot(paths, fast, tmp_path):
         import pathlib, time
         from eks_harness import renderq
         renderq.POLL_SECONDS = 0.02
-        with renderq.render_slot("encode", "other"):
+        with renderq.render_slot("render", "other"):
             pathlib.Path({str(marker)!r}).write_text(str(time.time()))
     """)
     with renderq.render_slot("render", "first"):
@@ -183,36 +183,18 @@ def test_leases_taken_inside_a_render_link_to_it(client, db, paths, fast, monkey
     assert "renderSlot" not in client.get(f"/api/leases/{plain['sid']}").json()["meta"]
 
 
-def test_encodes_share_the_render_lane(paths, fast, monkeypatch, tmp_path):
+def test_encodes_never_queue_behind_a_render(paths, fast, monkeypatch, tmp_path):
     from eks_harness.store import encode
 
-    ran = []
-    monkeypatch.setattr(encode, "_encode_recording", lambda *a, **k: ran.append(time.time()) or "ok")
+    monkeypatch.setattr(encode, "_tools", lambda: (_ for _ in ()).throw(encode.EncodeError("no tools")))
     with renderq.render_slot("render", "ad"):
-        renderq.attach_lease("abc123")
-        assert encode.encode_recording(tmp_path / "a.mov", tmp_path / "a.mp4", lease="abc123") == "ok"
-        assert renderq.status()["running"] == 1
-        started = threading.Event()
-        worker = threading.Thread(target=lambda: (started.set(),
-                                                  encode.encode_recording(tmp_path / "b.mov", tmp_path / "b.mp4",
-                                                                          lease="other")), daemon=True)
-        worker.start()
-        started.wait(5)
-        time.sleep(0.3)
-        assert len(ran) == 1 and renderq.status()["waiting"] == 1
-        released = time.time()
-    worker.join(5)
-    assert len(ran) == 2 and ran[1] >= released
-
-
-def test_encode_command_takes_the_lease_from_its_worker(paths, fast, monkeypatch, tmp_path):
-    from eks_harness.capture import encode as command
-
-    seen = {}
-    monkeypatch.setattr(command, "encode_recording",
-                        lambda *a, **k: seen.update(k) or (_ for _ in ()).throw(command.EncodeError("stop")))
-    (tmp_path / "in.mov").write_bytes(b"x")
-    monkeypatch.setenv("EHX_LEASE_SID", "w0rk3r")
-    assert command.main([str(tmp_path / "in.mov")]) == 1
-    assert seen["lease"] == "w0rk3r"
-
+        env = {k: v for k, v in os.environ.items() if k != renderq.HOLDER_ENV}
+        script = textwrap.dedent(f"""
+            from eks_harness.capture import encode
+            raise SystemExit(encode.main(["--timed-frames", {str(tmp_path / "frames")!r}, "--out", {str(tmp_path / "o.mp4")!r}]))
+        """)
+        out = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True, timeout=30)
+        assert out.returncode == 1, out.stderr
+        with pytest.raises(encode.EncodeError):
+            encode.encode_recording(tmp_path / "a.mov", tmp_path / "a.mp4")
+        assert renderq.status()["waiting"] == 0

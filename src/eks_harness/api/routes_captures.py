@@ -252,7 +252,7 @@ async def encode_and_store(ctx: AppContext, principal: Principal, lease: Lease, 
     full_path = raw.with_name(raw.stem + "-full.mp4")
     try:
         result = await run_in_threadpool(encode_recording, raw, full_path, pad_to=pad_to, trim=trim,
-                                         events=step_times(meta.get("steps")), lease=lease.sid)
+                                         events=step_times(meta.get("steps")))
     except EncodeError as error:
         kept = await store_file(ctx, principal, lease, raw, "video", caption=body.caption,
                                 tags=merged_tags(body.tags, "unencoded"),

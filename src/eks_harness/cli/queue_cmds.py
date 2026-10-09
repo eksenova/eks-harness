@@ -28,9 +28,10 @@ def cmd_queue(args: argparse.Namespace) -> int:
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
-    parser = subparsers.add_parser("queue", help="the render queue: video renders and recording encodes, one at a time",
-                                   description="Video renders and recording encodes on this machine share one lane and run one at a "
-                                               "time (render.concurrency); the rest wait first in, first out.")
+    parser = subparsers.add_parser("queue", help="the render queue: video renders, one at a time",
+                                   description="Video renders on this machine run one at a time (render.concurrency); "
+                                               "the rest wait first in, first out. Recording encodes run under their "
+                                               "device lease and do not queue.")
     parser.add_argument("--local", action="store_true", help="read the queue files directly (no daemon needed)")
     parser.add_argument("--json", action="store_true", help="print JSON")
     parser.set_defaults(func=cmd_queue)

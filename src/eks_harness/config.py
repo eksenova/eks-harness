@@ -109,7 +109,7 @@ _SETTINGS: list[Setting] = [
     Setting("live.idleStopSeconds", 10, "int", "stop a live stream producer this long after its last viewer leaves", minimum=0),
     Setting("live.maxFps", 10, "int", "frame rate cap of live streams", minimum=1, maximum=60),
     Setting("live.jpegQuality", 70, "int", "JPEG quality of live stream frames", minimum=10, maximum=100),
-    Setting("render.concurrency", 1, "int", "video renders and recording encodes that run at once on this machine (one shared lane); the rest wait first in, first out. Driver sessions and live recording never wait, and encodes for the leases a running render took use its slot", minimum=1),
+    Setting("render.concurrency", 1, "int", "video renders that run at once on this machine; the rest wait first in, first out. Driver sessions, recording and recording encodes run under their device lease and never wait", minimum=1),
     Setting("capture.pace.moveMs", 300, "int", "visible pointer travel to the target before each action, in ms", minimum=0),
     Setting("capture.pace.dwellMs", 400, "int", "pause on the target before each action, in ms", minimum=0),
     Setting("capture.pace.typeMsPerChar", 40, "int", "delay between typed characters, in ms", minimum=0),
