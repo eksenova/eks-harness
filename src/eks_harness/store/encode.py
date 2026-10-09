@@ -164,10 +164,11 @@ def _ffmpeg(ffmpeg: str, args: list[str], output: Path) -> None:
 
 
 def encode_recording(source: Path, out: Path, *, pad_to: float | None = None, trim: bool = False,
-                     crop: str | None = None, events: list[float] | None = None) -> EncodeResult:
+                     crop: str | None = None, events: list[float] | None = None,
+                     lease: str | None = None) -> EncodeResult:
     from eks_harness.renderq import render_slot
 
-    with render_slot("encode", Path(out).name):
+    with render_slot("encode", Path(out).name, lease=lease, session=lease):
         return _encode_recording(source, out, pad_to=pad_to, trim=trim, crop=crop, events=events)
 
 

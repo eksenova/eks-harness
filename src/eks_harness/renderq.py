@@ -9,7 +9,7 @@ import socket
 import threading
 import time
 from collections.abc import Callable, Iterator
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 _LOG = logging.getLogger(__name__)
@@ -28,6 +28,7 @@ class Ticket:
     host: str
     queued_at: float
     started_at: float | None = None
+    leases: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -130,8 +131,44 @@ def _held_by_parent(items: list[Ticket]) -> bool:
     return bool(holder) and any(t.id == holder and t.started_at is not None and t.pid != os.getpid() for t in items)
 
 
+def holding(ticket_id: str | None, items: list[Ticket] | None = None) -> bool:
+    if not ticket_id:
+        return False
+    return any(t.id == ticket_id and t.started_at is not None for t in (items if items is not None else tickets()))
+
+
+def current_holder() -> str | None:
+    return os.environ.get(HOLDER_ENV) or None
+
+
+def attach_lease(sid: str | None, ticket_id: str | None = None) -> bool:
+    ticket_id = ticket_id or current_holder()
+    if not sid or not ticket_id:
+        return False
+    folder = queue_dir()
+    with _locked(folder):
+        path = folder / f"{ticket_id}.json"
+        ticket = _read(path)
+        if ticket is None:
+            return False
+        if sid not in ticket.leases:
+            ticket.leases.append(sid)
+            _write(folder, ticket)
+    return True
+
+
+def lease_holder(sid: str | None, items: list[Ticket] | None = None) -> str | None:
+    if not sid:
+        return None
+    for ticket in items if items is not None else tickets():
+        if ticket.started_at is not None and sid in ticket.leases:
+            return ticket.id
+    return None
+
+
 @contextlib.contextmanager
-def render_slot(kind: str, label: str, *, session: str | None = None,
+def render_slot(kind: str, label: str, *, session: str | None = None, inherit: str | None = None,
+                lease: str | None = None,
                 on_wait: Callable[[int, Ticket], None] | None = None) -> Iterator[Ticket | None]:
     depth = getattr(_LOCAL, "depth", 0)
     if depth:
@@ -142,7 +179,8 @@ def render_slot(kind: str, label: str, *, session: str | None = None,
             _LOCAL.depth -= 1
         return
     folder = queue_dir()
-    if _held_by_parent(tickets(folder)):
+    current = tickets(folder)
+    if _held_by_parent(current) or holding(inherit, current) or lease_holder(lease, current):
         yield None
         return
     ticket = Ticket(id=f"{time.time_ns()}-{os.getpid()}-{secrets.token_hex(3)}", kind=kind, label=label[:200],

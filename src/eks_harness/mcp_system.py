@@ -176,7 +176,7 @@ def register_system_tools(server: MCPServer, tools: HarnessTools) -> None:
         return {"ok": data["ok"], "text": data["text"], "report": data["artifact"].get("url"),
                 "results": data["report"]["results"], "detected": data["report"].get("detected")}
 
-    @server.tool(description="The render queue: video renders and recording encodes run one at a time on the hub "
+    @server.tool(description="The render queue: video renders and recording encodes share one lane and run one at a time on the hub "
                              "machine (render.concurrency); shows what renders now and what waits, in order.",
                  annotations=READ_ONLY)
     def render_queue() -> dict[str, Any]:

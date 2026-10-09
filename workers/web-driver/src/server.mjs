@@ -978,7 +978,7 @@ const ENCODER = CONFIG.encoder ?? ['python3', '-m', 'eks_harness.capture.encode'
 
 function runEncoder(args) {
   const [command, ...prefix] = ENCODER
-  const result = spawnSync(command, [...prefix, ...args], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, env: { ...process.env, ...(CONFIG.encoderEnv ?? {}) } })
+  const result = spawnSync(command, [...prefix, ...args], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, env: { ...process.env, ...(LEASE_SID ? { EHX_LEASE_SID: LEASE_SID } : {}), ...(CONFIG.encoderEnv ?? {}) } })
   return result
 }
 

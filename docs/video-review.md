@@ -51,8 +51,9 @@ report = run_checks("render.mp4", load_expectations("expectations.json"))
 report.ok, report.as_dict(), report.text()
 ```
 
-Sheets and checks only read the video and run right away. The video renders and recording encodes that
-produce what you review wait in the machine's render queue: one runs at a time (`render.concurrency`), the
+Sheets and checks only read the video and run right away, as do driver sessions and live recording. Video
+renders and recording encodes share the machine's render queue (encodes for the leases a running render
+took use that render's slot): one runs at a time (`render.concurrency`), the
 rest first in, first out (`eks-harness queue`).
 
 ## Contact sheet

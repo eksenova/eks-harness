@@ -50,10 +50,17 @@ def require_control(request: Request, token: str | None) -> str:
 
 
 @router.get("/api/render-queue")
-def render_queue(_: Principal = Depends(current_principal)) -> dict:
+def render_queue(request: Request, _: Principal = Depends(current_principal)) -> dict:
     from eks_harness import renderq
+    from eks_harness.db.repos import leases as leases_repo
 
-    return renderq.status()
+    data = renderq.status()
+    held = leases_repo.holding(get_ctx(request).db.conn())
+    for item in data["items"]:
+        sids = set(item.get("leases") or [])
+        item["leases"] = [{"sid": lease.sid, "kind": lease.kind, "resource": lease.resource} for lease in held
+                          if lease.sid in sids or (lease.meta or {}).get("renderSlot") == item["id"]]
+    return data
 
 
 @router.get("/api/version", response_model=VersionResponse)

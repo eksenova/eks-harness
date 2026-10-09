@@ -105,19 +105,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--crop", help="W:H:X:Y")
     parser.add_argument("--pad-to", type=float, help="make the clip exactly this many seconds long")
     parser.add_argument("--json", action="store_true", help="print a JSON result instead of paths")
+    parser.add_argument("--sid", default=os.environ.get("EHX_LEASE_SID") or None,
+                        help="lease of the recording; inside a render that holds this lease the encode uses its slot")
     args = parser.parse_args(argv)
     events = event_times(read_jsonl(args.step_log)) if args.step_log and args.step_log.is_file() else None
     try:
         if args.timed_frames:
             if not args.out:
                 parser.error("--timed-frames needs --out")
-            result = encode_timed_frames(args.timed_frames, args.out, trim=args.trim, events=events, crop=args.crop)
+            from eks_harness.renderq import render_slot
+
+            with render_slot("encode", args.out.name, lease=args.sid, session=args.sid):
+                result = encode_timed_frames(args.timed_frames, args.out, trim=args.trim, events=events,
+                                             crop=args.crop)
         elif args.input:
             source = Path(args.input)
             out = args.out or source.with_suffix(".mp4")
             if out.resolve() == source.resolve():
                 out = source.with_name(source.stem + "-encoded.mp4")
-            result = encode_recording(source, out, pad_to=args.pad_to, trim=args.trim, crop=args.crop, events=events)
+            result = encode_recording(source, out, pad_to=args.pad_to, trim=args.trim, crop=args.crop, events=events,
+                                      lease=args.sid)
         else:
             parser.error("pass an input video or --timed-frames")
     except EncodeError as error:

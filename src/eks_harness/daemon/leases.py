@@ -180,7 +180,8 @@ class LeaseManager:
                                        tree=body.get("tree") or existing.tree,
                                        state_dir=body.get("state_dir") or existing.state_dir,
                                        label=body.get("label") or existing.label,
-                                       meta={**(existing.meta or {}), "tags": list(body.get("tags") or [])})
+                                       meta={**(existing.meta or {}), "tags": list(body.get("tags") or []),
+                                             "renderSlot": body.get("render_slot")})
                     lease = leases_repo.get(conn, existing.id)
                     if moved:
                         self.lease_event(pending, ev.LEASE_ACQUIRED, lease, actor,
@@ -196,7 +197,8 @@ class LeaseManager:
                         owner_started=body.get("owner_started"), tree=body.get("tree"),
                         state_dir=body.get("state_dir"), label=body.get("label"),
                         previous_sid=body.get("previous_sid"),
-                        meta={**(body.get("meta") or {}), **({"tags": list(body["tags"])} if body.get("tags") else {})})
+                        meta={**(body.get("meta") or {}), **({"tags": list(body["tags"])} if body.get("tags") else {}),
+                              **({"renderSlot": body["render_slot"]} if body.get("render_slot") else {})})
                     self.lease_event(pending, ev.LEASE_QUEUED, lease, actor)
             self.publish(pending)
             self.process_queue()

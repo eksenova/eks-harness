@@ -7,7 +7,6 @@ import sys
 import textwrap
 import threading
 import time
-from pathlib import Path
 
 import pytest
 
@@ -125,15 +124,6 @@ def test_concurrency_setting(paths, fast):
     assert sorted(inside) == ["x", "y"]
 
 
-def test_encode_recording_takes_a_slot(paths, fast, monkeypatch, tmp_path):
-    from eks_harness.store import encode
-
-    seen = []
-    monkeypatch.setattr(encode, "_encode_recording", lambda *a, **k: seen.append(renderq.status()["running"]) or "done")
-    assert encode.encode_recording(tmp_path / "in.mov", tmp_path / "out.mp4") == "done"
-    assert seen == [1]
-
-
 def test_queue_api_and_cli(client, paths, fast, capsys):
     from eks_harness.cli import main
 
@@ -143,3 +133,86 @@ def test_queue_api_and_cli(client, paths, fast, capsys):
         capsys.readouterr()
         assert main(["queue", "--local", "--json"]) == 0
         assert json.loads(capsys.readouterr().out)["items"][0]["label"] == "visible"
+
+
+def test_inherited_slot_does_not_wait(paths, fast):
+    folder = renderq.queue_dir()
+    other = renderq.Ticket(id="9-holder", kind="render", label="ad", session=None, pid=os.getppid(),
+                           host=renderq.socket.gethostname(), queued_at=time.time(), started_at=time.time())
+    (folder / "9-holder.json").write_text(json.dumps(other.as_dict()))
+    with renderq.render_slot("render", "on behalf", inherit="9-holder") as mine:
+        assert mine is None
+    done = threading.Event()
+
+    def blocked():
+        with renderq.render_slot("render", "unrelated"):
+            done.set()
+
+    thread = threading.Thread(target=blocked, daemon=True)
+    thread.start()
+    assert not done.wait(0.3)
+    (folder / "9-holder.json").unlink()
+    assert done.wait(5)
+
+
+def test_leases_taken_inside_a_render_link_to_it(client, db, paths, fast, monkeypatch):
+    from conftest import ensure_session
+
+    from eks_harness.flows import runner
+
+    ensure_session(db, "acme/ads", "render")
+    sent = {}
+
+    def fake_wait(client_, path, body, wait, kind):
+        sent.update(body)
+        return client.post(path, json=body).json()
+
+    monkeypatch.setattr("eks_harness.cli.lease_cmds.wait_for_lease", fake_wait)
+    with renderq.render_slot("render", "ad") as ticket:
+        lease = runner.acquire(None, kind="browser", project="acme/ads", session="render", instance="ad-render",
+                               tree=None, wait=5)
+        assert sent["renderSlot"] == ticket.id
+        assert client.get(f"/api/leases/{lease['sid']}").json()["meta"]["renderSlot"] == ticket.id
+        queue = client.get("/api/render-queue").json()
+        assert queue["items"][0]["leases"] == [{"sid": lease["sid"], "kind": "browser", "resource": lease["resource"]}]
+        assert renderq.status()["items"][0]["leases"] == [lease["sid"]]
+    sent.clear()
+    plain = runner.acquire(None, kind="browser", project="acme/ads", session="render", instance="other", tree=None,
+                           wait=5)
+    assert "renderSlot" not in sent
+    assert "renderSlot" not in client.get(f"/api/leases/{plain['sid']}").json()["meta"]
+
+
+def test_encodes_share_the_render_lane(paths, fast, monkeypatch, tmp_path):
+    from eks_harness.store import encode
+
+    ran = []
+    monkeypatch.setattr(encode, "_encode_recording", lambda *a, **k: ran.append(time.time()) or "ok")
+    with renderq.render_slot("render", "ad"):
+        renderq.attach_lease("abc123")
+        assert encode.encode_recording(tmp_path / "a.mov", tmp_path / "a.mp4", lease="abc123") == "ok"
+        assert renderq.status()["running"] == 1
+        started = threading.Event()
+        worker = threading.Thread(target=lambda: (started.set(),
+                                                  encode.encode_recording(tmp_path / "b.mov", tmp_path / "b.mp4",
+                                                                          lease="other")), daemon=True)
+        worker.start()
+        started.wait(5)
+        time.sleep(0.3)
+        assert len(ran) == 1 and renderq.status()["waiting"] == 1
+        released = time.time()
+    worker.join(5)
+    assert len(ran) == 2 and ran[1] >= released
+
+
+def test_encode_command_takes_the_lease_from_its_worker(paths, fast, monkeypatch, tmp_path):
+    from eks_harness.capture import encode as command
+
+    seen = {}
+    monkeypatch.setattr(command, "encode_recording",
+                        lambda *a, **k: seen.update(k) or (_ for _ in ()).throw(command.EncodeError("stop")))
+    (tmp_path / "in.mov").write_bytes(b"x")
+    monkeypatch.setenv("EHX_LEASE_SID", "w0rk3r")
+    assert command.main([str(tmp_path / "in.mov")]) == 1
+    assert seen["lease"] == "w0rk3r"
+

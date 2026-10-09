@@ -127,7 +127,16 @@ def acquire(client: Any, *, kind: str, project: str, session: str, instance: str
 
     body = {"kind": kind, "project": project, "session": session, "instance": instance,
             "tree": str(tree) if tree else None, "label": "flow", "tags": list(tags)}
-    return wait_for_lease(client, "/api/leases/acquire", body, wait, kind)
+    from eks_harness.renderq import current_holder
+
+    if current_holder():
+        body["renderSlot"] = current_holder()
+    lease = wait_for_lease(client, "/api/leases/acquire", body, wait, kind)
+    if current_holder() and lease.get("sid"):
+        from eks_harness.renderq import attach_lease
+
+        attach_lease(lease["sid"])
+    return lease
 
 
 @dataclass

@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "eks-harness": {
+      "source": {
+        "source": "github",
+        "repo": "eksenova/eks-harness"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "eks-harness@eks-harness": true
+  }
+}
