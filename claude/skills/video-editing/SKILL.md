@@ -18,6 +18,10 @@ project, write or modify a Python file (`project.py`) that defines a
 top-level `project = Project(...)` value. Every constructor argument is
 type-checked; the schema is the authoritative contract.
 
+After every render, judge it with the `video-review` skill: `eks-harness video sheet` for one image of the
+whole video with its audio and beat ticks, and `eks-harness video check` against the timeline you expect
+(cuts on beats, text and logos by their cue, loudness), instead of opening frames one by one.
+
 ## How to think in the video engine
 
 There are five concepts to internalise before you can move quickly:

@@ -81,7 +81,10 @@ def render_html_overlay_segment(plan: "_SegmentPlan", ctx: "RenderContext") -> P
     seg_start = float(resolve_time(plan.segment.in_, project, ctx.markers))
     seg_end = seg_start + seg_duration
 
-    template_path = Path(media.template).resolve()
+    template_path = Path(media.template)
+    if not template_path.is_absolute():
+        template_path = ctx.workspace / template_path
+    template_path = template_path.resolve()
     if not template_path.exists():
         raise FileNotFoundError(f"HTMLOverlay template not found: {template_path}")
     template_html = template_path.read_text(encoding="utf-8")

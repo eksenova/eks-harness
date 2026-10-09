@@ -57,6 +57,8 @@ text, or `{"role": "button", "name": "Save", "nth": 1}`.
 ## Working rules
 
 1. One flow per question; rerun the whole flow after a fix (it takes seconds).
-2. Read every screenshot and every contact sheet the report prints before you conclude anything.
+2. Read every screenshot and every contact sheet the report prints before you conclude anything. For timing
+   questions (did the toast appear by 2 s, does the cut land on the beat) run `eks-harness video check` on the
+   recording (skill `video-review`).
 3. Check the checkpoint lines: URL or route, layout spill, console errors, failed requests, alerts.
 4. Release the lease when the work is done: `eks-harness lease release` (or `--release` on the run).

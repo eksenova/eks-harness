@@ -327,6 +327,7 @@ export function ArtifactPage({ owner, name, slug, id, shared = false }: { owner?
           <CaptionEditor artifact={data} editable={editable && !disabled} controlRef={captionRef} />
           <TagsEditor artifact={data} editable={editable && !disabled} inputRef={tagRef} projectId={sharedSlug ? null : projectId} slug={sessionSlug} onColor={editable && !disabled ? setColorTag : undefined} />
           <PluginSlot slot="artifact.viewer" props={{ artifact: data as unknown as Record<string, unknown> }} />
+          <ReviewLinks artifact={data} hrefFor={hrefFor} />
           <section className="inspector-section">
             <h2 className="inspector-title">Links</h2>
             <DefList
@@ -558,6 +559,38 @@ function RetentionEditor({ artifact, editable, projectId }: { artifact: Artifact
         </form>
       ) : null}
       {error ? <p className="field-error">{error}</p> : null}
+    </section>
+  );
+}
+
+function ReviewLinks({ artifact, hrefFor }: { artifact: ArtifactOut; hrefFor: (id: string) => string }) {
+  const meta = (artifact.meta ?? {}) as Record<string, unknown>;
+  const video = typeof meta.video === "string" ? meta.video : null;
+  const sheets = Array.isArray(meta.sheets) ? meta.sheets.filter((id): id is string => typeof id === "string") : [];
+  const checks = typeof meta.checks === "string" ? meta.checks : null;
+  const role = meta.role === "checks" ? "checks" : meta.role === "sheet" ? "sheet" : null;
+  const verdict = role === "checks" ? meta.ok : meta.checksOk;
+  if (!video && !sheets.length && !checks) return null;
+  const link = (id: string, text: string) => (
+    <Link to={hrefFor(id)} className="link" title={id}>
+      {text}
+    </Link>
+  );
+  const outcome = typeof verdict === "boolean" ? (verdict ? "all checks pass" : "checks failed") : null;
+  return (
+    <section className="inspector-section">
+      <h2 className="inspector-title">Review</h2>
+      <DefList
+        items={[
+          video ? { label: "Video", value: link(video, "Open the video") } : null,
+          ...(role === "sheet" ? [] : sheets.map((id, index) => ({
+            label: sheets.length > 1 ? `Contact sheet ${index + 1}/${sheets.length}` : "Contact sheet",
+            value: link(id, "Open the sheet"),
+          }))),
+          checks && role !== "checks" ? { label: "Checks", value: link(checks, outcome ? `Report: ${outcome}` : "Open the report") } : null,
+          role === "checks" && outcome ? { label: "Verdict", value: outcome[0].toUpperCase() + outcome.slice(1) } : null,
+        ]}
+      />
     </section>
   );
 }

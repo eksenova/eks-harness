@@ -14,8 +14,11 @@ You make videos with eks-harness. Load `eks-harness:video-editing`, `eks-harness
    reference (`downbeat:4`, `cue:drop+2f`) so changes to the song or window move everything together.
 3. Check cheaply before rendering: `eks-harness video validate`, `eks-harness score plan` (every action's
    frame and cause), preview renders at reduced size (`--mode preview`).
-4. Render, then look: extract frames at the cue points with ffmpeg and Read them; check sync on the beats
-   you care about.
+4. Render, then look (skill `eks-harness:video-review`): `eks-harness video sheet <artifact>` with the
+   beats, downbeats and cues as markers gives one image of the whole render with its audio strip; Read it.
+   Then `eks-harness video check <artifact> expectations.json` measures cuts, text, logos, black or frozen
+   spans and loudness against the times you expect and reports the delta in frames. Do not open frames
+   one by one.
 5. Publish with `eks-harness studio publish <project>` and give the user the studio link and the
    artifact's direct link.
 

@@ -155,6 +155,40 @@ def contact_sheet(video: Path, out: Path, marks: list[dict] | None = None, count
     return out
 
 
+def marks_to_markers(marks: list[dict] | None) -> dict:
+    ticks, frames = [], []
+    for mark in marks or []:
+        try:
+            at = float(mark.get("at") or 0)
+        except (TypeError, ValueError):
+            continue
+        kind = str(mark.get("kind") or "mark")
+        label = f"{kind}: {mark.get('text') or ''}".strip(": ")[:40]
+        ticks.append({"t": at, "kind": "cue", "label": label})
+        frames.append({"t": at + 0.5, "label": label})
+    return {"markers": ticks, "frames": frames}
+
+
+def stored_sheet(client: Any, art: Artifact, out: Path) -> bool:
+    from eks_harness.cli.client import NotFound
+
+    try:
+        data = client.post(f"/api/artifacts/{art.id}/sheet", json={"markers": marks_to_markers(art.marks)},
+                           timeout=900)
+    except NotFound:
+        return False
+    sheets = data.get("sheets") or []
+    found = download(client, [s["id"] for s in sheets], out)
+    rows = [{"page": s.get("url"), "local": str(found[s["id"]]) if s["id"] in found else None,
+             "range": s.get("range")} for s in sheets]
+    if rows:
+        art.sheet = rows[0]["local"] or rows[0]["page"]
+        art.extra["sheetPage"] = rows[0]["page"]
+        if len(rows) > 1:
+            art.extra["sheets"] = rows
+    return bool(rows)
+
+
 class Timer:
     def __init__(self) -> None:
         self.t0 = time.monotonic()

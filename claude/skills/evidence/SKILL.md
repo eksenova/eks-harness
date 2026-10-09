@@ -18,7 +18,8 @@ eks-harness upload file.png --project acme/web --session feature/x --caption "..
 
 - Artifact links: `url` (page in the UI, needs login), `rawUrl` (the file), share links for people
   without a login. Present links, not just descriptions.
-- Before you report a capture, download and Read it; for videos Read the contact sheet.
+- Before you report a capture, download and Read it; for videos Read the contact sheet
+  (`eks-harness video sheet <id>`) and measure timing with `eks-harness video check` (skill `video-review`).
 - Pull requests that change UI carry evidence: screenshots (and a video for animated changes) as share
   links in the body. A change with no visible effect says `NO-UI-EVIDENCE` and why. The plugin's PR guard
   checks this for the paths a repo lists in `[claude] ui_paths`.

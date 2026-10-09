@@ -34,6 +34,7 @@ Claude Code plugin (skills, agents, hooks, commands and the MCP server):
 | Artifact | any stored output with links, tags, retention and share links |
 | Backend | a service stack an app talks to, run and seeded by a plugin |
 | Score | one timeline for video edits, Blender scenes, web scenes, device takes and audio |
+| Review | a video's contact sheet (one image) and machine checks against an expected timeline (`docs/video-review.md`) |
 | Node | a machine that dials the hub and runs jobs in GPU and CPU slots |
 | Plugin | a folder or package with `harness-plugin.toml` that contributes anything above |
 
@@ -60,7 +61,8 @@ eks-harness plugin new backend acme.api .harness/plugins/api
 
 `eks-harness` (alias `ehx`): `setup`, `doctor`, `daemon`, `config`, `login`, `projects`, `sessions`,
 `artifacts`, `share`, `search`, `annotate`, `lease`, `devices`, `profiles`, `browsers`, `capture`,
-`backend`, `flow`, `driver`, `node`, `job`, `plugin`, `video`, `studio`, `score`, `migrate`, `mcp`.
+`backend`, `flow`, `driver`, `node`, `job`, `plugin`, `video` (including `video sheet` and `video check`), `studio`,
+`score`, `migrate`, `mcp`.
 `eks-harness help <command>` shows details; `--json` prints plain JSON.
 
 ## Development

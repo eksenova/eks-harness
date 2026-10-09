@@ -30,6 +30,10 @@ def configure(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     )
     doctor.add_argument("--ffmpeg", default="ffmpeg")
 
+    from eks_harness.cli.review_cmds import add_arguments
+
+    add_arguments(sub)
+
     init = sub.add_parser(
         "init",
         help="Scaffold a project from a cookbook template",

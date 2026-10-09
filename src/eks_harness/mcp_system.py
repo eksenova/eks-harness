@@ -135,6 +135,47 @@ def register_system_tools(server: MCPServer, tools: HarnessTools) -> None:
         return tools.call("POST", "/api/backends/ensure", json={"definition": definition, "instance": instance,
                                                                 "tree": _tree(tree)}, timeout=300)
 
+    @server.tool(description="Contact sheet of a video artifact: one image with evenly spaced frames labelled by "
+                             "time and frame number, highlighted frames at given cues, and the audio waveform with "
+                             "beat, downbeat and cue ticks. Stored next to the video; the sheet images are returned "
+                             "so you can look at the whole video at once.", annotations=WRITE)
+    def video_sheet(artifact_id: Annotated[str, Field(description="Video artifact id")],
+                    markers: Annotated[dict[str, Any] | list[Any] | None, Field(
+                        description="{beats: [s], downbeats: [s], cues: [{t, label}], markers: [{t, kind, label}], "
+                                    "frames: [{t, label}]}; cues and frames become highlighted tiles")] = None,
+                    frames: Annotated[int | None, Field(ge=1, le=400, description="Evenly spaced frames "
+                                                        "(default 2 per second, 12 to 96)")] = None,
+                    images: Annotated[bool, Field(description="Attach the sheet images")] = True) -> list[Any]:
+        from mcp.server.mcpserver import Image
+
+        data = tools.call("POST", f"/api/artifacts/{quote(artifact_id.strip().upper(), safe='')}/sheet",
+                          json={"markers": markers, "frames": frames}, timeout=900)
+        summary = {"video": data["video"].get("url"), "info": data.get("info"),
+                   "sheets": [{"id": s["id"], "page": s.get("url"), "part": s["part"], "parts": s["parts"],
+                               "range": s["range"], "tiles": s["tiles"]} for s in data["sheets"]]}
+        content: list[Any] = [summary]
+        if images:
+            for sheet in data["sheets"]:
+                raw = tools.fetch_bytes(f"/raw/{quote(sheet['id'], safe='')}/{quote(sheet['filename'], safe='')}",
+                                        8 * 1024 * 1024)
+                if raw is not None:
+                    content.append(Image(data=raw, format="jpeg"))
+        return content
+
+    @server.tool(description="Check a video artifact against an expected timeline. expectations is "
+                             "{tolerance_frames, checks: [{t, kind, params, tolerance_frames, label}]} with kinds "
+                             "cut, motion, text (local OCR), visual (template or colour in a box), black, frozen, "
+                             "safe_area, loudness, onset, beats and plugin kinds. Returns pass/fail with measured vs "
+                             "expected times and the delta in frames, and stores the report next to the video.",
+                 annotations=WRITE)
+    def video_check(artifact_id: Annotated[str, Field(description="Video artifact id")],
+                    expectations: Annotated[dict[str, Any] | list[Any], Field(description="Checks to run")],
+                    tree: TreeArg = None) -> dict[str, Any]:
+        data = tools.call("POST", f"/api/artifacts/{quote(artifact_id.strip().upper(), safe='')}/checks",
+                          json={"expectations": expectations, "tree": _tree(tree)}, timeout=1800)
+        return {"ok": data["ok"], "text": data["text"], "report": data["artifact"].get("url"),
+                "results": data["report"]["results"], "detected": data["report"].get("detected")}
+
     @server.tool(description="Seed a running backend with a scenario from the seeder plugins.", annotations=WRITE)
     def seed_backend(backend_id: str, scenario: str | None = None, seeder: str | None = None) -> dict[str, Any]:
         return tools.call("POST", f"/api/backends/{quote(backend_id, safe='@:')}/seed",

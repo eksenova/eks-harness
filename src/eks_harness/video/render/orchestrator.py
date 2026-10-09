@@ -596,6 +596,15 @@ class Renderer:
             processors.append(plugin.open(effect, ctx))
 
         media_path = plan.media_path
+        if media_path is None and isinstance(plan.segment.media, HTMLOverlay):
+            if plan.segment.media.transparent:
+                raise NotImplementedError(
+                    "frame-pipeline effects on a transparent HTMLOverlay are not supported; "
+                    "set transparent=False or move the effects to a track below it"
+                )
+            from . import html_renderer
+
+            media_path = html_renderer.render_html_overlay_segment(plan, ctx)
         if media_path is None:
             raise NotImplementedError(
                 "hybrid frame pipeline currently requires a file-backed media source"
@@ -642,6 +651,8 @@ class Renderer:
         * ``plan.graph_prefix`` is empty, so the only decode-side filter is the
           time-invariant base ``scale`` - animated graph prefixes are
           time-dependent and would not survive the per-chunk window rebuild.
+        * the segment is not an ``HTMLOverlay`` (each worker would re-render
+          the whole page);
         * the worker can reconstruct the project (``project.py`` is present in
           the workspace).
 
@@ -654,6 +665,8 @@ class Renderer:
         )
 
         if plan.graph_prefix:
+            return 1
+        if isinstance(plan.segment.media, HTMLOverlay):
             return 1
         if frame_count < 2 * MIN_CHUNK_FRAMES:
             return 1

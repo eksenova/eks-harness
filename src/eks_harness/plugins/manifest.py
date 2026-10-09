@@ -37,6 +37,7 @@ CONTRIBUTION_TYPES: dict[str, str] = {
     "scene_engine": "runs scenes on a clock",
     "score_track": "a score track type",
     "encoder": "a video encoder",
+    "video_check": "a machine check for video review (cuts, text, loudness, ...)",
     "node_capability": "a capability a node can offer",
     "node_job": "a job kind nodes can run (frame ranges, scene previews, builds)",
     "mcp_tools": "MCP tools",

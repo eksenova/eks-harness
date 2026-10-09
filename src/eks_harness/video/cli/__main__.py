@@ -44,6 +44,8 @@ def run(args: argparse.Namespace) -> int:
         level=logging.DEBUG if getattr(args, "verbose", False) else logging.INFO,
         format="%(levelname)s %(name)s: %(message)s",
     )
+    if getattr(args, "review", None) is not None:
+        return args.review(args)
     handler = {
         "render": _cmd_render,
         "validate": _cmd_validate,

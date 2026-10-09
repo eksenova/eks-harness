@@ -105,7 +105,9 @@ def main() -> None:
                 seen.add(block["id"])
                 opened = read_later(line, block.get("local")) or read_later(line, block["id"])
                 if block["kind"] == "screenshot" and not opened:
-                    owed.append(f"screenshot {block['name']}: Read {block.get('local') or block['id']}")
+                    where = block.get("local") or (f"a local copy whose path contains {block['id']} "
+                                                   f"(eks-harness artifacts download {block['id']})")
+                    owed.append(f"screenshot {block['name']}: Read {where}")
                 if block["kind"] == "video" and not (opened or read_later(line, block.get("sheet"))
                                                      or frames_later(line, block["id"])):
                     owed.append(f"video {block['name']}: Read its contact sheet {block.get('sheet') or ''}".rstrip())

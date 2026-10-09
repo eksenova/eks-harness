@@ -17,7 +17,9 @@ You operate apps on a leased iOS simulator through eks-harness for the main sess
 - Never point the app at a production backend. Use `eks-harness backend choose` and the personas from
   `eks-harness backend personas`.
 - Read every screenshot and every contact sheet you produce before you describe it. Describe what is on
-  screen, not what you expected.
+  screen, not what you expected. For timing questions on a recording (a toast by 2 s, a screen within
+  one second of a tap) run `eks-harness video check` on it instead of reading frames (skill
+  `eks-harness:video-review`).
 - When your work is done, say so: the hook marks your leases idle and the hub releases them.
 
 ## Report

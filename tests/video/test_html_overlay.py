@@ -231,6 +231,128 @@ def test_html_overlay_renders_to_mp4(tmp_path: Path) -> None:
     assert 0.8 <= duration <= 1.3, f"unexpected duration: {duration}"
 
 
+def _require_chromium() -> None:
+    pytest.importorskip(
+        "playwright",
+        reason="HTMLOverlay requires `pip install eks-harness[html]`",
+    )
+    try:
+        from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]
+
+        with sync_playwright() as pw:
+            pw.chromium.launch(headless=True).close()
+    except Exception as exc:  # pragma: no cover - environment dependent
+        pytest.skip(
+            f"Playwright Chromium not available (run `playwright install chromium`): {exc}"
+        )
+
+
+def _html_project(template: Path, *, transparent: bool) -> Project:
+    from eks_harness.video import Animated, RGBSplit
+
+    return Project(
+        fps=24,
+        resolution=(320, 240),
+        duration=1.0,
+        render_settings=RenderSettings(pix_fmt="yuv420p"),
+        tracks=[
+            Track(
+                name="main",
+                segments=[
+                    Segment(
+                        id="s0",
+                        start=Seconds(t=0.0),
+                        in_=Seconds(t=0.0),
+                        out=Seconds(t=1.0),
+                        media=HTMLOverlay(
+                            template=str(template),
+                            transparent=transparent,
+                            viewport=(320, 240),
+                        ),
+                        effects=[RGBSplit(offset_x=Animated[int](root=6))],
+                    )
+                ],
+            )
+        ],
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
+    reason="ffmpeg/ffprobe binaries not on PATH",
+)
+def test_html_overlay_with_frame_pipeline_effect_renders(tmp_path: Path) -> None:
+    """An opaque ``HTMLOverlay`` is rasterised first and then fed through
+    the frame-pipeline tail (here ``RGBSplit``)."""
+
+    _require_chromium()
+    from eks_harness.video.render import RenderOptions, Renderer
+
+    template = tmp_path / "overlay.html"
+    template.write_text(_MINIMAL_HTML, encoding="utf-8")
+    out = tmp_path / "out.mp4"
+    Renderer(
+        _html_project(template, transparent=False),
+        RenderOptions(output=out, workspace=tmp_path),
+    ).render()
+
+    proc = subprocess.run(
+        [
+            "ffprobe",
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=nw=1:nk=1",
+            str(out),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    duration = float(proc.stdout.strip())
+    assert 0.8 <= duration <= 1.3, f"unexpected duration: {duration}"
+
+
+def test_transparent_html_overlay_rejects_frame_pipeline_effects(tmp_path: Path) -> None:
+    from eks_harness.video.render import RenderOptions, Renderer
+
+    template = tmp_path / "overlay.html"
+    template.write_text(_MINIMAL_HTML, encoding="utf-8")
+    renderer = Renderer(
+        _html_project(template, transparent=True),
+        RenderOptions(output=tmp_path / "out.mp4", workspace=tmp_path),
+    )
+    with pytest.raises(NotImplementedError, match="transparent HTMLOverlay"):
+        renderer.render()
+
+
+@pytest.mark.skipif(
+    shutil.which("ffmpeg") is None,
+    reason="ffmpeg binary not on PATH",
+)
+def test_html_overlay_relative_template_resolves_against_workspace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A relative ``template`` is looked up under the render workspace, not
+    the process cwd."""
+
+    _require_chromium()
+    from eks_harness.video.render import RenderOptions, Renderer
+
+    workspace = tmp_path / "proj"
+    (workspace / "overlays").mkdir(parents=True)
+    (workspace / "overlays" / "overlay.html").write_text(_MINIMAL_HTML, encoding="utf-8")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+
+    out = workspace / "out.mp4"
+    Renderer(
+        _html_project(Path("overlays/overlay.html"), transparent=False),
+        RenderOptions(output=out, workspace=workspace),
+    ).render()
+    assert out.exists() and out.stat().st_size > 0
+
+
 def test_solid_project_still_renders_after_html_overlay_import() -> None:
     """Importing the orchestrator with the new HTMLOverlay branch must
     not regress the existing media-kind dispatch."""

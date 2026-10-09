@@ -36,6 +36,7 @@ ROUTER_MODULES = (
     "routes_auth",
     "routes_projects",
     "routes_sessions",
+    "routes_review",
     "routes_artifacts",
     "routes_shares",
     "routes_leases",

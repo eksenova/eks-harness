@@ -4,8 +4,8 @@ import argparse
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
-    parser = subparsers.add_parser("video", help="render, validate and scaffold video projects",
-                                   description="Video engine commands: render, validate, schema, sync, doctor, init.")
+    parser = subparsers.add_parser("video", help="render, validate, scaffold and review videos",
+                                   description="Video engine commands: render, validate, schema, sync, doctor, init, and review: sheet, check.")
     from eks_harness.video.cli.parser import configure
 
     configure(parser)

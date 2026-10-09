@@ -10,7 +10,16 @@ from typing import Any
 
 from eks_harness.drivers.client import WorkerClient
 from eks_harness.drivers.profile import AppProfile
-from eks_harness.flows.client import Artifact, Step, StepError, Timer, artifact_of, contact_sheet, download
+from eks_harness.flows.client import (
+    Artifact,
+    Step,
+    StepError,
+    Timer,
+    artifact_of,
+    contact_sheet,
+    download,
+    stored_sheet,
+)
 
 Target = str | dict
 
@@ -177,9 +186,15 @@ class App:
             if art.id and art.id in found:
                 art.local = str(found[art.id])
                 if sheet and art.kind == "video":
-                    made = contact_sheet(found[art.id], self.out / f"{art.id}-sheet.png", art.marks)
-                    if made:
-                        art.sheet = str(made)
+                    try:
+                        stored = stored_sheet(self.harness, art, self.out)
+                    except Exception as error:
+                        self.notes.append(f"sheet of {art.name}: {error}")
+                        stored = False
+                    if not stored:
+                        made = contact_sheet(found[art.id], self.out / f"{art.id}-sheet.png", art.marks)
+                        if made:
+                            art.sheet = str(made)
 
     def report(self, *, failure: dict | None = None, value: Any = None) -> dict:
         slow = sorted(self.steps, key=lambda s: -s.ms)[:5]

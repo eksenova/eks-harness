@@ -254,7 +254,8 @@ def format_report(report: dict, flow_name: str) -> str:
         if art.get("durationSeconds"):
             label += f" ({art['durationSeconds']}s)"
         lines.append(label)
-        for key, title in (("url", "page"), ("raw", "direct"), ("local", "local"), ("sheet", "contact sheet")):
+        for key, title in (("url", "page"), ("raw", "direct"), ("local", "local"), ("sheet", "contact sheet"),
+                           ("sheetPage", "contact sheet page")):
             if art.get(key):
                 lines.append(f"  {title}: {art[key]}")
         for key in ("warnings", "failedInteractions"):
