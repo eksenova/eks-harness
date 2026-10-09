@@ -96,13 +96,18 @@ def retime(recording: Path, out: Path, points: list[tuple[float, float]], *, fps
         x, y, w, h = erase
         x0, y0 = max(1, x - 3), max(1, y - 3)
         clean = f"delogo=x={x0}:y={y0}:w={x + w + 3 - x0}:h={y + h + 3 - y0},"
+    spans = [(ua, ub, ra, rb, round(ub * fps) - round(ua * fps)) for ua, ub, ra, rb in spans]
+    spans = [span for span in spans if span[4] > 0]
     parts = [f"[0:v]{clean}tpad=start_mode=clone:start_duration={lead:.4f}:stop_mode=clone:"
              f"stop_duration={tail + 1:.4f},split={len(spans)}" + "".join(f"[s{i}]" for i in range(len(spans)))]
-    for i, (ua, ub, ra, rb) in enumerate(spans):
+    for i, (ua, ub, ra, rb, count) in enumerate(spans):
         factor = (ub - ua) / (rb - ra)
-        parts.append(f"[s{i}]trim=start={ra + lead:.4f}:end={rb + lead:.4f},setpts=(PTS-STARTPTS)*{factor:.6f}[p{i}]")
-    parts.append("".join(f"[p{i}]" for i in range(len(spans))) + f"concat=n={len(spans)}:v=1:a=0,fps={fps},"
-                 "scale=trunc(iw/2)*2:trunc(ih/2)*2[v]")
+        end = max(rb, ra + 2.0 / fps)
+        parts.append(f"[s{i}]trim=start={ra + lead:.4f}:end={end + lead:.4f},setpts=(PTS-STARTPTS)*{factor:.6f},"
+                     f"fps={fps}:round=up,tpad=stop_mode=clone:stop={count},trim=end_frame={count},"
+                     f"setpts=N/({fps}*TB)[p{i}]")
+    parts.append("".join(f"[p{i}]" for i in range(len(spans))) + f"concat=n={len(spans)}:v=1:a=0,"
+                 f"setpts=N/({fps}*TB),scale=trunc(iw/2)*2:trunc(ih/2)*2[v]")
     subprocess.run([ffmpeg, "-y", "-v", "error", "-i", str(recording), "-filter_complex", ";".join(parts),
                     "-map", "[v]", "-frames:v", str(frames), "-r", f"{fps}", *OPAQUE, "-an", str(out)], check=True)
     return out
@@ -253,7 +258,7 @@ def capture(media: DeviceTake, work: Path, ffmpeg: str = "ffmpeg") -> tuple[Path
 class DeviceTakeRenderer(MediaRenderer):
     name: ClassVar[str] = "device-take"
     model: ClassVar[type[DeviceTake]] = DeviceTake
-    version: ClassVar[str] = "1"
+    version: ClassVar[str] = "2"
     opt_in: ClassVar[bool] = True
 
     def __init__(self, context: Any = None) -> None:

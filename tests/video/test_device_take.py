@@ -116,3 +116,20 @@ def test_synced_marks_fall_back_to_the_wall_clock_offset_of_the_nearest_beacon()
     wall = {"a": 1.0, "b": 2.0, "c": 5.0}
     marks = synced_marks(order, wall, [30, None, 120], 30.0)
     assert marks == {"a": 1.0, "b": 2.0, "c": 4.0}
+
+
+def test_retime_is_frame_exact_with_tiny_spans(tmp_path: Path) -> None:
+    source = tmp_path / "ramp.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
+                    "nullsrc=s=64x64:r=30:d=10,geq=lum='16+mod(N*2\\,200)':cb=128:cr=128", "-c:v", "libx264",
+                    "-crf", "0", "-pix_fmt", "yuv420p", "-g", "30", str(source)], check=True)
+    points = [(0.3, 0.6), (0.58, 1.4), (1.9, 4.2), (1.991, 4.9), (3.12, 6.1), (3.15, 6.12), (4.6, 8.0), (4.62, 9.9),
+              (6.0, 9.95)]
+    out = retime(source, tmp_path / "out.mov", points, fps=30.0, frames=210)
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(out), "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+                         check=True, capture_output=True).stdout
+    frames = np.frombuffer(raw, np.uint8).reshape(-1, 64, 64)
+    assert len(frames) == 210
+    for target, recorded in points:
+        level = float(frames[round(target * 30)].mean()) * 219 / 255 / 2
+        assert abs(level - (round(recorded * 30) % 100)) <= 1.5, (target, recorded, level)
