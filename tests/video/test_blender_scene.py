@@ -140,6 +140,37 @@ def test_cache_key_follows_script_contents(tmp_path: Path, monkeypatch: pytest.M
     assert request_key(renderer, req, ctx) != first
 
 
+
+def test_cache_key_follows_nested_media_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from eks_harness.video.render import materialize
+
+    monkeypatch.setattr(runner, "find_blender", lambda explicit=None: "blender")
+    monkeypatch.setattr(runner, "blender_version", lambda binary: "Blender 9.9")
+    (tmp_path / "scene.py").write_text("print(1)")
+    screen = tmp_path / "screen.mov"
+    screen.write_bytes(b"take one")
+    media = BlenderScene(script="scene.py", media={"screen": str(screen)})
+    project = _project(media)
+    ctx = _ctx(tmp_path, project)
+    req = MediaRenderRequest(segment_id="scene", media=media, fps=FPS, resolution=(SIZE, SIZE), source_start=0.0,
+                             source_end=1.0, project_start=0.0, speed=1.0, frame_count=FPS, markers={},
+                             work_dir=tmp_path, output=tmp_path / "x.mov")
+    renderer = BlenderRenderer()
+    rendered = []
+
+    def fake_render(request, context):
+        rendered.append(request.output.name)
+        request.output.write_bytes(b"clip")
+        return request.output
+
+    monkeypatch.setattr(renderer, "render", fake_render)
+    first = materialize.render_request(renderer, req, ctx)
+    assert materialize.render_request(renderer, req, ctx) == first and len(rendered) == 1
+    screen.write_bytes(b"take two, re-captured")
+    second = materialize.render_request(renderer, req, ctx)
+    assert second != first and len(rendered) == 2
+    assert materialize.nested_media(media) == {"screen": str(screen)}
+
 def _frames_rgba(path: Path) -> np.ndarray:
     raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "rawvideo", "-pix_fmt", "rgba", "-"],
                          check=True, capture_output=True).stdout

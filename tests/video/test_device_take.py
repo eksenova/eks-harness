@@ -96,12 +96,18 @@ def _beacon_recording(path: Path, schedule: dict[int, int], frames: int, dim: di
     return path
 
 
-def test_beacon_frames_find_each_cue_even_when_two_share_a_frame(tmp_path: Path) -> None:
-    # cues 0..7; cues 2 and 3 land in the same frame (only 3's hue is ever drawn); a modal dims cue 6's beacon
+def test_beacon_frames_leave_an_unseen_cue_to_the_wall_clock(tmp_path: Path) -> None:
+    # cues 0..7; cue 2's hue is never drawn (cue 3 replaced it within one frame); a modal dims cue 6's beacon
     schedule = {10: 0, 25: 1, 40: 3, 55: 4, 70: 5, 85: 6, 100: 7}
     video = _beacon_recording(tmp_path / "b.mp4", schedule, 120, {i: 0.55 for i in range(85, 100)})
     frames, box = beacon_frames(video, 8)
-    assert frames == [10, 25, 40, 40, 55, 70, 85, 100]
+    assert frames == [10, 25, None, 40, 55, 70, 85, 100]
+    order = [f"c{i}" for i in range(8)]
+    wall = {"c0": 0.3, "c1": 0.8, "c2": 1.31, "c3": 1.34, "c4": 1.8, "c5": 2.3, "c6": 2.8, "c7": 3.3}
+    marks = synced_marks(order, wall, frames, 30.0)
+    assert marks["c1"] < marks["c2"] < marks["c3"]
+    targets = {name: 1.0 + i for i, name in enumerate(order)}
+    assert [r for _, r in warp_points(marks, targets)] == sorted(marks.values())
     assert box is not None and box[0] <= 4 and box[1] <= 4 and 28 <= box[2] <= 32 and 28 <= box[3] <= 32
 
 

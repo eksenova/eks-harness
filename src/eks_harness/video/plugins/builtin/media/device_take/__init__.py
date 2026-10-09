@@ -149,8 +149,7 @@ def beacon_frames(recording: Path, count: int, ffmpeg: str = "ffmpeg") -> tuple[
         skip = next((j for j in range(len(BEACON_HUES)) if (nxt + j) % len(BEACON_HUES) == code), None)
         if skip is None or nxt + skip >= count:
             continue
-        for k in range(nxt, nxt + skip + 1):
-            found[k] = index
+        found[nxt + skip] = index
         nxt += skip + 1
     return found, box
 

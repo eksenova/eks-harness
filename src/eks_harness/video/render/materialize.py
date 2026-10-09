@@ -59,8 +59,23 @@ def _digest_path(path: Path, h: Any) -> None:
         h.update(f"missing:{path}".encode())
 
 
-def request_key(renderer: MediaRenderer, request: MediaRenderRequest, ctx: RenderContext) -> str:
-    """Content-addressed key: renderer identity, media model, timing, markers and input file contents."""
+def _digest_file(path: Path, h: Any) -> None:
+    if not path.is_file():
+        h.update(f"missing:{path}".encode())
+        return
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            h.update(chunk)
+
+
+def nested_media(media: Any) -> dict[str, Any]:
+    found = getattr(media, "media", None)
+    return dict(found) if isinstance(found, dict) else {}
+
+
+def request_key(renderer: MediaRenderer, request: MediaRenderRequest, ctx: RenderContext,
+                nested: dict[str, Path] | None = None) -> str:
+    """Content-addressed key: renderer identity, media model, timing, markers, input files and nested outputs."""
 
     h = hashlib.sha256()
     h.update(json.dumps({
@@ -79,6 +94,9 @@ def request_key(renderer: MediaRenderer, request: MediaRenderRequest, ctx: Rende
     for path in renderer.cache_inputs(request.media, ctx):
         h.update(str(path).encode())
         _digest_path(Path(path), h)
+    for name, path in sorted((nested or {}).items()):
+        h.update(f"nested:{name}".encode())
+        _digest_file(Path(path), h)
     return h.hexdigest()[:32]
 
 
@@ -102,7 +120,8 @@ def render_request(renderer: MediaRenderer, probe: MediaRenderRequest, ctx: Rend
     """Render (or reuse from the cache) one request; returns the clip path."""
 
     root = Path(ctx.cache_dir) / "media"
-    key = request_key(renderer, probe, ctx)
+    nested = {name: render_nested(media, probe, ctx, name) for name, media in nested_media(probe.media).items()}
+    key = request_key(renderer, probe, ctx, nested=nested)
     work_dir = root / renderer.name / key
     output = root / renderer.name / f"{key}.mov"
     if output.exists() and output.stat().st_size > 0:
