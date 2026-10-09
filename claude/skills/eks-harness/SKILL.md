@@ -23,6 +23,7 @@ nodes, and renders **videos** and **scores** (one clock for edits, Blender, web 
 | Edit or render a video | `eks-harness video render`, MCP `video_*` | `eks-harness:video-editing` |
 | See what renders now and what waits (one video render at a time; driver sessions, recording and encodes run under their device lease and never wait) | `eks-harness queue`, MCP `render_queue` | - |
 | Review a video (one-image contact sheet, timeline checks) | `eks-harness video sheet`, `eks-harness video check`, MCP `video_sheet`, `video_check` | `eks-harness:video-review` |
+| Update eks-harness from GitHub (the daemon also updates itself when idle) | `eks-harness update`, `eks-harness update --check` | - |
 | Sync Blender, web scenes and device takes to a song | `eks-harness score plan`, `score render`, live mode in the UI | `eks-harness:scores` |
 | Write a Blender or HTML scene | `eks_harness.blender`, `@eks-harness/scene` | `eks-harness:blender-scenes`, `:web-scenes` |
 | Render on GPUs elsewhere | nodes and jobs | `eks-harness:nodes` |

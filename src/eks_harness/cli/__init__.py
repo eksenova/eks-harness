@@ -54,12 +54,13 @@ COMMAND_MODULES = (
     "driver_cmds",
     "doctor_cmd",
     "migrate_cmds",
+    "update_cmds",
 )
 
 DESCRIPTION = """eks-harness: browser and device pools, backends, leases, artifact store, video studio and web UI.
 
 Every command talks to the running daemon over its HTTP API, except setup, auth recover,
-daemon install/uninstall/start/stop and version, which work on local files.
+daemon install/uninstall/start/stop, update and version, which work on local files.
 
 Output: tables and panels for people; --json (before or after the command) prints plain JSON
 on stdout for scripts and agents. In JSON mode a failure is also printed on stdout, as

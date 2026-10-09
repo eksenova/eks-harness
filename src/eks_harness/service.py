@@ -344,6 +344,23 @@ def start(paths: Paths, role: Role = DAEMON) -> bool:
     return True
 
 
+def restart(paths: Paths, role: Role = DAEMON) -> bool:
+    if not installed(paths, role):
+        return False
+    system = platform.system()
+    if system == "Darwin":
+        code, _ = run(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{role.label}"])
+        return code == 0 or start(paths, role)
+    if system == "Linux":
+        code, _ = run(["systemctl", "--user", "restart", role.unit])
+        return code == 0
+    if system == "Windows":
+        run(["schtasks", "/End", "/TN", role.task])
+        code, _ = run(["schtasks", "/Run", "/TN", role.task])
+        return code == 0
+    return False
+
+
 def linger_hint() -> str | None:
     if platform.system() != "Linux":
         return None

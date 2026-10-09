@@ -51,6 +51,7 @@ GROUPS: dict[str, str] = {
     "service": "Service",
     "plugins": "Plugins",
     "video": "Video",
+    "update": "Updates",
 }
 
 _SETTINGS: list[Setting] = [
@@ -103,6 +104,11 @@ _SETTINGS: list[Setting] = [
     Setting("daemon.sweepSeconds", 300, "int", "interval between sweeps for stray browsers, simulators and emulators", minimum=30),
     Setting("storage.maxUploadMb", 2048, "int", "largest accepted upload in MB", minimum=1),
     Setting("storage.quotaGb", None, "int", "show a storage warning in the UI above this many GB (empty: no quota)", nullable=True, minimum=1),
+    Setting("update.repository", "https://github.com/eksenova/eks-harness.git", "str", "git repository updates install from (git's own credentials are used for private repositories)"),
+    Setting("update.ref", "main", "str", "branch, tag or commit that updates follow"),
+    Setting("update.auto", True, "bool", "check for new commits and install them automatically when nothing is running (service mode only); the daemon restarts gracefully afterwards"),
+    Setting("update.checkMinutes", 60, "int", "how often the daemon checks for updates", minimum=5),
+    Setting("update.replaceLocal", False, "bool", "let automatic updates replace an install built from a local checkout"),
     Setting("retention.defaultDays", None, "int", "delete unpinned artifacts older than this many days in projects without their own retention (empty: keep forever)", nullable=True, minimum=1),
     Setting("retention.checkMinutes", 60, "int", "how often retention and share expiry run", minimum=1),
     Setting("events.retentionDays", 90, "int", "keep activity events this many days", minimum=1),

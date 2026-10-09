@@ -95,7 +95,7 @@ def build_info() -> dict:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict):
-            info.update({k: data.get(k, info.get(k)) for k in ("version", "sourceHash", "builtAt")})
+            info.update({k: data.get(k, info.get(k)) for k in ("version", "sourceHash", "builtAt", "gitCommit", "gitDirty")})
     except (OSError, json.JSONDecodeError):
         pass
     root = source_root()

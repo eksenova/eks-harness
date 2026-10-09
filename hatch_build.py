@@ -38,6 +38,7 @@ class CustomBuildHook(BuildHookInterface):
             "version": version_module.__version__,
             "sourceHash": version_module.compute_source_hash(root),
             "builtAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            **git_state(root),
         }
         (package / version_module.BUILD_INFO_FILE).write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")
 
@@ -86,6 +87,20 @@ class CustomBuildHook(BuildHookInterface):
             target = workers / folder.name
             copy_tree(folder / "src", target / "src")
             shutil.copyfile(folder / "package.json", target / "package.json")
+
+
+def git_state(root: Path) -> dict:
+    def git(*args: str) -> str | None:
+        try:
+            result = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, timeout=20)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return result.stdout.strip() if result.returncode == 0 else None
+
+    commit = git("rev-parse", "HEAD")
+    if not commit:
+        return {}
+    return {"gitCommit": commit, "gitDirty": bool(git("status", "--porcelain", "--untracked-files=no"))}
 
 
 def copy_tree(source: Path, target: Path) -> None:

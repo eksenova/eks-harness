@@ -13,6 +13,10 @@ eks-harness setup                     # config, admin user and API key, service
 eks-harness doctor
 ```
 
+Updates come from the same GitHub source: `eks-harness update` installs the newest commit of `main`
+(keeping the installed extras) and restarts the daemon gracefully; `eks-harness update --check` only
+looks. The daemon also updates itself when nothing is running (`update.auto`, docs/updates.md).
+
 Optional extras: `eks-harness[video]` (the video engine), `[html]` (web scenes), `[ml]` (beat tracking,
 speech to text), `[matting]`, `[sam3]`, `[stems]`, `[denoise]`, `[all]`. Blender is optional and found
 on the hub or on nodes.
