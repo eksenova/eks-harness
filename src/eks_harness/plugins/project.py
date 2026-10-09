@@ -19,6 +19,7 @@ class ProjectConfig:
     tree: Path | None = None
     project_id: str | None = None
     name: str | None = None
+    tags: tuple[str, ...] = ()
     enable: tuple[str, ...] = ()
     disable: tuple[str, ...] = ()
     trust: tuple[str, ...] = ()
@@ -96,6 +97,7 @@ def load_project_config(tree: Path | None) -> ProjectConfig:
         tree=tree,
         project_id=project.get("id"),
         name=project.get("name"),
+        tags=_strings(project.get("tags"), "project.tags"),
         enable=_strings(plugins.get("enable"), "plugins.enable"),
         disable=_strings(plugins.get("disable"), "plugins.disable"),
         trust=_strings(plugins.get("trust"), "plugins.trust"),

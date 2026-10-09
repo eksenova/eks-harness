@@ -55,9 +55,22 @@ class ServiceSpec:
     working_dir: Path
 
 
+def user_bus_env() -> dict[str, str] | None:
+    if os.environ.get("XDG_RUNTIME_DIR") or not hasattr(os, "getuid"):
+        return None
+    runtime = Path(f"/run/user/{os.getuid()}")
+    if not runtime.is_dir():
+        return None
+    env = dict(os.environ, XDG_RUNTIME_DIR=str(runtime))
+    if (runtime / "bus").exists() and not env.get("DBUS_SESSION_BUS_ADDRESS"):
+        env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={runtime / 'bus'}"
+    return env
+
+
 def run(args: list[str], check: bool = False) -> tuple[int, str]:
+    env = user_bus_env() if args[:2] == ["systemctl", "--user"] else None
     try:
-        result = subprocess.run(args, capture_output=True, text=True)
+        result = subprocess.run(args, capture_output=True, text=True, env=env)
     except OSError as error:
         if check:
             raise ServiceError(f"{' '.join(args)}: {error}") from error

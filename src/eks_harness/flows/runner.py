@@ -122,11 +122,11 @@ def project_and_session(profile: AppProfile, host: PluginHost, tree: Path | None
 
 
 def acquire(client: Any, *, kind: str, project: str, session: str, instance: str, tree: Path | None,
-            wait: float) -> dict[str, Any]:
+            wait: float, tags: tuple[str, ...] = ()) -> dict[str, Any]:
     from eks_harness.cli.lease_cmds import wait_for_lease
 
     body = {"kind": kind, "project": project, "session": session, "instance": instance,
-            "tree": str(tree) if tree else None, "label": "flow"}
+            "tree": str(tree) if tree else None, "label": "flow", "tags": list(tags)}
     return wait_for_lease(client, "/api/leases/acquire", body, wait, kind)
 
 
@@ -161,8 +161,9 @@ def prepare_app(request: FlowRequest, *, client: Any, paths: Any, config: Any, h
         from eks_harness.cli.lease_cmds import instance_key
 
         instance = instance_key(None, tree)
+    tags = profile.tags or (host.project(tree).tags if tree else ())
     lease = acquire(client, kind=LEASE_KINDS[platform], project=project, session=session, instance=instance,
-                    tree=tree, wait=request.wait)
+                    tree=tree, wait=request.wait, tags=tags)
     sid = lease["sid"]
     cls = app_class(harness_dir, platform, flow_helpers(host, platform, tree), profile.app_file)
     kwargs: dict[str, Any] = {"sid": sid, "harness": client, "verbose": request.verbose, "out": request.out,

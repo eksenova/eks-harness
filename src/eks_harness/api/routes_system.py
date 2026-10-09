@@ -49,6 +49,13 @@ def require_control(request: Request, token: str | None) -> str:
     return principal.username
 
 
+@router.get("/api/render-queue")
+def render_queue(_: Principal = Depends(current_principal)) -> dict:
+    from eks_harness import renderq
+
+    return renderq.status()
+
+
 @router.get("/api/version", response_model=VersionResponse)
 def version(request: Request, _: Principal = Depends(current_principal)) -> dict:
     info = get_ctx(request).version

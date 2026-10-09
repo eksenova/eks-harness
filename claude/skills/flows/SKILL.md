@@ -19,7 +19,8 @@ MCP: `flow_run(flow=..., platform=..., params=...)` returns the same report as J
 
 ## App setup
 
-`<app>/.harness/app.toml` names the project, platforms, URLs, Metro port, fixtures and checks. A `.harness/`
+`<app>/.harness/app.toml` names the project, its `tags` (put on every capture, for example `["web-app"]`),
+platforms, URLs, Metro port, fixtures and checks. A `.harness/`
 outside the app drives it with `[app] extends = "../path/to/app"` (profile and `App` inherited).
 `<app>/.harness/app.py` may define `class App(WebApp)` or `class App(MobileApp)` with app helpers
 (login screens, menus) and `boot()` that starts the app before the worker attaches. Extend those

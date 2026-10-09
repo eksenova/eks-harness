@@ -5,10 +5,15 @@ description: Work with the evidence store: projects, sessions, artifacts (screen
 
 # Evidence and PR screenshots
 
-Every capture is an artifact in a project (`owner/name`) and a session (usually the branch).
+Every capture is an artifact in a project (`owner/name`) and a session (usually the branch). One project per
+repository is the norm; tags tell its apps and parts apart (`tags = ["web-app"]` in an app's
+`.harness/app.toml` tags every capture of its flows, `eks-harness lease acquire --tag` does the same for a
+manual lease). Filter with `--tag`, not with separate projects. An admin folds projects together with
+`eks-harness projects merge <a> <b> --into owner/name --apply`: each source's name becomes a tag on its
+artifacts, sessions merge, and artifact and share links keep working.
 
 ```bash
-eks-harness artifacts list --project acme/web --session feature/x
+eks-harness artifacts list --project acme/web --session feature/x --tag mobile-app
 eks-harness artifacts download <id>
 eks-harness artifacts tag <id> evidence
 eks-harness search "checkout error"

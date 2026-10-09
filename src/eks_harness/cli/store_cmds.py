@@ -26,6 +26,7 @@ from eks_harness.cli.ui import (
     print_json,
     print_links,
     table,
+    warn,
 )
 from eks_harness.ids import slugify
 
@@ -240,6 +241,32 @@ def cmd_projects_create(args: argparse.Namespace) -> int:
     else:
         ok(f"Created {project['id']}")
         print(project["url"])
+    return 0
+
+
+def cmd_projects_merge(args: argparse.Namespace) -> int:
+    tags = {}
+    for item in args.tag or []:
+        source, sep, tag = item.partition("=")
+        if not sep:
+            fail(f"--tag takes SOURCE=TAG, got '{item}'", EXIT_USAGE)
+        tags[source.strip().lower()] = tag.strip()
+    body = {"sources": args.sources, "into": args.into, "tags": tags, "title": args.title or "",
+            "description": args.description or "", "dryRun": not args.apply}
+    with _client(args) as client:
+        result = client.post("/api/projects/merge", json=body, timeout=600)
+    if args.json:
+        print_json(result)
+        return 0
+    rows = [[s["project"], s["tag"], s["artifacts"], s["sessions"], s["grants"],
+             "inherit" if s["retentionDays"] is None else s["retentionDays"]] for s in result["sources"]]
+    console.print(table(["Project", "Tag", "Artifacts", "Sessions", "Grants", "Retention"], rows))
+    if result["applied"]:
+        ok(f"merged {len(rows)} project(s) into {result['into']}: {result['artifacts']} artifacts, "
+           f"{result['sessions']} session links")
+    else:
+        warn(f"dry run: rerun with --apply to merge into {result['into']}"
+             + (" (it will be created)" if result["created"] else ""))
     return 0
 
 
@@ -846,6 +873,17 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                            help="follow the global default (retention.defaultDays)")
     _json_flag(p)
     p.set_defaults(func=cmd_projects_edit)
+    p = projects_sub.add_parser("merge", help="merge projects into one; each source becomes a tag on its artifacts "
+                                              "(admin)")
+    p.add_argument("sources", nargs="+", help="owner/name of each project to merge")
+    p.add_argument("--into", required=True, help="target owner/name (created when missing)")
+    p.add_argument("--tag", action="append", metavar="SOURCE=TAG",
+                   help="tag for one source's artifacts (default: the source's name)")
+    p.add_argument("--title")
+    p.add_argument("--description")
+    p.add_argument("--apply", action="store_true", help="merge (without it: show the plan)")
+    _json_flag(p)
+    p.set_defaults(func=cmd_projects_merge)
     p = projects_sub.add_parser("delete", help="delete a project with all its sessions and files")
     p.add_argument("project", help="owner/name")
     p.add_argument("--force", action="store_true", help="delete even when leases are live in it")

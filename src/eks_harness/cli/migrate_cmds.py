@@ -96,7 +96,7 @@ def cmd_farm(args: argparse.Namespace) -> int:
             try:
                 install_node(RemoteTarget(node["host"], wsl=node["wsl"] or args.wsl == node["id"]),
                              hub=args.hub_url or data["hubUrl"], token=data["token"], name=node["id"],
-                             slots=node["slots"], blender=node["blender"],
+                             slots=node["slots"], blender=node["blender"], wheel=args.wheel,
                              log=lambda text, n=node["id"]: console.print(f"  {n}: {text}", markup=False))
                 ok(f"node {node['id']} installed")
             except InstallError as error:
@@ -197,6 +197,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("--apply", action="store_true", help="register and install the nodes over SSH")
     p.add_argument("--hub-url", help="URL the nodes dial")
     p.add_argument("--wsl", help="node id whose SSH host is Windows (install inside WSL)")
+    p.add_argument("--wheel", type=Path, help="eks-harness wheel to install on the nodes (default: build one from "
+                                              "the source checkout)")
     p.add_argument("--keep-farm", action="store_true", help="do not rewrite the hub's farm.toml")
     p.add_argument("--dry-run", action="store_true", help="only show the nodes (the default without --apply)")
     p.add_argument("--json", action="store_true")

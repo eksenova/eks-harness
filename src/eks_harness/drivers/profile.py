@@ -36,6 +36,7 @@ class AppProfile:
     name: str = "app"
     project: str | None = None
     session: str | None = None
+    tags: tuple[str, ...] = ()
     platforms: tuple[str, ...] = ("web",)
     web: dict[str, Any] = field(default_factory=dict)
     mobile: dict[str, Any] = field(default_factory=dict)
@@ -91,7 +92,8 @@ def load_profile(harness_dir: Path, env: dict[str, str] | None = None, _seen: tu
     if unknown:
         raise ProfileError(f"{file}: unknown platform(s) {', '.join(unknown)} (use web, ios, android)")
     return AppProfile(root=root, name=str(app.get("name") or root.name),
-                      project=app.get("project"), session=app.get("session") or None, platforms=tuple(platforms),
+                      project=app.get("project"), session=app.get("session") or None,
+                      tags=tuple(str(t) for t in (app.get("tags") or [])), platforms=tuple(platforms),
                       web=dict(data.get("web") or {}), mobile=dict(data.get("mobile") or {}),
                       checks=dict(data.get("checks") or {}), raw=data, app_file=app_file)
 

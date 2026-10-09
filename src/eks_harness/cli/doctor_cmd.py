@@ -35,6 +35,11 @@ def tool_checks() -> list[dict[str, Any]]:
                              ("adb", ["adb", "version"], "Android devices"),
                              ("xcrun", ["xcrun", "--version"], "iOS simulators")):
         found = shutil.which(name)
+        if not found and name == "adb":
+            from eks_harness.pools.devices import tool
+
+            found = tool("adb")
+            argv = [found, "version"] if found else argv
         rows.append({"check": f"tool {name}", "state": "ok" if found else "warn",
                      "detail": _version(argv) if found else f"missing (needed for {need})"})
     from eks_harness.nodes.capabilities import blender_info

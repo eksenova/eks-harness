@@ -168,7 +168,8 @@ class WorkerManager:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(full, handle)
         log_file = state_dir / "worker.log"
-        env = {**os.environ, **self.env, "EHX_WORKER_CONFIG": str(config_file)}
+        env = {k: v for k, v in {**os.environ, **self.env}.items() if k != "EKS_HARNESS_RENDER_SLOT"}
+        env["EHX_WORKER_CONFIG"] = str(config_file)
         script = self.root / SCRIPTS[kind]
         if not script.is_file():
             raise WorkerError(f"the {kind} driver worker is missing at {script}")

@@ -51,6 +51,10 @@ report = run_checks("render.mp4", load_expectations("expectations.json"))
 report.ok, report.as_dict(), report.text()
 ```
 
+Sheets and checks only read the video and run right away. The video renders and recording encodes that
+produce what you review wait in the machine's render queue: one runs at a time (`render.concurrency`), the
+rest first in, first out (`eks-harness queue`).
+
 ## Contact sheet
 
 - Tiles: `frames` evenly spaced frames including the first and the last (default two per second,

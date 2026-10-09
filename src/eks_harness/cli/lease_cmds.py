@@ -184,7 +184,8 @@ def acquire_body(args: argparse.Namespace) -> dict:
     return {"kind": normalize_kind(args.kind), "project": args.project, "session": session, "instance": instance,
             "backend": args.backend, "owner_pid": owner_pid, "owner_started": owner_started,
             "tree": str(tree) if tree else None, "state_dir": args.state_dir,
-            "label": args.label or (f"{Path(str(tree)).name}" if tree else None)}
+            "label": args.label or (f"{Path(str(tree)).name}" if tree else None),
+            "tags": [t for item in (getattr(args, "tag", None) or []) for t in item.split(",") if t.strip()]}
 
 
 def cmd_acquire(args: argparse.Namespace) -> int:
@@ -533,6 +534,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("--no-wait", action="store_true", help="return at once with the queue position")
     p.add_argument("--state-dir", help="harness state dir cleaned on release")
     p.add_argument("--label", help="label shown in the queue")
+    p.add_argument("--tag", action="append", help="tag every capture of this lease (repeatable or comma separated)")
     p.add_argument("--owner-pid", type=int, help="the lease ends when this process exits (default: CLAUDE_PID)")
     p.add_argument("--shell", action="store_true", help="print shell assignments (EKS_SID, EKS_CDP_URL, ...)")
     add_instance(p)

@@ -710,6 +710,7 @@ class LeaseAcquireRequest(ApiModel):
     tree: str | None = None
     state_dir: str | None = None
     label: str | None = None
+    tags: list[str] = Field(default_factory=list)
 
     @field_validator("kind", mode="before")
     @classmethod

@@ -234,6 +234,16 @@ def compose_project(score: Score, current: Plan, clips: dict[str, Path], base: P
 def render_score(score: Score, base: Path, output: Path | None, *, workspace: Path | None = None,
                  analyzer: Analyzer | None = None, take_runner: TakeRunner | None = None, max_iterations: int = 4,
                  progress: Progress | None = None, mode: str = "final") -> ScoreRender:
+    from eks_harness.renderq import render_slot
+
+    with render_slot("score", f"score {score.name}"):
+        return _render_score(score, base, output, workspace=workspace, analyzer=analyzer, take_runner=take_runner,
+                             max_iterations=max_iterations, progress=progress, mode=mode)
+
+
+def _render_score(score: Score, base: Path, output: Path | None, *, workspace: Path | None = None,
+                  analyzer: Analyzer | None = None, take_runner: TakeRunner | None = None, max_iterations: int = 4,
+                  progress: Progress | None = None, mode: str = "final") -> ScoreRender:
     from eks_harness.video.render.context import RenderOptions
     from eks_harness.video.render.orchestrator import Renderer
 

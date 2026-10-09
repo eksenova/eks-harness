@@ -213,8 +213,9 @@ def commit(db: Database, paths: Paths, staged: Staged, *, project: str | None = 
            browser: str | None = None) -> Artifact:
     if source not in artifacts_repo.SOURCES:
         raise bad_request(f"source must be one of {', '.join(artifacts_repo.SOURCES)}.", error="invalid_source")
+    lease_tags = list(((target.lease.meta or {}).get("tags") or []) if target and target.lease else [])
     try:
-        clean_tags = artifacts_repo.normalize_tags(tags)
+        clean_tags = artifacts_repo.normalize_tags([*lease_tags, *(tags or [])])
     except ValueError as problem:
         raise bad_request(str(problem), error="invalid_tag") from None
     final_meta = _clean_meta(meta)

@@ -30,10 +30,21 @@ def memory_bytes() -> int:
         return 0
 
 
+WSL_NVIDIA_SMI = "/usr/lib/wsl/lib/nvidia-smi"
+
+
+def nvidia_smi() -> str | None:
+    found = shutil.which("nvidia-smi")
+    if found:
+        return found
+    return WSL_NVIDIA_SMI if Path(WSL_NVIDIA_SMI).is_file() else None
+
+
 def nvidia_gpus() -> list[dict[str, Any]]:
-    if not shutil.which("nvidia-smi"):
+    binary = nvidia_smi()
+    if not binary:
         return []
-    text = _run(["nvidia-smi", "--query-gpu=index,name,memory.total,uuid,driver_version",
+    text = _run([binary, "--query-gpu=index,name,memory.total,uuid,driver_version",
                  "--format=csv,noheader,nounits"])
     gpus = []
     for line in text.splitlines():
@@ -56,7 +67,10 @@ def blender_info(explicit: str | None = None) -> dict[str, Any] | None:
     candidates = [explicit, os.environ.get("EKS_HARNESS_BLENDER"), shutil.which("blender"),
                   "/Applications/Blender.app/Contents/MacOS/Blender"]
     for candidate in candidates:
-        if not candidate or not Path(candidate).exists():
+        if not candidate:
+            continue
+        candidate = str(Path(candidate).expanduser())
+        if not Path(candidate).exists():
             continue
         text = _run([candidate, "--version"], timeout=60)
         match = re.search(r"Blender\s+(\d+\.\d+(?:\.\d+)?)", text)

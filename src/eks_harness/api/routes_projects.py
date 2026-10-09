@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Body, Depends, Query, Request
 
 from eks_harness.api.deps import ProjectAccess, current_principal, get_ctx, get_scope, require_admin, require_project
 from eks_harness.api.errors import bad_request, conflict
@@ -52,6 +52,25 @@ def create_project(body: ProjectCreate, request: Request, principal: Principal =
                        detail={"project": project.id, "created": True})
     return views.projects_for(ctx.db.conn(), ctx.links, scope, principal.user_id, [project],
                               default_retention_days(ctx.config))[0]
+
+
+@router.post("/merge")
+def merge_projects(request: Request, body: dict = Body(...), principal: Principal = Depends(require_admin)) -> dict:
+    from eks_harness.store import merge
+
+    ctx = get_ctx(request)
+    sources = [str(s) for s in body.get("sources") or []]
+    into = str(body.get("into") or "").strip().lower()
+    tags = {str(k).lower(): str(v) for k, v in (body.get("tags") or {}).items()}
+    try:
+        if body.get("dryRun"):
+            return merge.plan(ctx.db.conn(), sources, into, tags).as_dict()
+        result = merge.merge(ctx.db, sources, into, tags=tags, title=str(body.get("title") or ""),
+                             description=str(body.get("description") or ""), events=ctx.events,
+                             actor=principal.username)
+    except merge.MergeError as error:
+        raise bad_request(str(error), error="bad_merge") from None
+    return result.as_dict()
 
 
 @router.get("/{owner}/{name}", response_model=ProjectOut)

@@ -126,6 +126,13 @@ class Renderer:
         self.options = options
 
     def render(self, output: Path | None = None) -> Path:
+        from eks_harness.renderq import render_slot
+
+        target = Path(output) if output is not None else self.options.output
+        with render_slot("render", Path(target).name if target else "video"):
+            return self._render(output)
+
+    def _render(self, output: Path | None = None) -> Path:
         target = Path(output) if output is not None else self.options.output
         reporter: ProgressReporter = (
             self.options.progress_reporter

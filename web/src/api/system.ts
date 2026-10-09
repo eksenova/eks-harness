@@ -257,6 +257,28 @@ export function useNode(id: string) {
   return useQuery({ queryKey: systemKeys.node(id), queryFn: () => api.get<NodeOut>(`/api/nodes/${encodeSegment(id)}`), refetchInterval: 4000 });
 }
 
+export interface RenderTicket {
+  id: string;
+  kind: string;
+  label: string;
+  session: string | null;
+  pid: number;
+  state: "running" | "waiting";
+  position?: number;
+  seconds: number;
+}
+
+export interface RenderQueue {
+  concurrency: number;
+  running: number;
+  waiting: number;
+  items: RenderTicket[];
+}
+
+export function useRenderQueue() {
+  return useQuery({ queryKey: ["render-queue"], queryFn: () => api.get<RenderQueue>("/api/render-queue"), refetchInterval: 3000 });
+}
+
 export function useJobs(params: Query = {}) {
   return useQuery({ queryKey: systemKeys.jobs(params), queryFn: () => api.get<{ items: JobOut[] }>("/api/jobs", { query: { limit: 100, ...params } }), refetchInterval: 3000 });
 }

@@ -49,6 +49,7 @@ COMMAND_MODULES = (
     "video_cmds",
     "studio_cmds",
     "score_cmds",
+    "queue_cmds",
     "flow_cmds",
     "driver_cmds",
     "doctor_cmd",

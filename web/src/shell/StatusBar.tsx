@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useProjects, useStatus } from "../api/queries";
-import { useJobs, useLiveSessions, useNodes } from "../api/system";
+import { useJobs, useLiveSessions, useNodes, useRenderQueue } from "../api/system";
 import { Icon } from "../components/Icon";
 import { OverflowMenu, separator, type MenuItem } from "../components/Menu";
 import { StateBar } from "../components/Workbench";
@@ -13,6 +13,7 @@ export function StatusBar() {
   const nodes = useNodes();
   const jobs = useJobs({ state: "queued,assigned,running" });
   const live = useLiveSessions();
+  const renders = useRenderQueue();
   const connection = useConnection();
   const leases = status.data?.leases.length ?? 0;
   const queued = status.data?.queue.length ?? 0;
@@ -42,6 +43,13 @@ export function StatusBar() {
         {running ? plural(running, "job") + " running" : "no jobs running"}
         {waiting ? `, ${waiting} queued` : ""}
       </Link>
+      {renders.data && (renders.data.running || renders.data.waiting) ? (
+        <span title={renders.data.items.map((t) => `${t.state === "running" ? "rendering" : `#${t.position} waiting`}: ${t.label}${t.session ? ` (${t.session})` : ""}`).join("\n")}>
+          <StateBar tone={renders.data.running ? "busy" : "wait"} />
+          {renders.data.running ? `${plural(renders.data.running, "render")} running` : "no render running"}
+          {renders.data.waiting ? `, ${renders.data.waiting} waiting` : ""}
+        </span>
+      ) : null}
       {playing ? (
         <Link to="/studio">
           <StateBar tone="busy" />
