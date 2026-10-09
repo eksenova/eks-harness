@@ -14,6 +14,7 @@ import { PluginPage, PluginRoutePage, PluginsPage } from "./pages/Plugins";
 import { ScorePage } from "./pages/Score";
 import { StudioEditPage, StudioPage } from "./pages/Studio";
 import { SearchPage } from "./pages/Search";
+import { CleanupPage } from "./pages/Cleanup";
 import { SessionPage } from "./pages/Session";
 import { SessionsPage } from "./pages/Sessions";
 import { SettingsPage } from "./pages/Settings";
@@ -163,6 +164,7 @@ const sidRoute = createRoute({
 });
 
 const searchRoute = createRoute({ getParentRoute: () => appRoute, path: "search", component: SearchPage });
+const cleanupRoute = createRoute({ getParentRoute: () => appRoute, path: "cleanup", component: CleanupPage });
 const devicesRoute = createRoute({ getParentRoute: () => appRoute, path: "devices", component: DevicesPage });
 const deviceRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -234,6 +236,7 @@ const routeTree = rootRoute.addChildren([
     artifactRoute,
     sidRoute,
     searchRoute,
+    cleanupRoute,
     devicesRoute,
     deviceRoute,
     browsersRoute,

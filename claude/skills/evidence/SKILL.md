@@ -28,3 +28,9 @@ eks-harness upload file.png --project acme/web --session feature/x --caption "..
 - Pull requests that change UI carry evidence: screenshots (and a video for animated changes) as share
   links in the body. A change with no visible effect says `NO-UI-EVIDENCE` and why. The plugin's PR guard
   checks this for the paths a repo lists in `[claude] ui_paths`.
+- Old data goes on the UI's Evidence > Clean up page (`/cleanup`): conditions on project, session (list,
+  wildcard, exclusions, idle days), age or dates, kind, tags (any, all, none), source, size, text and
+  viewed state, with a live preview (count, size, breakdowns, sample) before a confirmed delete. Pinned
+  artifacts, live share links and captures of live leases stay unless included. API:
+  `POST /api/cleanup/preview` and `POST /api/cleanup/apply` (docs/cleanup.md). Delete only when the user
+  asks for it.

@@ -133,7 +133,7 @@ function useSections(auth: AuthInfo): Section[] {
   return [
     { to: "/", label: "Now", match: (p) => p === "/" },
     { to: "/lab", label: "Lab", match: (p) => /^\/(lab|machines|devices|browsers|backends)(\/|$)/.test(p), count: queued || undefined, countLabel: `${queued} queued` },
-    { to: "/evidence", label: "Evidence", match: (p) => /^\/(evidence|sessions|projects|p|sid|search)(\/|$)/.test(p), count: unseen || undefined, countLabel: `${unseen} not seen` },
+    { to: "/evidence", label: "Evidence", match: (p) => /^\/(evidence|sessions|projects|p|sid|search|cleanup)(\/|$)/.test(p), count: unseen || undefined, countLabel: `${unseen} not seen` },
     { to: "/studio", label: "Studio", match: (p) => p.startsWith("/studio") },
     { to: "/nodes", label: "Nodes", match: (p) => p.startsWith("/nodes"), count: offline || undefined, countLabel: `${offline} offline` },
     { to: "/plugins", label: "Plugins", match: (p) => p.startsWith("/plugins") || p.startsWith("/x/"), count: pending || undefined, countLabel: `${pending} waiting for approval` },

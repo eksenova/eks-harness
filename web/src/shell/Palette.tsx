@@ -63,6 +63,7 @@ export function CommandPalette({ onClose, extra }: { onClose: () => void; extra:
       { id: "nav-browsers", group: "Go to", label: "Browser profiles", hint: "Lab", run: go("/browsers") },
       { id: "nav-backends", group: "Go to", label: "Backends", hint: "Lab", run: go("/backends") },
       { id: "nav-search", group: "Go to", label: "Search artifacts", hint: "/", run: go("/search") },
+      { id: "nav-cleanup", group: "Go to", label: "Clean up old data", hint: "Evidence", run: go("/cleanup") },
       { id: "theme-light", group: "Theme", label: "Theme: light", run: () => { setTheme("light"); onClose(); } },
       { id: "theme-dark", group: "Theme", label: "Theme: dark", run: () => { setTheme("dark"); onClose(); } },
       { id: "theme-system", group: "Theme", label: "Theme: system", run: () => { setTheme("system"); onClose(); } },

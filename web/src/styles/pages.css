@@ -730,3 +730,138 @@
     min-height: 320px;
   }
 }
+
+/* Clean up */
+
+.cleanup-presets {
+  margin-bottom: var(--s-4);
+  flex-wrap: wrap;
+}
+
+.cleanup-grid {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: var(--s-6);
+  align-items: start;
+}
+
+.cleanup-form .section:first-child {
+  margin-top: 0;
+}
+
+.cleanup-form .field {
+  margin-bottom: var(--s-3);
+}
+
+.cleanup-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-3);
+}
+
+.cleanup-result {
+  display: grid;
+  gap: var(--s-4);
+  min-width: 0;
+  position: sticky;
+  top: var(--s-4);
+}
+
+.cleanup-total {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: var(--s-5);
+  align-items: center;
+  padding: var(--s-4);
+  border: var(--hair);
+  border-top: var(--head-rule);
+  background: var(--paper);
+  transition: opacity var(--t-fast) var(--ease);
+}
+
+.cleanup-total.is-stale {
+  opacity: 0.6;
+}
+
+.cleanup-total-number {
+  font-size: var(--fs-26);
+  line-height: var(--lh-tight);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cleanup-total-range {
+  font-size: var(--fs-13);
+}
+
+.cleanup-skipped {
+  margin: 0;
+  font-size: var(--fs-13);
+}
+
+.cleanup-breakdowns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--s-4) var(--s-5);
+}
+
+.cleanup-breakdown-title {
+  margin: 0 0 var(--s-2);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+
+.cleanup-bars {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-13);
+}
+
+.cleanup-bars th,
+.cleanup-bars td {
+  padding: 3px var(--s-2) 3px 0;
+  border-bottom: var(--hair-soft);
+  text-align: left;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.cleanup-bars th {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cleanup-bars .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+
+.cleanup-bar {
+  width: 30%;
+  min-width: 60px;
+}
+
+.cleanup-more {
+  margin: var(--s-1) 0 0;
+  font-size: var(--fs-12);
+}
+
+@media (max-width: 1099px) {
+  .cleanup-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cleanup-result {
+    position: static;
+    order: -1;
+  }
+
+  .cleanup-total {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
