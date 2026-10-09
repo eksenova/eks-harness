@@ -35,7 +35,7 @@ def clip_bytes(tmp_path_factory: pytest.TempPathFactory) -> bytes:
 
 @pytest.fixture
 def video_id(client, clip_bytes) -> str:
-    response = client.post("/api/artifacts", data={"project": "acme/ads", "session": "render-1", "kind": "video"},
+    response = client.post("/api/artifacts", data={"project": "acme/ads", "session": "render-1", "kind": "video", "tags": "eksenads"},
                            files={"file": ("ad.mp4", clip_bytes, "video/mp4")})
     assert response.status_code == 201, response.text
     return response.json()["id"]
@@ -61,7 +61,7 @@ def test_sheet_is_stored_next_to_the_video(client, video_id):
     assert any(t.get("cue") == "stamp" for t in sheet["tiles"])
     stored = client.get(f"/api/artifacts/{sheet['id']}").json()
     assert stored["meta"]["role"] == "sheet" and stored["meta"]["video"] == video_id
-    assert "sheet" in stored["tags"]
+    assert {"sheet", "eksenads"} <= set(stored["tags"])
     assert client.get(f"/api/artifacts/{video_id}").json()["meta"]["sheets"] == [sheet["id"]]
     again = client.post(f"/api/artifacts/{video_id}/sheet", json={"frames": 12}).json()
     assert client.get(f"/api/artifacts/{sheet['id']}").status_code == 404
@@ -82,7 +82,7 @@ def test_checks_store_a_report_and_link_it(client, video_id):
     report = data["artifact"]
     assert report["kind"] == "log" and report["filename"] == "ad-checks.json"
     assert report["meta"]["ok"] is False and report["meta"]["video"] == video_id
-    assert "fail" in report["tags"]
+    assert {"fail", "checks", "eksenads"} <= set(report["tags"])
     video = client.get(f"/api/artifacts/{video_id}").json()
     assert video["meta"]["checks"] == report["id"] and video["meta"]["checksOk"] is False
     assert client.get(f"/api/artifacts/{sheet['id']}").json()["meta"]["checks"] == report["id"]

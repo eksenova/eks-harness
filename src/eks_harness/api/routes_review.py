@@ -40,7 +40,8 @@ def _store(ctx: AppContext, principal: Principal, video: Artifact, path: Path, *
            tags: list[str], meta: dict) -> Artifact:
     return store_artifacts.ingest_file(
         ctx.db, ctx.config, project=video.project_id, session=video.session_slug, path_or_stream=path, kind=kind,
-        caption=caption, tags=tags, meta=meta, source="agent", user=principal, filename=path.name,
+        caption=caption, tags=list(dict.fromkeys([*tags, *(video.tags or ())])), meta=meta, source="agent",
+        user=principal, filename=path.name,
         events=ctx.events, move=True)
 
 

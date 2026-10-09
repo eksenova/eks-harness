@@ -293,6 +293,7 @@ def install(paths: Paths, command: list[str] | None = None, retire: list[str] | 
         unit.write_text(systemd_unit(spec, role), encoding="utf-8")
         run(["systemctl", "--user", "daemon-reload"], check=True)
         run(["systemctl", "--user", "enable", "--now", role.unit], check=True)
+        run(["systemctl", "--user", "restart", role.unit], check=True)
         where = str(unit)
     elif system == "Windows":
         run(["schtasks", "/Create", "/TN", role.task, "/SC", "ONLOGON", "/RL", "LIMITED", "/F", "/TR",
