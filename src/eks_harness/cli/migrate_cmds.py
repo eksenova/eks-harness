@@ -56,7 +56,8 @@ def farm_nodes(source: Path) -> list[dict[str, Any]]:
             if "VIDEODSL_CYCLES_DEVICE" in env:
                 env["EKS_HARNESS_CYCLES_DEVICE"] = env.pop("VIDEODSL_CYCLES_DEVICE")
             gpu = "CUDA_VISIBLE_DEVICES" in env or backend in ("CUDA", "OPTIX", "HIP", "METAL")
-            slot_id = f"gpu{env.get('CUDA_VISIBLE_DEVICES', index)}" if gpu else f"cpu{index}"
+            visible = str(env.get("CUDA_VISIBLE_DEVICES", ""))
+            slot_id = (f"gpu{visible}" if visible.isdigit() else f"gpu{index}") if gpu else f"cpu{index}"
             tags = ["gpu", backend.lower()] if gpu and backend else ["gpu"] if gpu else ["cpu"]
             slots.append({"id": slot_id, "workers": per_slot, "env": env, "tags": tags,
                           **({"backend": backend} if backend else {})})
