@@ -1,0 +1,11 @@
+{
+  "name": "eks-harness-workspace",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.5.1",
+  "scripts": {
+    "build": "pnpm -r --filter './sdk/**' --filter './workers/**' run build && pnpm --filter ./web run build",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test"
+  }
+}

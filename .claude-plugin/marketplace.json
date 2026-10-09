@@ -1,0 +1,13 @@
+{
+  "name": "eks-harness",
+  "description": "Plugin marketplace of eks-harness: device, browser and backend harness, video engine, scores and studio.",
+  "owner": { "name": "eks-harness maintainers" },
+  "plugins": [
+    {
+      "name": "eks-harness",
+      "source": "./claude",
+      "description": "Skills, agents, hooks, commands and the eks-harness MCP server.",
+      "version": "0.1.0"
+    }
+  ]
+}

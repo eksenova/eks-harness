@@ -1,0 +1,10 @@
+[plugin]
+id = "eks.device-take"
+name = "Device takes"
+version = "1.0.0"
+api = "1"
+description = "DeviceTake media: a flow run against a leased browser or device while recording, retimed so its cues land on their project times"
+
+[[contributes.media_renderer]]
+id = "device-take"
+entry = "eks_harness.video.plugins.builtin.media.device_take:DeviceTakeRenderer"

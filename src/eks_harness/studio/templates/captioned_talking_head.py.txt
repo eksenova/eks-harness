@@ -1,0 +1,30 @@
+from eks_harness.video import *
+
+# Vertical talking-head clip backed by a single video source. Captions are
+# expected to be added once the captioner plugin lands in Phase 2.
+
+project = Project(
+    fps=30,
+    resolution=(1080, 1920),
+    duration=20.0,
+    markers=[
+        STTMarkers(name="speech", source="tracks[0].segments[0]", backend="faster-whisper"),
+    ],
+    tracks=[
+        Track(
+            name="main",
+            segments=[
+                Segment(
+                    id="head",
+                    start=Seconds(t=0.0),
+                    media=VideoFile(path="assets/video/talking_head.mp4"),
+                    in_=Seconds(t=0.0),
+                    out=Seconds(t=20.0),
+                    effects=[
+                        Crop(x=0, y=420, w=1080, h=1920),
+                    ],
+                ),
+            ],
+        ),
+    ],
+)

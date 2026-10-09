@@ -1,0 +1,20 @@
+[plugin]
+id = "eks.blender"
+name = "Blender scenes"
+version = "1.0.0"
+api = "1"
+description = "BlenderScene media: renders .blend files and bpy scripts in sync with the timeline, locally or on the render farm"
+enabled_by_default = false
+
+[[contributes.media_renderer]]
+id = "blender"
+entry = "eks_harness.video.plugins.builtin.media.blender:BlenderRenderer"
+
+[[contributes.node_capability]]
+id = "blender"
+entry = "eks_harness.video.plugins.builtin.media.blender.runner:BlenderCapability"
+
+[config]
+executable = { type = "path", default = "", description = "Blender executable (empty: EKS_HARNESS_BLENDER, blender on PATH, then the usual install paths)" }
+workers = { type = "int", default = 1, description = "Blender processes per machine when no farm is configured" }
+cycles_device = { type = "str", default = "", description = "Cycles device type (OPTIX, CUDA, HIP, METAL, CPU; empty: best available)" }

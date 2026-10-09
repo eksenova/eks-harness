@@ -1,0 +1,18 @@
+from __future__ import annotations
+
+import argparse
+
+from eks_harness.plugins.sdk import PluginContext
+
+
+class Commands:
+    def __init__(self, context: PluginContext) -> None:
+        self.context = context
+
+    def register(self, subparsers: argparse._SubParsersAction) -> None:
+        parser = subparsers.add_parser("{{slug}}", help="{{description}}")
+        parser.set_defaults(func=self.run)
+
+    def run(self, args: argparse.Namespace) -> int:
+        print("{{name}}")
+        return 0

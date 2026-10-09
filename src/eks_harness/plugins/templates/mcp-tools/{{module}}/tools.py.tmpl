@@ -1,0 +1,15 @@
+from __future__ import annotations
+
+from typing import Any
+
+from eks_harness.plugins.sdk import PluginContext
+
+
+class Tools:
+    def __init__(self, context: PluginContext) -> None:
+        self.context = context
+
+    def register(self, server: Any, harness: Any) -> None:
+        @server.tool(name="{{slug}}_hello", description="Say hello from {{name}}")
+        def hello(name: str = "world") -> str:
+            return f"hello {name}"

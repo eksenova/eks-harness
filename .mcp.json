@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest", "--headless", "--isolated", "--viewport-size", "1440,900"]
+    },
+    "eks-harness": {
+      "command": "uv",
+      "args": ["run", "--project", ".", "eks-harness", "mcp"],
+      "env": { "PYTHONUNBUFFERED": "1" }
+    }
+  }
+}

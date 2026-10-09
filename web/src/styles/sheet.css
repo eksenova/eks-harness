@@ -1,0 +1,398 @@
+.sheet {
+  --track-color: var(--track-plugin);
+  display: flex;
+  flex-direction: column;
+  border: var(--hair);
+  background: var(--sheet);
+  min-width: 0;
+  font-size: var(--fs-12);
+}
+.sheet [data-kind="edit"] {
+  --track-color: var(--track-edit);
+}
+.sheet [data-kind="blender"] {
+  --track-color: var(--track-blender);
+}
+.sheet [data-kind="web"] {
+  --track-color: var(--track-web);
+}
+.sheet [data-kind="device"] {
+  --track-color: var(--track-device);
+}
+.sheet [data-kind="audio"] {
+  --track-color: var(--track-audio);
+}
+.sheet [data-kind="plugin"] {
+  --track-color: var(--track-plugin);
+}
+
+.sheet-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 34px;
+  padding: 0 var(--s-2);
+  background: var(--canvas);
+  border-bottom: var(--hair);
+  flex-wrap: wrap;
+}
+.sheet-readout {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  padding-right: var(--s-3);
+  margin-right: var(--s-1);
+  border-right: var(--hair);
+}
+.sheet-readout .timecode {
+  font-size: var(--fs-14);
+  font-weight: 600;
+}
+.sheet-readout .sheet-bars {
+  color: var(--ink-2);
+  font-size: var(--fs-13);
+  font-weight: 400;
+}
+.sheet-fill {
+  flex: 1;
+}
+.sheet-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  height: 26px;
+  min-width: 26px;
+  justify-content: center;
+  padding: 0 var(--s-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--fs-12);
+  cursor: pointer;
+}
+.sheet-tool:hover {
+  color: var(--ink);
+  border-color: var(--rule);
+}
+.sheet-tool[aria-pressed="true"] {
+  color: var(--ink);
+  border-color: var(--ink-3);
+  background: var(--paper);
+}
+.sheet-tool:focus-visible {
+  outline: var(--focus);
+  outline-offset: 1px;
+}
+
+.sheet-scroll {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+}
+.sheet-scroll:focus-visible {
+  outline: var(--focus);
+  outline-offset: -2px;
+}
+.sheet-canvas {
+  position: relative;
+}
+.sheet-rulers {
+  display: flex;
+  position: relative;
+  border-bottom: var(--hair);
+  background: var(--paper);
+  cursor: col-resize;
+  user-select: none;
+}
+.sheet-corner {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  flex: none;
+  width: var(--head);
+  background: var(--canvas);
+  border-right: var(--hair);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.sheet-corner-row {
+  height: 18px;
+  padding: 0 var(--s-2);
+  color: var(--ink-3);
+  font-size: var(--fs-11);
+  line-height: 18px;
+}
+.sheet-ruler {
+  position: relative;
+}
+.sheet-ruler-time,
+.sheet-ruler-bars {
+  position: relative;
+}
+.sheet-ruler-bars {
+  border-top: 1px solid var(--rule-soft);
+}
+.sheet-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  padding-left: 4px;
+  border-left: 1px solid var(--rule-bar);
+  color: var(--ink-2);
+  line-height: 22px;
+  white-space: nowrap;
+}
+.sheet-tick .timecode {
+  font-size: var(--fs-11);
+}
+.sheet-beat-tick {
+  position: absolute;
+  bottom: 0;
+  height: 6px;
+  border-left: 1px solid var(--rule-beat);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  line-height: 1;
+  color: var(--ink-2);
+}
+.sheet-beat-tick--bar {
+  height: 100%;
+  border-left-color: var(--rule-bar);
+  padding: 3px 0 0 3px;
+}
+.sheet-marker {
+  position: absolute;
+  top: 23px;
+  z-index: 2;
+  padding: 0 4px;
+  border-left: 2px solid var(--ink);
+  background: var(--paper);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.sheet-playhead-head {
+  position: absolute;
+  bottom: -1px;
+  z-index: 3;
+  width: 9px;
+  height: 9px;
+  margin-left: -4px;
+  background: var(--mark);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  pointer-events: none;
+}
+
+.sheet-body {
+  position: relative;
+  display: flex;
+}
+.sheet-heads {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  flex: none;
+  width: var(--head);
+  background: var(--canvas);
+  border-right: var(--hair);
+}
+.sheet-head {
+  display: flex;
+  align-items: stretch;
+  gap: var(--s-2);
+  border-bottom: var(--hair);
+  cursor: pointer;
+  overflow: hidden;
+}
+.sheet-head[aria-selected="true"] {
+  background: var(--mark-wash);
+}
+.sheet-head-code {
+  flex: none;
+  display: flex;
+  align-items: center;
+  width: 36px;
+  padding-left: 8px;
+  border-left: 4px solid var(--track-color);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  color: var(--ink);
+}
+.sheet[data-small] .sheet-head-code {
+  width: 100%;
+  padding-left: 6px;
+}
+.sheet-head-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding-right: var(--s-2);
+}
+.sheet-head-name {
+  font-size: var(--fs-12);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sheet-head-meta {
+  color: var(--ink-3);
+  font-size: var(--fs-11);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sheet-lanes {
+  position: relative;
+  flex: none;
+}
+.sheet-rule {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px solid var(--rule-soft);
+  pointer-events: none;
+}
+.sheet-rule--bar {
+  border-left-color: var(--rule-beat);
+}
+.sheet-rule--marker {
+  border-left: 1px dashed var(--ink-3);
+}
+.sheet-lane {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-bottom: var(--hair);
+}
+.sheet-clip {
+  position: absolute;
+  top: 3px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  min-width: 3px;
+  padding: 0 6px;
+  overflow: hidden;
+  border: 1px solid var(--track-color);
+  border-radius: var(--r-control);
+  background: color-mix(in srgb, var(--track-color) 18%, var(--sheet));
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sheet-clip:hover {
+  background: color-mix(in srgb, var(--track-color) 28%, var(--sheet));
+}
+.sheet-clip[aria-pressed="true"] {
+  outline: 2px solid var(--mark);
+  outline-offset: 0;
+}
+.sheet-clip-label {
+  font-size: var(--fs-11);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sheet-clip-detail {
+  font-size: var(--fs-11);
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sheet-event {
+  position: absolute;
+  bottom: 1px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  transform: translateX(-4px);
+}
+.sheet-event-flag {
+  width: 8px;
+  height: 8px;
+  background: var(--track-color);
+}
+.sheet-event[data-dir="in"] .sheet-event-flag {
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+.sheet-event[data-dir="out"] .sheet-event-flag {
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+.sheet-event[aria-pressed="true"] {
+  color: var(--mark);
+}
+.sheet-event[aria-pressed="true"] .sheet-event-flag {
+  background: var(--mark);
+}
+.sheet-event-name {
+  white-space: nowrap;
+}
+.sheet-links {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.sheet-links path {
+  fill: none;
+  stroke: var(--ink-3);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+.sheet-snap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--ink);
+  pointer-events: none;
+}
+.sheet-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  border-left: 1px solid var(--mark);
+  pointer-events: none;
+}
+.sheet-overview {
+  position: relative;
+  background: var(--canvas);
+  border-top: var(--hair);
+  cursor: pointer;
+}
+.sheet-overview-clip {
+  position: absolute;
+  height: 2px;
+  background: var(--track-color);
+}
+.sheet-overview-head {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--mark);
+}
+.sheet[data-small] .sheet-scroll::after {
+  content: "";
+}

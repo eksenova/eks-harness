@@ -1,0 +1,16 @@
+.venv/
+dist/
+build/
+__pycache__/
+*.pyc
+.pytest_cache/
+web/node_modules/
+web/dist/
+src/eks_harness/web_dist/
+src/eks_harness/_build.json
+node_modules/
+sdk/*/dist/
+workers/*/dist/
+src/eks_harness/assets/scene-runtime.js
+src/eks_harness/_workers/
+docs/local/

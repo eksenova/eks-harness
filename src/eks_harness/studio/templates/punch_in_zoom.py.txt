@@ -1,0 +1,39 @@
+from eks_harness.video import *
+
+# Punch-in fade for a single video source. Replace the placeholder Crop
+# parameters with your tracker's output once available.
+
+project = Project(
+    fps=30,
+    resolution=(1080, 1920),
+    duration=10.0,
+    tracks=[
+        Track(
+            name="main",
+            segments=[
+                Segment(
+                    id="punch",
+                    start=Seconds(t=0.0),
+                    media=VideoFile(path="assets/video/source.mp4"),
+                    in_=Seconds(t=0.0),
+                    out=Seconds(t=10.0),
+                    effects=[
+                        Crop(
+                            x=Animated[int](root=[
+                                Keyframe[int](t=Seconds(t=0.0), v=0),
+                                Keyframe[int](t=Seconds(t=10.0), v=240),
+                            ]),
+                            y=0,
+                            w=Animated[int](root=[
+                                Keyframe[int](t=Seconds(t=0.0), v=1080),
+                                Keyframe[int](t=Seconds(t=10.0), v=600),
+                            ]),
+                            h=1920,
+                        ),
+                        Fade(direction="in", duration=0.5),
+                    ],
+                ),
+            ],
+        ),
+    ],
+)

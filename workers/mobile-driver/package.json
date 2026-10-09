@@ -1,0 +1,15 @@
+{
+  "name": "@eks-harness/mobile-driver",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "eks-harness mobile driver worker: drives React Native apps through Metro's DevTools (CDP) and the @eks-harness/react-native bridge",
+  "main": "src/server.mjs",
+  "scripts": {
+    "typecheck": "node --check src/server.mjs",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.0"
+  }
+}

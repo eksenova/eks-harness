@@ -1,0 +1,33 @@
+[plugin]
+id = "eks.drivers"
+name = "Built-in drivers"
+version = "1.0.0"
+api = "1"
+description = "Web (Chrome over CDP with Playwright), iOS simulator and Android emulator drivers with the React Native bridge"
+
+[[contributes.driver]]
+id = "web"
+platform = "web"
+entry = "eks_harness.drivers.builtin:WebDriver"
+
+[[contributes.driver]]
+id = "ios"
+platform = "ios"
+entry = "eks_harness.drivers.builtin:IosDriver"
+
+[[contributes.driver]]
+id = "android"
+platform = "android"
+entry = "eks_harness.drivers.builtin:AndroidDriver"
+
+[[contributes.platform]]
+id = "web"
+entry = "eks_harness.drivers.builtin:WebDriver"
+
+[[contributes.platform]]
+id = "ios"
+entry = "eks_harness.drivers.builtin:IosDriver"
+
+[[contributes.platform]]
+id = "android"
+entry = "eks_harness.drivers.builtin:AndroidDriver"

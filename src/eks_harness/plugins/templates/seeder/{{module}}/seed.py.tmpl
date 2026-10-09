@@ -1,0 +1,17 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
+
+from eks_harness.plugins.sdk import PluginContext
+
+
+class Seeder:
+    def __init__(self, context: PluginContext) -> None:
+        self.context = context
+
+    def scenarios(self) -> list[str]:
+        return ["standard"]
+
+    def seed(self, context: Mapping[str, Any], scenario: str) -> dict[str, Any]:
+        return {"scenario": scenario}

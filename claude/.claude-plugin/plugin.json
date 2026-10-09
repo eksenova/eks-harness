@@ -1,0 +1,41 @@
+{
+  "name": "eks-harness",
+  "displayName": "eks-harness",
+  "version": "0.1.0",
+  "description": "Drive browsers, simulators and emulators, run backends and flows, capture evidence, edit and render videos, and score synchronized Blender, web and device scenes with eks-harness.",
+  "author": {
+    "name": "eks-harness maintainers"
+  },
+  "keywords": [
+    "testing",
+    "ui",
+    "harness",
+    "playwright",
+    "ios",
+    "android",
+    "react-native",
+    "video",
+    "blender",
+    "mcp"
+  ],
+  "mcpServers": {
+    "eks-harness": {
+      "command": "sh",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/scripts/mcp.sh"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--headless",
+        "--isolated"
+      ]
+    }
+  }
+}

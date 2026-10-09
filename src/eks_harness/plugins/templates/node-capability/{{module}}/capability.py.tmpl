@@ -1,0 +1,12 @@
+from __future__ import annotations
+
+import shutil
+from typing import Any
+
+
+class Capability:
+    name = "{{slug}}"
+
+    def probe(self) -> dict[str, Any] | None:
+        path = shutil.which("{{slug}}")
+        return {"path": path} if path else None

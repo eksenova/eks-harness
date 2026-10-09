@@ -1,0 +1,6 @@
+from {{module}}.backend import Backend
+
+
+def test_describe_and_spec() -> None:
+    backend = Backend.__new__(Backend)
+    assert backend.describe()["ports"] == ["http"]

@@ -1,0 +1,10 @@
+[plugin]
+id = "eks.web-scene"
+name = "Web scenes"
+version = "1.0.0"
+api = "1"
+description = "WebScene media: HTML/CSS/JS scenes rendered frame-exactly on a virtual clock, synced to markers and score events"
+
+[[contributes.media_renderer]]
+id = "web_scene"
+entry = "eks_harness.video.plugins.builtin.media.web_scene:WebSceneRenderer"

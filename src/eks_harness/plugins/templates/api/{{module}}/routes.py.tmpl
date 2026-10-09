@@ -1,0 +1,16 @@
+from __future__ import annotations
+
+from fastapi import APIRouter
+
+from eks_harness.plugins.sdk import PluginContext
+
+
+class Routes:
+    def router(self, context: PluginContext) -> APIRouter:
+        router = APIRouter()
+
+        @router.get("/status")
+        def status() -> dict:
+            return {"plugin": context.plugin_id, "settings": sorted(context.settings)}
+
+        return router

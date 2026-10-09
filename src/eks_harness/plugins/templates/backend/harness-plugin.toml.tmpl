@@ -1,0 +1,13 @@
+[plugin]
+id = "{{id}}"
+name = "{{name}}"
+version = "0.1.0"
+api = "1"
+description = "{{description}}"
+
+[[contributes.backend]]
+id = "{{slug}}"
+entry = "{{module}}.backend:Backend"
+
+[config]
+image = { type = "str", default = "", description = "container image or build target" }

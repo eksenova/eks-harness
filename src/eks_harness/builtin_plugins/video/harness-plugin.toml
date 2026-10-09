@@ -1,0 +1,226 @@
+[plugin]
+id = "eks.video"
+name = "Video engine built-ins"
+version = "1.0.0"
+api = "1"
+description = "Effects, encoders, marker sources, captioners and media providers of the video engine"
+
+[[contributes.effect]]
+id = "brightness"
+entry = "eks_harness.video.plugins.builtin.effects.brightness:BrightnessPlugin"
+
+[[contributes.effect]]
+id = "contrast"
+entry = "eks_harness.video.plugins.builtin.effects.contrast:ContrastPlugin"
+
+[[contributes.effect]]
+id = "saturation"
+entry = "eks_harness.video.plugins.builtin.effects.saturation:SaturationPlugin"
+
+[[contributes.effect]]
+id = "crop"
+entry = "eks_harness.video.plugins.builtin.effects.crop:CropPlugin"
+
+[[contributes.effect]]
+id = "mirror"
+entry = "eks_harness.video.plugins.builtin.effects.mirror:MirrorPlugin"
+
+[[contributes.effect]]
+id = "pan"
+entry = "eks_harness.video.plugins.builtin.effects.pan:PanPlugin"
+
+[[contributes.effect]]
+id = "fade"
+entry = "eks_harness.video.plugins.builtin.effects.fade:FadePlugin"
+
+[[contributes.effect]]
+id = "chroma_key"
+entry = "eks_harness.video.plugins.builtin.effects.chromakey:ChromaKeyPlugin"
+
+[[contributes.effect]]
+id = "color_grade"
+entry = "eks_harness.video.plugins.builtin.effects.colorgrade:ColorGradePlugin"
+
+[[contributes.effect]]
+id = "flash"
+entry = "eks_harness.video.plugins.builtin.effects.flash:FlashPlugin"
+
+[[contributes.effect]]
+id = "captions"
+entry = "eks_harness.video.plugins.builtin.effects.captions:CaptionsPlugin"
+
+[[contributes.effect]]
+id = "rgb_split"
+entry = "eks_harness.video.plugins.builtin.effects.rgbsplit:RGBSplitPlugin"
+
+[[contributes.effect]]
+id = "glitch"
+entry = "eks_harness.video.plugins.builtin.effects.glitch:GlitchPlugin"
+
+[[contributes.effect]]
+id = "shake"
+entry = "eks_harness.video.plugins.builtin.effects.shake:ShakePlugin"
+
+[[contributes.effect]]
+id = "vhs"
+entry = "eks_harness.video.plugins.builtin.effects.vhs:VHSPlugin"
+
+[[contributes.effect]]
+id = "datamosh"
+entry = "eks_harness.video.plugins.builtin.effects.datamosh:DatamoshPlugin"
+
+[[contributes.effect]]
+id = "matanyone_remove"
+entry = "eks_harness.video.plugins.builtin.effects.matanyone_remove:MatAnyoneRemovePlugin"
+
+[[contributes.effect]]
+id = "birefnet_remove"
+entry = "eks_harness.video.plugins.builtin.effects.birefnet_remove:BiRefNetRemovePlugin"
+
+[[contributes.effect]]
+id = "sam3_track"
+entry = "eks_harness.video.plugins.builtin.effects.sam3_track:SAM3TrackPlugin"
+
+[[contributes.effect]]
+id = "auto_reframe"
+entry = "eks_harness.video.plugins.builtin.effects.auto_reframe:AutoReframePlugin"
+
+[[contributes.effect]]
+id = "punch_in"
+entry = "eks_harness.video.plugins.builtin.effects.punch_in:PunchInPlugin"
+
+[[contributes.effect]]
+id = "blur"
+entry = "eks_harness.video.plugins.builtin.effects.blur:BlurPlugin"
+
+[[contributes.effect]]
+id = "sharpen"
+entry = "eks_harness.video.plugins.builtin.effects.sharpen:SharpenPlugin"
+
+[[contributes.effect]]
+id = "vignette"
+entry = "eks_harness.video.plugins.builtin.effects.vignette:VignettePlugin"
+
+[[contributes.effect]]
+id = "film_grain"
+entry = "eks_harness.video.plugins.builtin.effects.film_grain:FilmGrainPlugin"
+
+[[contributes.effect]]
+id = "invert"
+entry = "eks_harness.video.plugins.builtin.effects.invert:InvertPlugin"
+
+[[contributes.effect]]
+id = "posterize"
+entry = "eks_harness.video.plugins.builtin.effects.posterize:PosterizePlugin"
+
+[[contributes.effect]]
+id = "text_overlay"
+entry = "eks_harness.video.plugins.builtin.effects.text_overlay:TextOverlayPlugin"
+
+[[contributes.effect]]
+id = "lower_third"
+entry = "eks_harness.video.plugins.builtin.effects.lower_third:LowerThirdPlugin"
+
+[[contributes.effect]]
+id = "freeze"
+entry = "eks_harness.video.plugins.builtin.effects.freeze:FreezePlugin"
+
+[[contributes.effect]]
+id = "zoom"
+entry = "eks_harness.video.plugins.builtin.effects.zoom:ZoomPlugin"
+
+[[contributes.effect]]
+id = "speed_ramp"
+entry = "eks_harness.video.plugins.builtin.effects.speed_ramp:SpeedRampPlugin"
+
+[[contributes.effect]]
+id = "lut"
+entry = "eks_harness.video.plugins.builtin.effects.lut:LUTPlugin"
+
+[[contributes.effect]]
+id = "watermark"
+entry = "eks_harness.video.plugins.builtin.effects.watermark:WatermarkPlugin"
+
+[[contributes.effect]]
+id = "sticker"
+entry = "eks_harness.video.plugins.builtin.effects.sticker:StickerOverlayPlugin"
+
+[[contributes.encoder]]
+id = "amf"
+entry = "eks_harness.video.plugins.builtin.encoders.amf:AmfEncoder"
+
+[[contributes.encoder]]
+id = "nvenc"
+entry = "eks_harness.video.plugins.builtin.encoders.nvenc:NvencEncoder"
+
+[[contributes.encoder]]
+id = "videotoolbox"
+entry = "eks_harness.video.plugins.builtin.encoders.videotoolbox:VideotoolboxEncoder"
+
+[[contributes.encoder]]
+id = "qsv"
+entry = "eks_harness.video.plugins.builtin.encoders.qsv:QsvEncoder"
+
+[[contributes.encoder]]
+id = "libx264"
+entry = "eks_harness.video.plugins.builtin.encoders.libx264:Libx264Encoder"
+
+[[contributes.marker_source]]
+id = "beat_tracker"
+entry = "eks_harness.video.plugins.builtin.markers.beat_tracker:BeatTrackerExtractor"
+
+[[contributes.marker_source]]
+id = "stt_markers"
+entry = "eks_harness.video.plugins.builtin.markers.stt_markers:STTMarkersExtractor"
+
+[[contributes.marker_source]]
+id = "scene_markers"
+entry = "eks_harness.video.plugins.builtin.markers.scene_markers:SceneMarkersExtractor"
+
+[[contributes.marker_source]]
+id = "silence_markers"
+entry = "eks_harness.video.plugins.builtin.markers.silence_markers:SilenceMarkersExtractor"
+
+[[contributes.marker_source]]
+id = "onset_markers"
+entry = "eks_harness.video.plugins.builtin.markers.onset_markers:OnsetMarkersExtractor"
+
+[[contributes.marker_source]]
+id = "energy_markers"
+entry = "eks_harness.video.plugins.builtin.markers.energy_markers:EnergyMarkersExtractor"
+
+[[contributes.marker_source]]
+id = "momentum_markers"
+entry = "eks_harness.video.plugins.builtin.markers.momentum_markers:MomentumMarkersExtractor"
+
+[[contributes.marker_source]]
+id = "face_markers"
+entry = "eks_harness.video.plugins.builtin.markers.face_markers:FaceMarkersExtractor"
+
+[[contributes.marker_source]]
+id = "motion_markers"
+entry = "eks_harness.video.plugins.builtin.markers.motion_markers:MotionMarkersExtractor"
+
+[[contributes.captioner]]
+id = "winml-whisper"
+entry = "eks_harness.video.plugins.builtin.captioners.winml_whisper_captioner:WinmlWhisperCaptioner"
+
+[[contributes.captioner]]
+id = "faster-whisper"
+entry = "eks_harness.video.plugins.builtin.captioners.faster_whisper_captioner:FasterWhisperCaptioner"
+
+[[contributes.captioner]]
+id = "whisperx"
+entry = "eks_harness.video.plugins.builtin.captioners.whisperx_captioner:WhisperXCaptioner"
+
+[[contributes.captioner]]
+id = "mlx-whisper"
+entry = "eks_harness.video.plugins.builtin.captioners.mlx_whisper_captioner:MlxWhisperCaptioner"
+
+[[contributes.media_provider]]
+id = "filesystem"
+entry = "eks_harness.video.plugins.builtin.media_providers.filesystem:FilesystemProvider"
+
+[[contributes.media_provider]]
+id = "yt_dlp"
+entry = "eks_harness.video.plugins.builtin.media_providers.yt_dlp:YtDlpProvider"

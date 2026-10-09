@@ -1,0 +1,36 @@
+from __future__ import annotations
+
+import sys
+from collections.abc import Mapping
+from typing import Any
+
+from eks_harness.plugins.sdk import BackendSpec, Health, PluginContext, ProcessSpec
+
+
+class Backend:
+    def __init__(self, context: PluginContext) -> None:
+        self.context = context
+
+    def describe(self) -> dict[str, Any]:
+        return {"description": "{{name}}", "ports": ["http"], "idleGraceSeconds": 120}
+
+    def fingerprint(self, context: Mapping[str, Any]) -> str:
+        return str(self.context.settings.get("image") or "")
+
+    def prepare(self, context: Mapping[str, Any]) -> None:
+        pass
+
+    def spec(self, context: Mapping[str, Any]) -> BackendSpec:
+        port = context["ports"]["http"]
+        return BackendSpec(
+            processes=[ProcessSpec(name="{{slug}}-http", port="http",
+                                   command=[sys.executable, "-m", "http.server", str(port), "--bind", "127.0.0.1"],
+                                   health=Health(url=f"http://127.0.0.1:{port}/"))],
+            exports={"API_BASE_URL": "http://127.0.0.1:{ports.http}"},
+        )
+
+    def teardown(self, context: Mapping[str, Any], final: bool = False) -> None:
+        pass
+
+    def seed(self, context: Mapping[str, Any], scenario: str | None = None) -> dict[str, Any]:
+        return {"scenario": scenario or "standard"}

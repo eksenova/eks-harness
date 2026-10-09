@@ -1,0 +1,14 @@
+[plugin]
+id = "{{id}}"
+name = "{{name}}"
+version = "0.1.0"
+api = "1"
+description = "{{description}}"
+
+[[contributes.driver]]
+id = "{{slug}}"
+entry = "{{module}}.driver:Driver"
+
+[[contributes.platform]]
+id = "{{slug}}"
+entry = "{{module}}.driver:Platform"

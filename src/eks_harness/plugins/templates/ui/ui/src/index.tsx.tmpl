@@ -1,0 +1,7 @@
+import { definePlugin, type SlotProps } from "@eks-harness/ui-sdk";
+
+function Tab({ project }: SlotProps) {
+  return <section>{project?.id}</section>;
+}
+
+export default definePlugin({ "project.tab": Tab });

@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {"hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/harness_hint.py\""}]}
+    ],
+    "PreToolUse": [
+      {"matcher": "Bash|mcp__.*eks-harness.*__driver_.*",
+       "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cheap_inspection_guard.py\""}]},
+      {"matcher": "Bash",
+       "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pr_evidence_guard.py\""}]},
+      {"matcher": "Edit|Write|MultiEdit|NotebookEdit",
+       "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/design_hint.py\""}]}
+    ],
+    "PostToolUse": [
+      {"matcher": "Bash|EnterWorktree",
+       "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/prewarm.py\""}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/evidence_guard.py\""}]}
+    ],
+    "SubagentStop": [
+      {"hooks": [
+        {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/evidence_guard.py\""},
+        {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/agent_stop.py\""}
+      ]}
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@eks-harness/worker-kit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared pieces of the eks-harness driver workers: daemon client, script runner, DevTools link, config and extensions",
+  "exports": {
+    "./daemon-client": "./src/daemon-client.mjs",
+    "./script-runner": "./src/script-runner.mjs",
+    "./devtools-link": "./src/devtools-link.mjs",
+    "./config": "./src/config.mjs",
+    "./extensions": "./src/extensions.mjs"
+  },
+  "scripts": {
+    "typecheck": "node --check src/daemon-client.mjs && node --check src/script-runner.mjs && node --check src/devtools-link.mjs && node --check src/config.mjs && node --check src/extensions.mjs",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.0"
+  }
+}

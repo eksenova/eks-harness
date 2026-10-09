@@ -1,0 +1,7032 @@
+{
+  "$defs": {
+    "Animated_EQ_": {
+      "title": "Animated[EQ]"
+    },
+    "Animated_float_": {
+      "title": "Animated[float]"
+    },
+    "Animated_int_": {
+      "title": "Animated[int]"
+    },
+    "AudioFade": {
+      "additionalProperties": false,
+      "description": "Per-segment fade-in and/or fade-out applied via ffmpeg ``afade``.",
+      "properties": {
+        "fade_in": {
+          "default": 0.0,
+          "title": "Fade In",
+          "type": "number"
+        },
+        "fade_out": {
+          "default": 0.0,
+          "title": "Fade Out",
+          "type": "number"
+        }
+      },
+      "title": "AudioFade",
+      "type": "object"
+    },
+    "AudioFile": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "audio_file",
+          "default": "audio_file",
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Path"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "AudioFile",
+      "type": "object"
+    },
+    "AudioSegment": {
+      "additionalProperties": false,
+      "description": "A clip placed on an ``AudioTrack``.",
+      "properties": {
+        "denoise": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeepFilterDenoise"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ducking": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Ducking"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "fade": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AudioFade"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "gain_db": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "in": {
+          "discriminator": {
+            "mapping": {
+              "beat": "#/$defs/BeatRef",
+              "frames": "#/$defs/Frames",
+              "marker": "#/$defs/MarkerRef",
+              "seconds": "#/$defs/Seconds",
+              "word": "#/$defs/WordRef"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Seconds"
+            },
+            {
+              "$ref": "#/$defs/Frames"
+            },
+            {
+              "$ref": "#/$defs/BeatRef"
+            },
+            {
+              "$ref": "#/$defs/WordRef"
+            },
+            {
+              "$ref": "#/$defs/MarkerRef"
+            }
+          ],
+          "title": "In"
+        },
+        "media": {
+          "discriminator": {
+            "mapping": {
+              "audio_file": "#/$defs/AudioFile",
+              "generated_card": "#/$defs/GeneratedCard",
+              "html_overlay": "#/$defs/HTMLOverlay",
+              "image_file": "#/$defs/ImageFile",
+              "separated_stem": "#/$defs/SeparatedStem",
+              "solid": "#/$defs/Solid",
+              "tts_generated": "#/$defs/TTSGenerated",
+              "video_file": "#/$defs/VideoFile"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/VideoFile"
+            },
+            {
+              "$ref": "#/$defs/ImageFile"
+            },
+            {
+              "$ref": "#/$defs/Solid"
+            },
+            {
+              "$ref": "#/$defs/GeneratedCard"
+            },
+            {
+              "$ref": "#/$defs/AudioFile"
+            },
+            {
+              "$ref": "#/$defs/TTSGenerated"
+            },
+            {
+              "$ref": "#/$defs/SeparatedStem"
+            },
+            {
+              "$ref": "#/$defs/HTMLOverlay"
+            }
+          ],
+          "title": "Media"
+        },
+        "out": {
+          "discriminator": {
+            "mapping": {
+              "beat": "#/$defs/BeatRef",
+              "frames": "#/$defs/Frames",
+              "marker": "#/$defs/MarkerRef",
+              "seconds": "#/$defs/Seconds",
+              "word": "#/$defs/WordRef"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Seconds"
+            },
+            {
+              "$ref": "#/$defs/Frames"
+            },
+            {
+              "$ref": "#/$defs/BeatRef"
+            },
+            {
+              "$ref": "#/$defs/WordRef"
+            },
+            {
+              "$ref": "#/$defs/MarkerRef"
+            }
+          ],
+          "title": "Out"
+        },
+        "reverb": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Reverb"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "start": {
+          "discriminator": {
+            "mapping": {
+              "beat": "#/$defs/BeatRef",
+              "frames": "#/$defs/Frames",
+              "marker": "#/$defs/MarkerRef",
+              "seconds": "#/$defs/Seconds",
+              "word": "#/$defs/WordRef"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Seconds"
+            },
+            {
+              "$ref": "#/$defs/Frames"
+            },
+            {
+              "$ref": "#/$defs/BeatRef"
+            },
+            {
+              "$ref": "#/$defs/WordRef"
+            },
+            {
+              "$ref": "#/$defs/MarkerRef"
+            }
+          ],
+          "title": "Start"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "media",
+        "out"
+      ],
+      "title": "AudioSegment",
+      "type": "object"
+    },
+    "AudioTrack": {
+      "additionalProperties": false,
+      "description": "Audio track with full ``Animated`` parity for gain / pan / EQ.",
+      "properties": {
+        "eq": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Animated_EQ_"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "gain_db": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "loudness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LoudnessNormalize"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "pan": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "parametric_eq": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EQEffect"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "segments": {
+          "items": {
+            "$ref": "#/$defs/AudioSegment"
+          },
+          "title": "Segments",
+          "type": "array"
+        },
+        "sidechain": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SidechainConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "AudioTrack",
+      "type": "object"
+    },
+    "AutoReframe": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "auto_reframe",
+          "default": "auto_reframe",
+          "title": "Kind",
+          "type": "string"
+        },
+        "smoothing": {
+          "default": 0.85,
+          "title": "Smoothing",
+          "type": "number"
+        },
+        "target_aspect": {
+          "default": [
+            9,
+            16
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Target Aspect",
+          "type": "array"
+        },
+        "tracker": {
+          "default": "face",
+          "enum": [
+            "face",
+            "salience"
+          ],
+          "title": "Tracker",
+          "type": "string"
+        }
+      },
+      "title": "AutoReframe",
+      "type": "object"
+    },
+    "BackOut": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "back_out",
+          "default": "back_out",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "BackOut",
+      "type": "object"
+    },
+    "BeatFlash": {
+      "additionalProperties": false,
+      "description": "Crossfade that flashes white on every beat inside the transition window.\n\nNot a plain xfade preset: an ``xfade=transition=fade`` is overlaid with a\nsum of narrow Gaussian brightness bumps (``eq``, ``eval=frame``), one per\nbeat of ``stream`` that falls inside the window. The renderer threads the\nwindow-local beat times from the project's resolved markers; when no beat\nlands in the window it falls back to a single pulse at mid-window so the\ntransition is never a silent no-op. ``intensity`` scales the flash\nbrightness (0 = none, 1 = strong).",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "intensity": {
+          "default": 0.7,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Intensity",
+          "type": "number"
+        },
+        "kind": {
+          "const": "beat_flash",
+          "default": "beat_flash",
+          "title": "Kind",
+          "type": "string"
+        },
+        "stream": {
+          "default": "kick",
+          "title": "Stream",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "BeatFlash",
+      "type": "object"
+    },
+    "BeatGlitch": {
+      "additionalProperties": false,
+      "description": "Pixelize blend that bursts a chromatic glitch on every beat in the window.\n\nNot a plain xfade preset: an ``xfade=transition=pixelize`` is followed by an\n``rgbashift`` whose channel split is gated to a short pulse around each beat\nof ``stream`` inside the transition window. The renderer threads the\nwindow-local beat times from the project's resolved markers; when no beat\nlands in the window it falls back to a single pulse at mid-window so the\ntransition is never a silent no-op. ``intensity`` scales the channel-split\nmagnitude (0 = none, 1 = strong).",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "intensity": {
+          "default": 0.7,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Intensity",
+          "type": "number"
+        },
+        "kind": {
+          "const": "beat_glitch",
+          "default": "beat_glitch",
+          "title": "Kind",
+          "type": "string"
+        },
+        "stream": {
+          "default": "kick",
+          "title": "Stream",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "BeatGlitch",
+      "type": "object"
+    },
+    "BeatPulse": {
+      "additionalProperties": false,
+      "description": "Pulse curve triggered on every beat in the referenced stream.\n\n``intensity_ramp`` is either a constant amplitude or a list of keyframes\nspanning the project; the amplitude at each trigger is sampled from the\nramp and multiplied into the envelope.",
+      "properties": {
+        "baseline": {
+          "default": 0.0,
+          "title": "Baseline",
+          "type": "number"
+        },
+        "envelope": {
+          "discriminator": {
+            "mapping": {
+              "box_env": "#/$defs/BoxEnv",
+              "easing_env": "#/$defs/EasingEnv",
+              "exp_decay_env": "#/$defs/ExpDecayEnv",
+              "linear_env": "#/$defs/LinearEnv"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ExpDecayEnv"
+            },
+            {
+              "$ref": "#/$defs/LinearEnv"
+            },
+            {
+              "$ref": "#/$defs/BoxEnv"
+            },
+            {
+              "$ref": "#/$defs/EasingEnv"
+            }
+          ],
+          "title": "Envelope"
+        },
+        "intensity_ramp": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "$ref": "#/$defs/Keyframe_float_"
+              },
+              "type": "array"
+            }
+          ],
+          "title": "Intensity Ramp"
+        },
+        "kind": {
+          "const": "beat_pulse",
+          "default": "beat_pulse",
+          "title": "Kind",
+          "type": "string"
+        },
+        "trigger": {
+          "$ref": "#/$defs/BeatRef"
+        }
+      },
+      "required": [
+        "trigger",
+        "envelope",
+        "intensity_ramp"
+      ],
+      "title": "BeatPulse",
+      "type": "object"
+    },
+    "BeatRef": {
+      "additionalProperties": false,
+      "description": "Reference to a beat marker stream emitted by a ``MarkerSource``.\n\n``every=N`` selects every N-th beat in the stream. ``offset_ms`` shifts\nthe resolved time. ``range`` optionally bounds resolution to a sub-window\nof the project.",
+      "properties": {
+        "every": {
+          "default": 1,
+          "title": "Every",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "beat",
+          "default": "beat",
+          "title": "Kind",
+          "type": "string"
+        },
+        "offset_ms": {
+          "default": 0.0,
+          "title": "Offset Ms",
+          "type": "number"
+        },
+        "range": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "discriminator": {
+                    "mapping": {
+                      "beat": "#/$defs/BeatRef",
+                      "frames": "#/$defs/Frames",
+                      "marker": "#/$defs/MarkerRef",
+                      "seconds": "#/$defs/Seconds",
+                      "word": "#/$defs/WordRef"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/Seconds"
+                    },
+                    {
+                      "$ref": "#/$defs/Frames"
+                    },
+                    {
+                      "$ref": "#/$defs/BeatRef"
+                    },
+                    {
+                      "$ref": "#/$defs/WordRef"
+                    },
+                    {
+                      "$ref": "#/$defs/MarkerRef"
+                    }
+                  ]
+                },
+                {
+                  "discriminator": {
+                    "mapping": {
+                      "beat": "#/$defs/BeatRef",
+                      "frames": "#/$defs/Frames",
+                      "marker": "#/$defs/MarkerRef",
+                      "seconds": "#/$defs/Seconds",
+                      "word": "#/$defs/WordRef"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/Seconds"
+                    },
+                    {
+                      "$ref": "#/$defs/Frames"
+                    },
+                    {
+                      "$ref": "#/$defs/BeatRef"
+                    },
+                    {
+                      "$ref": "#/$defs/WordRef"
+                    },
+                    {
+                      "$ref": "#/$defs/MarkerRef"
+                    }
+                  ]
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Range"
+        },
+        "stream": {
+          "title": "Stream",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stream"
+      ],
+      "title": "BeatRef",
+      "type": "object"
+    },
+    "BeatTracker": {
+      "additionalProperties": false,
+      "description": "Beat / kick / snare / downbeat extraction from an audio source.\n\n``source`` references either an audio track name or a path-like asset id;\nthe marker extractor plugin resolves it.\n\n``backend`` selects the extraction backend. ``\"auto\"`` (the default)\ntries BeatNet, then madmom, then librosa, then falls back to an\nevenly-spaced stub. Explicit values pin a backend for reproducibility;\nif the pinned backend is unavailable, the extractor logs a warning and\nfalls back through the remaining backends in auto order.",
+      "properties": {
+        "backend": {
+          "default": "auto",
+          "enum": [
+            "auto",
+            "beatnet",
+            "madmom",
+            "librosa"
+          ],
+          "title": "Backend",
+          "type": "string"
+        },
+        "bpm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bpm"
+        },
+        "kind": {
+          "const": "beat_tracker",
+          "default": "beat_tracker",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "streams": {
+          "items": {
+            "enum": [
+              "kick",
+              "snare",
+              "beat",
+              "downbeat"
+            ],
+            "type": "string"
+          },
+          "title": "Streams",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "source"
+      ],
+      "title": "BeatTracker",
+      "type": "object"
+    },
+    "Bezier": {
+      "additionalProperties": false,
+      "description": "Cubic Bezier curve in project-time.\n\nGoes from ``p0`` at ``t=0`` to ``p3`` at ``t=duration`` via control points\n``p1`` and ``p2``. Beyond ``duration`` the value is clamped to ``p3``.\n\nDistinct from :class:`eks_harness.video.ir.easing.CubicBezier` which is a\nnormalized easing (0..1 -> 0..1); this is a value-producing curve in\nseconds.",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "bezier",
+          "default": "bezier",
+          "title": "Kind",
+          "type": "string"
+        },
+        "p0": {
+          "title": "P0",
+          "type": "number"
+        },
+        "p1": {
+          "title": "P1",
+          "type": "number"
+        },
+        "p2": {
+          "title": "P2",
+          "type": "number"
+        },
+        "p3": {
+          "title": "P3",
+          "type": "number"
+        }
+      },
+      "required": [
+        "p0",
+        "p1",
+        "p2",
+        "p3",
+        "duration"
+      ],
+      "title": "Bezier",
+      "type": "object"
+    },
+    "BiRefNetRemove": {
+      "additionalProperties": false,
+      "description": "Per-frame BiRefNet matting via ``rembg``. Requires\n``pip install eks-harness[matting]``.",
+      "properties": {
+        "background": {
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Background",
+          "type": "array"
+        },
+        "kind": {
+          "const": "birefnet_remove",
+          "default": "birefnet_remove",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "BiRefNetRemove",
+      "type": "object"
+    },
+    "Blur": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "blur",
+          "default": "blur",
+          "title": "Kind",
+          "type": "string"
+        },
+        "radius": {
+          "$ref": "#/$defs/Animated_float_"
+        }
+      },
+      "required": [
+        "radius"
+      ],
+      "title": "Blur",
+      "type": "object"
+    },
+    "BlurThrough": {
+      "additionalProperties": false,
+      "description": "Blur-out / blur-in blend through the boundary.\n\nRenders via ffmpeg ``xfade=transition=hblur``.",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "blur_through",
+          "default": "blur_through",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "BlurThrough",
+      "type": "object"
+    },
+    "Bounce": {
+      "additionalProperties": false,
+      "description": "Damped absolute-value sine: ``amplitude * exp(-decay*t) * |sin(2*pi*t/period)|``.\n\nUseful for \"settling\" animations such as a UI element bouncing into place.",
+      "properties": {
+        "amplitude": {
+          "title": "Amplitude",
+          "type": "number"
+        },
+        "decay": {
+          "default": 1.0,
+          "title": "Decay",
+          "type": "number"
+        },
+        "kind": {
+          "const": "bounce",
+          "default": "bounce",
+          "title": "Kind",
+          "type": "string"
+        },
+        "period": {
+          "exclusiveMinimum": 0,
+          "title": "Period",
+          "type": "number"
+        }
+      },
+      "required": [
+        "amplitude",
+        "period"
+      ],
+      "title": "Bounce",
+      "type": "object"
+    },
+    "BounceOut": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "bounce_out",
+          "default": "bounce_out",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "BounceOut",
+      "type": "object"
+    },
+    "BoxEnv": {
+      "additionalProperties": false,
+      "description": "Rectangular envelope of ``width`` seconds at amplitude 1.0.",
+      "properties": {
+        "kind": {
+          "const": "box_env",
+          "default": "box_env",
+          "title": "Kind",
+          "type": "string"
+        },
+        "width": {
+          "title": "Width",
+          "type": "number"
+        }
+      },
+      "required": [
+        "width"
+      ],
+      "title": "BoxEnv",
+      "type": "object"
+    },
+    "Brightness": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "kind": {
+          "const": "brightness",
+          "default": "brightness",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "amount"
+      ],
+      "title": "Brightness",
+      "type": "object"
+    },
+    "Captions": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "default": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Color",
+          "type": "array"
+        },
+        "font": {
+          "default": "Inter",
+          "title": "Font",
+          "type": "string"
+        },
+        "kind": {
+          "const": "captions",
+          "default": "captions",
+          "title": "Kind",
+          "type": "string"
+        },
+        "margin": {
+          "default": 120,
+          "title": "Margin",
+          "type": "integer"
+        },
+        "max_words_per_card": {
+          "default": 4,
+          "title": "Max Words Per Card",
+          "type": "integer"
+        },
+        "position": {
+          "default": "bottom",
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ],
+          "title": "Position",
+          "type": "string"
+        },
+        "size": {
+          "default": 64,
+          "title": "Size",
+          "type": "integer"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "stroke": {
+          "anyOf": [
+            {
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stroke"
+        },
+        "stroke_width": {
+          "default": 0,
+          "title": "Stroke Width",
+          "type": "integer"
+        },
+        "style": {
+          "default": "tiktok",
+          "enum": [
+            "tiktok",
+            "subtitle",
+            "kinetic"
+          ],
+          "title": "Style",
+          "type": "string"
+        },
+        "word_animation": {
+          "default": "pop",
+          "enum": [
+            "pop",
+            "fade",
+            "none"
+          ],
+          "title": "Word Animation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "Captions",
+      "type": "object"
+    },
+    "ChromaKey": {
+      "additionalProperties": false,
+      "properties": {
+        "blend": {
+          "default": 0.0,
+          "title": "Blend",
+          "type": "number"
+        },
+        "color": {
+          "default": [
+            0,
+            255,
+            0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Color",
+          "type": "array"
+        },
+        "kind": {
+          "const": "chroma_key",
+          "default": "chroma_key",
+          "title": "Kind",
+          "type": "string"
+        },
+        "similarity": {
+          "default": 0.1,
+          "title": "Similarity",
+          "type": "number"
+        }
+      },
+      "title": "ChromaKey",
+      "type": "object"
+    },
+    "ColorGrade": {
+      "additionalProperties": false,
+      "properties": {
+        "exposure": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "kind": {
+          "const": "color_grade",
+          "default": "color_grade",
+          "title": "Kind",
+          "type": "string"
+        },
+        "lut_path": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lut Path"
+        },
+        "temperature": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "tint": {
+          "$ref": "#/$defs/Animated_float_"
+        }
+      },
+      "title": "ColorGrade",
+      "type": "object"
+    },
+    "Contrast": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "kind": {
+          "const": "contrast",
+          "default": "contrast",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "amount"
+      ],
+      "title": "Contrast",
+      "type": "object"
+    },
+    "Crop": {
+      "additionalProperties": false,
+      "properties": {
+        "h": {
+          "$ref": "#/$defs/Animated_int_"
+        },
+        "kind": {
+          "const": "crop",
+          "default": "crop",
+          "title": "Kind",
+          "type": "string"
+        },
+        "w": {
+          "$ref": "#/$defs/Animated_int_"
+        },
+        "x": {
+          "$ref": "#/$defs/Animated_int_"
+        },
+        "y": {
+          "$ref": "#/$defs/Animated_int_"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "title": "Crop",
+      "type": "object"
+    },
+    "Crossfade": {
+      "additionalProperties": false,
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "crossfade",
+          "default": "crossfade",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "Crossfade",
+      "type": "object"
+    },
+    "CubicBezier": {
+      "additionalProperties": false,
+      "description": "CSS-style cubic bezier easing with control points in [0, 1].",
+      "properties": {
+        "kind": {
+          "const": "cubic_bezier",
+          "default": "cubic_bezier",
+          "title": "Kind",
+          "type": "string"
+        },
+        "p1x": {
+          "title": "P1X",
+          "type": "number"
+        },
+        "p1y": {
+          "title": "P1Y",
+          "type": "number"
+        },
+        "p2x": {
+          "title": "P2X",
+          "type": "number"
+        },
+        "p2y": {
+          "title": "P2Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "p1x",
+        "p1y",
+        "p2x",
+        "p2y"
+      ],
+      "title": "CubicBezier",
+      "type": "object"
+    },
+    "Curve": {
+      "discriminator": {
+        "mapping": {
+          "beat_pulse": "#/$defs/BeatPulse",
+          "bezier": "#/$defs/Bezier",
+          "bounce": "#/$defs/Bounce",
+          "exp_decay": "#/$defs/ExpDecay",
+          "lambda": "#/$defs/Lambda",
+          "lfo": "#/$defs/LFO",
+          "noise": "#/$defs/Noise",
+          "random_choice": "#/$defs/RandomChoice",
+          "sine": "#/$defs/Sine",
+          "spring": "#/$defs/Spring",
+          "step": "#/$defs/Step"
+        },
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/BeatPulse"
+        },
+        {
+          "$ref": "#/$defs/ExpDecay"
+        },
+        {
+          "$ref": "#/$defs/Sine"
+        },
+        {
+          "$ref": "#/$defs/LFO"
+        },
+        {
+          "$ref": "#/$defs/Lambda"
+        },
+        {
+          "$ref": "#/$defs/Spring"
+        },
+        {
+          "$ref": "#/$defs/Noise"
+        },
+        {
+          "$ref": "#/$defs/RandomChoice"
+        },
+        {
+          "$ref": "#/$defs/Step"
+        },
+        {
+          "$ref": "#/$defs/Bezier"
+        },
+        {
+          "$ref": "#/$defs/Bounce"
+        }
+      ]
+    },
+    "Cut": {
+      "additionalProperties": false,
+      "description": "Hard cut. Default for adjacent segments.",
+      "properties": {
+        "kind": {
+          "const": "cut",
+          "default": "cut",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "Cut",
+      "type": "object"
+    },
+    "Datamosh": {
+      "additionalProperties": false,
+      "properties": {
+        "intensity": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "kind": {
+          "const": "datamosh",
+          "default": "datamosh",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "Datamosh",
+      "type": "object"
+    },
+    "DeepFilterDenoise": {
+      "additionalProperties": false,
+      "description": "Per-segment audio noise removal via DeepFilterNet 3.\n\nRuns as a pre-pass on the segment's input audio (before ``atrim`` /\n``afade`` / ``adelay``) and the rest of the audio chain operates on the\ndenoised WAV. Cached on disk by ``(source path, source mtime, params)``\nso repeated renders reuse the result.\n\nLazy-loaded; requires ``pip install eks-harness[denoise]``.",
+      "properties": {
+        "attenuation_limit_db": {
+          "default": 60.0,
+          "minimum": 0,
+          "title": "Attenuation Limit Db",
+          "type": "number"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "title": "DeepFilterDenoise",
+      "type": "object"
+    },
+    "DipToBlack": {
+      "additionalProperties": false,
+      "description": "Fade outgoing segment to black, then fade in incoming.\n\nRenders via ffmpeg ``xfade=transition=fadeblack``.",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "dip_to_black",
+          "default": "dip_to_black",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "DipToBlack",
+      "type": "object"
+    },
+    "DipToWhite": {
+      "additionalProperties": false,
+      "description": "Fade outgoing segment to white, then fade in incoming.\n\nRenders via ffmpeg ``xfade=transition=fadewhite``.",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "dip_to_white",
+          "default": "dip_to_white",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "DipToWhite",
+      "type": "object"
+    },
+    "Dissolve": {
+      "additionalProperties": false,
+      "description": "Random-noise dissolve between segments.\n\nRenders via ffmpeg ``xfade=transition=dissolve``.",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "dissolve",
+          "default": "dissolve",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "Dissolve",
+      "type": "object"
+    },
+    "Ducking": {
+      "additionalProperties": false,
+      "description": "Segment-level sidechain ducking keyed off another audio source.\n\nMirrors :class:`SidechainConfig` (which is track-level) but attaches to\nan individual :class:`AudioSegment`, enabling per-clip ducking decisions\nsuch as ducking music only under a specific VO segment.",
+      "properties": {
+        "attack_ms": {
+          "default": 10.0,
+          "title": "Attack Ms",
+          "type": "number"
+        },
+        "ratio": {
+          "default": 4.0,
+          "title": "Ratio",
+          "type": "number"
+        },
+        "release_ms": {
+          "default": 200.0,
+          "title": "Release Ms",
+          "type": "number"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "threshold_db": {
+          "default": -20.0,
+          "title": "Threshold Db",
+          "type": "number"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "Ducking",
+      "type": "object"
+    },
+    "EQBand": {
+      "additionalProperties": false,
+      "description": "One band of a parametric EQ.",
+      "properties": {
+        "frequency_hz": {
+          "title": "Frequency Hz",
+          "type": "number"
+        },
+        "gain_db": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "q": {
+          "default": 1.0,
+          "title": "Q",
+          "type": "number"
+        },
+        "type": {
+          "default": "peak",
+          "enum": [
+            "peak",
+            "low_shelf",
+            "high_shelf"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "frequency_hz"
+      ],
+      "title": "EQBand",
+      "type": "object"
+    },
+    "EQEffect": {
+      "additionalProperties": false,
+      "description": "Multi-band parametric EQ; supersedes the 3-band :class:`EQ` when set.\n\nEach :class:`EQBand` becomes one ``equalizer`` filter node in the\nrendered track chain.",
+      "properties": {
+        "bands": {
+          "items": {
+            "$ref": "#/$defs/EQBand"
+          },
+          "title": "Bands",
+          "type": "array"
+        }
+      },
+      "title": "EQEffect",
+      "type": "object"
+    },
+    "EaseIn": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "ease_in",
+          "default": "ease_in",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "EaseIn",
+      "type": "object"
+    },
+    "EaseInCubic": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "ease_in_cubic",
+          "default": "ease_in_cubic",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "EaseInCubic",
+      "type": "object"
+    },
+    "EaseInOut": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "ease_in_out",
+          "default": "ease_in_out",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "EaseInOut",
+      "type": "object"
+    },
+    "EaseInOutCubic": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "ease_in_out_cubic",
+          "default": "ease_in_out_cubic",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "EaseInOutCubic",
+      "type": "object"
+    },
+    "EaseOut": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "ease_out",
+          "default": "ease_out",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "EaseOut",
+      "type": "object"
+    },
+    "EaseOutCubic": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "ease_out_cubic",
+          "default": "ease_out_cubic",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "EaseOutCubic",
+      "type": "object"
+    },
+    "Easing": {
+      "discriminator": {
+        "mapping": {
+          "back_out": "#/$defs/BackOut",
+          "bounce_out": "#/$defs/BounceOut",
+          "cubic_bezier": "#/$defs/CubicBezier",
+          "ease_in": "#/$defs/EaseIn",
+          "ease_in_cubic": "#/$defs/EaseInCubic",
+          "ease_in_out": "#/$defs/EaseInOut",
+          "ease_in_out_cubic": "#/$defs/EaseInOutCubic",
+          "ease_out": "#/$defs/EaseOut",
+          "ease_out_cubic": "#/$defs/EaseOutCubic",
+          "elastic_out": "#/$defs/ElasticOut",
+          "linear": "#/$defs/LinearEasing",
+          "plugin": "#/$defs/PluginEasing"
+        },
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/LinearEasing"
+        },
+        {
+          "$ref": "#/$defs/EaseIn"
+        },
+        {
+          "$ref": "#/$defs/EaseOut"
+        },
+        {
+          "$ref": "#/$defs/EaseInOut"
+        },
+        {
+          "$ref": "#/$defs/EaseInCubic"
+        },
+        {
+          "$ref": "#/$defs/EaseOutCubic"
+        },
+        {
+          "$ref": "#/$defs/EaseInOutCubic"
+        },
+        {
+          "$ref": "#/$defs/BounceOut"
+        },
+        {
+          "$ref": "#/$defs/ElasticOut"
+        },
+        {
+          "$ref": "#/$defs/BackOut"
+        },
+        {
+          "$ref": "#/$defs/CubicBezier"
+        },
+        {
+          "$ref": "#/$defs/PluginEasing"
+        }
+      ]
+    },
+    "EasingEnv": {
+      "additionalProperties": false,
+      "description": "Duration-bounded envelope shaped by any :class:`Easing` variant.\n\nLets the user spell things like \"250ms glitch on every beat with\neaseOutElastic-shaped strength\" via::\n\n    BeatPulse(\n        trigger=BeatRef(stream=\"kick\", offset_ms=50),\n        envelope=EasingEnv(duration=0.25, easing=ElasticOut()),\n        intensity_ramp=0.8,\n    )\n\nThe envelope is zero outside ``[trigger, trigger + duration]``. Inside\nthat window, the easing's ``evaluate(t01)`` is sampled at\n``t01 = (frame - trigger) / duration_in_frames``. ``direction``\ncontrols whether the eased curve runs forward (``\"in\"``: 0\u21921, like a\nfade-up) or is inverted (``\"out\"``: 1\u21920, like a fade-down / one-shot\ndecay). Default is ``\"out\"`` because the most common use is a strong\ninitial pop that decays, matching ``ExpDecayEnv`` semantics.",
+      "properties": {
+        "direction": {
+          "default": "out",
+          "enum": [
+            "in",
+            "out"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "easing": {
+          "discriminator": {
+            "mapping": {
+              "back_out": "#/$defs/BackOut",
+              "bounce_out": "#/$defs/BounceOut",
+              "cubic_bezier": "#/$defs/CubicBezier",
+              "ease_in": "#/$defs/EaseIn",
+              "ease_in_cubic": "#/$defs/EaseInCubic",
+              "ease_in_out": "#/$defs/EaseInOut",
+              "ease_in_out_cubic": "#/$defs/EaseInOutCubic",
+              "ease_out": "#/$defs/EaseOut",
+              "ease_out_cubic": "#/$defs/EaseOutCubic",
+              "elastic_out": "#/$defs/ElasticOut",
+              "linear": "#/$defs/LinearEasing",
+              "plugin": "#/$defs/PluginEasing"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/LinearEasing"
+            },
+            {
+              "$ref": "#/$defs/EaseIn"
+            },
+            {
+              "$ref": "#/$defs/EaseOut"
+            },
+            {
+              "$ref": "#/$defs/EaseInOut"
+            },
+            {
+              "$ref": "#/$defs/EaseInCubic"
+            },
+            {
+              "$ref": "#/$defs/EaseOutCubic"
+            },
+            {
+              "$ref": "#/$defs/EaseInOutCubic"
+            },
+            {
+              "$ref": "#/$defs/BounceOut"
+            },
+            {
+              "$ref": "#/$defs/ElasticOut"
+            },
+            {
+              "$ref": "#/$defs/BackOut"
+            },
+            {
+              "$ref": "#/$defs/CubicBezier"
+            },
+            {
+              "$ref": "#/$defs/PluginEasing"
+            }
+          ],
+          "title": "Easing"
+        },
+        "kind": {
+          "const": "easing_env",
+          "default": "easing_env",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration",
+        "easing"
+      ],
+      "title": "EasingEnv",
+      "type": "object"
+    },
+    "Effect": {
+      "discriminator": {
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "amount": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "kind": {
+              "const": "brightness",
+              "default": "brightness",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "amount"
+          ],
+          "title": "Brightness",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "amount": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "kind": {
+              "const": "contrast",
+              "default": "contrast",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "amount"
+          ],
+          "title": "Contrast",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "amount": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "kind": {
+              "const": "saturation",
+              "default": "saturation",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "amount"
+          ],
+          "title": "Saturation",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "h": {
+              "$ref": "#/$defs/Animated_int_"
+            },
+            "kind": {
+              "const": "crop",
+              "default": "crop",
+              "title": "Kind",
+              "type": "string"
+            },
+            "w": {
+              "$ref": "#/$defs/Animated_int_"
+            },
+            "x": {
+              "$ref": "#/$defs/Animated_int_"
+            },
+            "y": {
+              "$ref": "#/$defs/Animated_int_"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "w",
+            "h"
+          ],
+          "title": "Crop",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "axis": {
+              "default": "horizontal",
+              "enum": [
+                "horizontal",
+                "vertical",
+                "both"
+              ],
+              "title": "Axis",
+              "type": "string"
+            },
+            "kind": {
+              "const": "mirror",
+              "default": "mirror",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "title": "Mirror",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "cx": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "cy": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "kind": {
+              "const": "zoom",
+              "default": "zoom",
+              "title": "Kind",
+              "type": "string"
+            },
+            "scale": {
+              "$ref": "#/$defs/Animated_float_"
+            }
+          },
+          "required": [
+            "scale"
+          ],
+          "title": "Zoom",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "dx": {
+              "$ref": "#/$defs/Animated_int_"
+            },
+            "dy": {
+              "$ref": "#/$defs/Animated_int_"
+            },
+            "kind": {
+              "const": "pan",
+              "default": "pan",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "dx",
+            "dy"
+          ],
+          "title": "Pan",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "factor": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "kind": {
+              "const": "speed_ramp",
+              "default": "speed_ramp",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "factor"
+          ],
+          "title": "SpeedRamp",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "discriminator": {
+                "mapping": {
+                  "beat": "#/$defs/BeatRef",
+                  "frames": "#/$defs/Frames",
+                  "marker": "#/$defs/MarkerRef",
+                  "seconds": "#/$defs/Seconds",
+                  "word": "#/$defs/WordRef"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Seconds"
+                },
+                {
+                  "$ref": "#/$defs/Frames"
+                },
+                {
+                  "$ref": "#/$defs/BeatRef"
+                },
+                {
+                  "$ref": "#/$defs/WordRef"
+                },
+                {
+                  "$ref": "#/$defs/MarkerRef"
+                }
+              ],
+              "title": "At"
+            },
+            "hold": {
+              "exclusiveMinimum": 0,
+              "title": "Hold",
+              "type": "number"
+            },
+            "kind": {
+              "const": "freeze",
+              "default": "freeze",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "at",
+            "hold"
+          ],
+          "title": "Freeze",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "blend": {
+              "default": 0.0,
+              "title": "Blend",
+              "type": "number"
+            },
+            "color": {
+              "default": [
+                0,
+                255,
+                0
+              ],
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "title": "Color",
+              "type": "array"
+            },
+            "kind": {
+              "const": "chroma_key",
+              "default": "chroma_key",
+              "title": "Kind",
+              "type": "string"
+            },
+            "similarity": {
+              "default": 0.1,
+              "title": "Similarity",
+              "type": "number"
+            }
+          },
+          "title": "ChromaKey",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "exposure": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "kind": {
+              "const": "color_grade",
+              "default": "color_grade",
+              "title": "Kind",
+              "type": "string"
+            },
+            "lut_path": {
+              "anyOf": [
+                {
+                  "format": "path",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Lut Path"
+            },
+            "temperature": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "tint": {
+              "$ref": "#/$defs/Animated_float_"
+            }
+          },
+          "title": "ColorGrade",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "direction": {
+              "enum": [
+                "in",
+                "out"
+              ],
+              "title": "Direction",
+              "type": "string"
+            },
+            "duration": {
+              "exclusiveMinimum": 0,
+              "title": "Duration",
+              "type": "number"
+            },
+            "kind": {
+              "const": "fade",
+              "default": "fade",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "direction",
+            "duration"
+          ],
+          "title": "Fade",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "blur",
+              "default": "blur",
+              "title": "Kind",
+              "type": "string"
+            },
+            "radius": {
+              "$ref": "#/$defs/Animated_float_"
+            }
+          },
+          "required": [
+            "radius"
+          ],
+          "title": "Blur",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "amount": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "kind": {
+              "const": "sharpen",
+              "default": "sharpen",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "amount"
+          ],
+          "title": "Sharpen",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "angle": {
+              "default": 0.628,
+              "title": "Angle",
+              "type": "number"
+            },
+            "kind": {
+              "const": "vignette",
+              "default": "vignette",
+              "title": "Kind",
+              "type": "string"
+            },
+            "x0": {
+              "default": 0.5,
+              "title": "X0",
+              "type": "number"
+            },
+            "y0": {
+              "default": 0.5,
+              "title": "Y0",
+              "type": "number"
+            }
+          },
+          "title": "Vignette",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "intensity": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "kind": {
+              "const": "film_grain",
+              "default": "film_grain",
+              "title": "Kind",
+              "type": "string"
+            },
+            "seed": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Seed"
+            }
+          },
+          "required": [
+            "intensity"
+          ],
+          "title": "FilmGrain",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "lut",
+              "default": "lut",
+              "title": "Kind",
+              "type": "string"
+            },
+            "path": {
+              "format": "path",
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "title": "LUT",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "invert",
+              "default": "invert",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "title": "Invert",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "posterize",
+              "default": "posterize",
+              "title": "Kind",
+              "type": "string"
+            },
+            "levels": {
+              "$ref": "#/$defs/Animated_int_"
+            }
+          },
+          "required": [
+            "levels"
+          ],
+          "title": "Posterize",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "color": {
+              "default": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "title": "Color",
+              "type": "array"
+            },
+            "duration": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Duration"
+            },
+            "font": {
+              "default": "Inter",
+              "title": "Font",
+              "type": "string"
+            },
+            "kind": {
+              "const": "text_overlay",
+              "default": "text_overlay",
+              "title": "Kind",
+              "type": "string"
+            },
+            "size": {
+              "default": 48,
+              "title": "Size",
+              "type": "integer"
+            },
+            "start": {
+              "anyOf": [
+                {
+                  "discriminator": {
+                    "mapping": {
+                      "beat": "#/$defs/BeatRef",
+                      "frames": "#/$defs/Frames",
+                      "marker": "#/$defs/MarkerRef",
+                      "seconds": "#/$defs/Seconds",
+                      "word": "#/$defs/WordRef"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/Seconds"
+                    },
+                    {
+                      "$ref": "#/$defs/Frames"
+                    },
+                    {
+                      "$ref": "#/$defs/BeatRef"
+                    },
+                    {
+                      "$ref": "#/$defs/WordRef"
+                    },
+                    {
+                      "$ref": "#/$defs/MarkerRef"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Start"
+            },
+            "text": {
+              "title": "Text",
+              "type": "string"
+            },
+            "x": {
+              "$ref": "#/$defs/Animated_int_"
+            },
+            "y": {
+              "$ref": "#/$defs/Animated_int_"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "title": "TextOverlay",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "bg_color": {
+              "default": [
+                0,
+                0,
+                0,
+                180
+              ],
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "title": "Bg Color",
+              "type": "array"
+            },
+            "color": {
+              "default": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "title": "Color",
+              "type": "array"
+            },
+            "font": {
+              "default": "Inter",
+              "title": "Font",
+              "type": "string"
+            },
+            "kind": {
+              "const": "lower_third",
+              "default": "lower_third",
+              "title": "Kind",
+              "type": "string"
+            },
+            "margin": {
+              "default": 120,
+              "title": "Margin",
+              "type": "integer"
+            },
+            "position": {
+              "default": "left",
+              "enum": [
+                "left",
+                "center",
+                "right"
+              ],
+              "title": "Position",
+              "type": "string"
+            },
+            "subtitle": {
+              "default": "",
+              "title": "Subtitle",
+              "type": "string"
+            },
+            "subtitle_size": {
+              "default": 36,
+              "title": "Subtitle Size",
+              "type": "integer"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            },
+            "title_size": {
+              "default": 72,
+              "title": "Title Size",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "title": "LowerThird",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "watermark",
+              "default": "watermark",
+              "title": "Kind",
+              "type": "string"
+            },
+            "opacity": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "path": {
+              "format": "path",
+              "title": "Path",
+              "type": "string"
+            },
+            "scale": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "x": {
+              "$ref": "#/$defs/Animated_int_"
+            },
+            "y": {
+              "$ref": "#/$defs/Animated_int_"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "title": "Watermark",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "sticker",
+              "default": "sticker",
+              "title": "Kind",
+              "type": "string"
+            },
+            "path": {
+              "format": "path",
+              "title": "Path",
+              "type": "string"
+            },
+            "rotation": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "scale": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "x": {
+              "$ref": "#/$defs/Animated_int_"
+            },
+            "y": {
+              "$ref": "#/$defs/Animated_int_"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "title": "StickerOverlay",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Solid-color flash with envelope.\n\n``at`` may be a TimeRef or an Animated[float] of trigger times.\n``curve`` (when set, typically :class:`BeatPulse`) drives the per-frame\nalpha envelope used by the frame-pipeline composite path.",
+          "properties": {
+            "at": {
+              "anyOf": [
+                {
+                  "discriminator": {
+                    "mapping": {
+                      "beat": "#/$defs/BeatRef",
+                      "frames": "#/$defs/Frames",
+                      "marker": "#/$defs/MarkerRef",
+                      "seconds": "#/$defs/Seconds",
+                      "word": "#/$defs/WordRef"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/Seconds"
+                    },
+                    {
+                      "$ref": "#/$defs/Frames"
+                    },
+                    {
+                      "$ref": "#/$defs/BeatRef"
+                    },
+                    {
+                      "$ref": "#/$defs/WordRef"
+                    },
+                    {
+                      "$ref": "#/$defs/MarkerRef"
+                    }
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/Animated_float_"
+                }
+              ],
+              "title": "At"
+            },
+            "color": {
+              "default": [
+                255,
+                255,
+                255
+              ],
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "title": "Color",
+              "type": "array"
+            },
+            "curve": {
+              "anyOf": [
+                {
+                  "discriminator": {
+                    "mapping": {
+                      "beat_pulse": "#/$defs/BeatPulse",
+                      "bezier": "#/$defs/Bezier",
+                      "bounce": "#/$defs/Bounce",
+                      "exp_decay": "#/$defs/ExpDecay",
+                      "lambda": "#/$defs/Lambda",
+                      "lfo": "#/$defs/LFO",
+                      "noise": "#/$defs/Noise",
+                      "random_choice": "#/$defs/RandomChoice",
+                      "sine": "#/$defs/Sine",
+                      "spring": "#/$defs/Spring",
+                      "step": "#/$defs/Step"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/BeatPulse"
+                    },
+                    {
+                      "$ref": "#/$defs/ExpDecay"
+                    },
+                    {
+                      "$ref": "#/$defs/Sine"
+                    },
+                    {
+                      "$ref": "#/$defs/LFO"
+                    },
+                    {
+                      "$ref": "#/$defs/Lambda"
+                    },
+                    {
+                      "$ref": "#/$defs/Spring"
+                    },
+                    {
+                      "$ref": "#/$defs/Noise"
+                    },
+                    {
+                      "$ref": "#/$defs/RandomChoice"
+                    },
+                    {
+                      "$ref": "#/$defs/Step"
+                    },
+                    {
+                      "$ref": "#/$defs/Bezier"
+                    },
+                    {
+                      "$ref": "#/$defs/Bounce"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Curve"
+            },
+            "duration": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "kind": {
+              "const": "flash",
+              "default": "flash",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "at",
+            "duration"
+          ],
+          "title": "Flash",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "rgb_split",
+              "default": "rgb_split",
+              "title": "Kind",
+              "type": "string"
+            },
+            "offset_x": {
+              "$ref": "#/$defs/Animated_int_"
+            },
+            "offset_y": {
+              "$ref": "#/$defs/Animated_int_"
+            }
+          },
+          "required": [
+            "offset_x"
+          ],
+          "title": "RGBSplit",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "block_size": {
+              "default": 16,
+              "exclusiveMinimum": 0,
+              "title": "Block Size",
+              "type": "integer"
+            },
+            "intensity": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "kind": {
+              "const": "glitch",
+              "default": "glitch",
+              "title": "Kind",
+              "type": "string"
+            },
+            "seed": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Seed"
+            }
+          },
+          "required": [
+            "intensity"
+          ],
+          "title": "Glitch",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "decay": {
+              "default": 0.0,
+              "title": "Decay",
+              "type": "number"
+            },
+            "freq_hz": {
+              "default": 6.0,
+              "title": "Freq Hz",
+              "type": "number"
+            },
+            "intensity": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "kind": {
+              "const": "shake",
+              "default": "shake",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "intensity"
+          ],
+          "title": "Shake",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "chroma_blur": {
+              "default": 1.5,
+              "title": "Chroma Blur",
+              "type": "number"
+            },
+            "kind": {
+              "const": "vhs",
+              "default": "vhs",
+              "title": "Kind",
+              "type": "string"
+            },
+            "noise": {
+              "default": 0.05,
+              "title": "Noise",
+              "type": "number"
+            },
+            "scanlines": {
+              "default": true,
+              "title": "Scanlines",
+              "type": "boolean"
+            }
+          },
+          "title": "VHS",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "intensity": {
+              "$ref": "#/$defs/Animated_float_"
+            },
+            "kind": {
+              "const": "datamosh",
+              "default": "datamosh",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "title": "Datamosh",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "color": {
+              "default": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "title": "Color",
+              "type": "array"
+            },
+            "font": {
+              "default": "Inter",
+              "title": "Font",
+              "type": "string"
+            },
+            "kind": {
+              "const": "captions",
+              "default": "captions",
+              "title": "Kind",
+              "type": "string"
+            },
+            "margin": {
+              "default": 120,
+              "title": "Margin",
+              "type": "integer"
+            },
+            "max_words_per_card": {
+              "default": 4,
+              "title": "Max Words Per Card",
+              "type": "integer"
+            },
+            "position": {
+              "default": "bottom",
+              "enum": [
+                "top",
+                "center",
+                "bottom"
+              ],
+              "title": "Position",
+              "type": "string"
+            },
+            "size": {
+              "default": 64,
+              "title": "Size",
+              "type": "integer"
+            },
+            "source": {
+              "title": "Source",
+              "type": "string"
+            },
+            "stroke": {
+              "anyOf": [
+                {
+                  "maxItems": 4,
+                  "minItems": 4,
+                  "prefixItems": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ],
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Stroke"
+            },
+            "stroke_width": {
+              "default": 0,
+              "title": "Stroke Width",
+              "type": "integer"
+            },
+            "style": {
+              "default": "tiktok",
+              "enum": [
+                "tiktok",
+                "subtitle",
+                "kinetic"
+              ],
+              "title": "Style",
+              "type": "string"
+            },
+            "word_animation": {
+              "default": "pop",
+              "enum": [
+                "pop",
+                "fade",
+                "none"
+              ],
+              "title": "Word Animation",
+              "type": "string"
+            }
+          },
+          "required": [
+            "source"
+          ],
+          "title": "Captions",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Background matting. Current backend: ``rembg`` + BiRefNet-portrait\n(per-frame, no temporal propagation). The native MatAnyone 2 integration\nis pending - for now this and :class:`BiRefNetRemove` share the rembg\nbackend. Requires ``pip install eks-harness[matting]``.",
+          "properties": {
+            "background": {
+              "default": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "title": "Background",
+              "type": "array"
+            },
+            "kind": {
+              "const": "matanyone_remove",
+              "default": "matanyone_remove",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "title": "MatAnyoneRemove",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Per-frame BiRefNet matting via ``rembg``. Requires\n``pip install eks-harness[matting]``.",
+          "properties": {
+            "background": {
+              "default": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "title": "Background",
+              "type": "array"
+            },
+            "kind": {
+              "const": "birefnet_remove",
+              "default": "birefnet_remove",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "title": "BiRefNetRemove",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "SAM 3 (Meta, 2025) - open-vocabulary segmentation + tracking.\n\nLazy-loaded; requires ``pip install eks-harness[sam3]``.",
+          "properties": {
+            "confidence_threshold": {
+              "default": 0.5,
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Confidence Threshold",
+              "type": "number"
+            },
+            "kind": {
+              "const": "sam3_track",
+              "default": "sam3_track",
+              "title": "Kind",
+              "type": "string"
+            },
+            "output": {
+              "default": "mask",
+              "enum": [
+                "mask",
+                "matte",
+                "highlight"
+              ],
+              "title": "Output",
+              "type": "string"
+            },
+            "prompt": {
+              "title": "Prompt",
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "title": "SAM3Track",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "auto_reframe",
+              "default": "auto_reframe",
+              "title": "Kind",
+              "type": "string"
+            },
+            "smoothing": {
+              "default": 0.85,
+              "title": "Smoothing",
+              "type": "number"
+            },
+            "target_aspect": {
+              "default": [
+                9,
+                16
+              ],
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "title": "Target Aspect",
+              "type": "array"
+            },
+            "tracker": {
+              "default": "face",
+              "enum": [
+                "face",
+                "salience"
+              ],
+              "title": "Tracker",
+              "type": "string"
+            }
+          },
+          "title": "AutoReframe",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "punch_in",
+              "default": "punch_in",
+              "title": "Kind",
+              "type": "string"
+            },
+            "track_speaker": {
+              "default": true,
+              "title": "Track Speaker",
+              "type": "boolean"
+            },
+            "trigger": {
+              "anyOf": [
+                {
+                  "discriminator": {
+                    "mapping": {
+                      "beat": "#/$defs/BeatRef",
+                      "frames": "#/$defs/Frames",
+                      "marker": "#/$defs/MarkerRef",
+                      "seconds": "#/$defs/Seconds",
+                      "word": "#/$defs/WordRef"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/Seconds"
+                    },
+                    {
+                      "$ref": "#/$defs/Frames"
+                    },
+                    {
+                      "$ref": "#/$defs/BeatRef"
+                    },
+                    {
+                      "$ref": "#/$defs/WordRef"
+                    },
+                    {
+                      "$ref": "#/$defs/MarkerRef"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Trigger"
+            },
+            "zoom": {
+              "$ref": "#/$defs/Animated_float_"
+            }
+          },
+          "title": "PunchIn",
+          "type": "object"
+        }
+      ],
+      "title": "Effect"
+    },
+    "ElasticOut": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "elastic_out",
+          "default": "elastic_out",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "ElasticOut",
+      "type": "object"
+    },
+    "EnergyMarkers": {
+      "additionalProperties": false,
+      "description": "Band-filtered RMS energy markers.\n\nEmits markers at moments where the band-filtered RMS exceeds the\n``percentile`` percentile measured over the whole source. Useful for\n\"hype\" or peak-energy detection.",
+      "properties": {
+        "band": {
+          "default": "full",
+          "enum": [
+            "low",
+            "mid",
+            "high",
+            "full"
+          ],
+          "title": "Band",
+          "type": "string"
+        },
+        "kind": {
+          "const": "energy_markers",
+          "default": "energy_markers",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "percentile": {
+          "default": 0.85,
+          "title": "Percentile",
+          "type": "number"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "source"
+      ],
+      "title": "EnergyMarkers",
+      "type": "object"
+    },
+    "Envelope": {
+      "discriminator": {
+        "mapping": {
+          "box_env": "#/$defs/BoxEnv",
+          "easing_env": "#/$defs/EasingEnv",
+          "exp_decay_env": "#/$defs/ExpDecayEnv",
+          "linear_env": "#/$defs/LinearEnv"
+        },
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ExpDecayEnv"
+        },
+        {
+          "$ref": "#/$defs/LinearEnv"
+        },
+        {
+          "$ref": "#/$defs/BoxEnv"
+        },
+        {
+          "$ref": "#/$defs/EasingEnv"
+        }
+      ]
+    },
+    "ExpDecay": {
+      "additionalProperties": false,
+      "description": "Single-shot exponential decay anchored at t=0.",
+      "properties": {
+        "baseline": {
+          "default": 0.0,
+          "title": "Baseline",
+          "type": "number"
+        },
+        "kind": {
+          "const": "exp_decay",
+          "default": "exp_decay",
+          "title": "Kind",
+          "type": "string"
+        },
+        "tau": {
+          "title": "Tau",
+          "type": "number"
+        }
+      },
+      "required": [
+        "tau"
+      ],
+      "title": "ExpDecay",
+      "type": "object"
+    },
+    "ExpDecayEnv": {
+      "additionalProperties": false,
+      "description": "Exponential decay envelope: ``exp(-t / tau)``.",
+      "properties": {
+        "kind": {
+          "const": "exp_decay_env",
+          "default": "exp_decay_env",
+          "title": "Kind",
+          "type": "string"
+        },
+        "tau": {
+          "title": "Tau",
+          "type": "number"
+        }
+      },
+      "required": [
+        "tau"
+      ],
+      "title": "ExpDecayEnv",
+      "type": "object"
+    },
+    "FaceMarkers": {
+      "additionalProperties": false,
+      "description": "Face-presence markers from a video source.\n\nEmits the start time of every contiguous run of frames containing at\nleast one face larger than ``min_size`` pixels. Backed by OpenCV's\nHaar cascade (no extra weights required).",
+      "properties": {
+        "kind": {
+          "const": "face_markers",
+          "default": "face_markers",
+          "title": "Kind",
+          "type": "string"
+        },
+        "min_size": {
+          "default": 80,
+          "title": "Min Size",
+          "type": "integer"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "source"
+      ],
+      "title": "FaceMarkers",
+      "type": "object"
+    },
+    "Fade": {
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "enum": [
+            "in",
+            "out"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "fade",
+          "default": "fade",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "direction",
+        "duration"
+      ],
+      "title": "Fade",
+      "type": "object"
+    },
+    "FadeGrays": {
+      "additionalProperties": false,
+      "description": "Desaturate to grayscale through the boundary, then recolour.\n\nRenders via ffmpeg ``xfade=transition=fadegrays``.",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "fade_grays",
+          "default": "fade_grays",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "FadeGrays",
+      "type": "object"
+    },
+    "FilmBurn": {
+      "additionalProperties": false,
+      "description": "Stylized warm film-burn over a crossfade boundary.\n\nA procedural approximation: a crossfade is overlaid with a Gaussian\nbrightness bloom, a warm ``colorbalance`` push, and a gated ``rgbashift``\nchroma bleed. This is a synthesised burn from ffmpeg primitives, not a\nphotoreal film-burn - a texture-overlay burn is future work. ``intensity``\nscales the bloom, chroma bleed, and overall strength (0 = none, 1 = strong).",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "intensity": {
+          "default": 0.7,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Intensity",
+          "type": "number"
+        },
+        "kind": {
+          "const": "film_burn",
+          "default": "film_burn",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "FilmBurn",
+      "type": "object"
+    },
+    "FilmGrain": {
+      "additionalProperties": false,
+      "properties": {
+        "intensity": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "kind": {
+          "const": "film_grain",
+          "default": "film_grain",
+          "title": "Kind",
+          "type": "string"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
+        }
+      },
+      "required": [
+        "intensity"
+      ],
+      "title": "FilmGrain",
+      "type": "object"
+    },
+    "Flash": {
+      "additionalProperties": false,
+      "description": "Solid-color flash with envelope.\n\n``at`` may be a TimeRef or an Animated[float] of trigger times.\n``curve`` (when set, typically :class:`BeatPulse`) drives the per-frame\nalpha envelope used by the frame-pipeline composite path.",
+      "properties": {
+        "at": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "beat": "#/$defs/BeatRef",
+                  "frames": "#/$defs/Frames",
+                  "marker": "#/$defs/MarkerRef",
+                  "seconds": "#/$defs/Seconds",
+                  "word": "#/$defs/WordRef"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Seconds"
+                },
+                {
+                  "$ref": "#/$defs/Frames"
+                },
+                {
+                  "$ref": "#/$defs/BeatRef"
+                },
+                {
+                  "$ref": "#/$defs/WordRef"
+                },
+                {
+                  "$ref": "#/$defs/MarkerRef"
+                }
+              ]
+            },
+            {
+              "$ref": "#/$defs/Animated_float_"
+            }
+          ],
+          "title": "At"
+        },
+        "color": {
+          "default": [
+            255,
+            255,
+            255
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Color",
+          "type": "array"
+        },
+        "curve": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "beat_pulse": "#/$defs/BeatPulse",
+                  "bezier": "#/$defs/Bezier",
+                  "bounce": "#/$defs/Bounce",
+                  "exp_decay": "#/$defs/ExpDecay",
+                  "lambda": "#/$defs/Lambda",
+                  "lfo": "#/$defs/LFO",
+                  "noise": "#/$defs/Noise",
+                  "random_choice": "#/$defs/RandomChoice",
+                  "sine": "#/$defs/Sine",
+                  "spring": "#/$defs/Spring",
+                  "step": "#/$defs/Step"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/BeatPulse"
+                },
+                {
+                  "$ref": "#/$defs/ExpDecay"
+                },
+                {
+                  "$ref": "#/$defs/Sine"
+                },
+                {
+                  "$ref": "#/$defs/LFO"
+                },
+                {
+                  "$ref": "#/$defs/Lambda"
+                },
+                {
+                  "$ref": "#/$defs/Spring"
+                },
+                {
+                  "$ref": "#/$defs/Noise"
+                },
+                {
+                  "$ref": "#/$defs/RandomChoice"
+                },
+                {
+                  "$ref": "#/$defs/Step"
+                },
+                {
+                  "$ref": "#/$defs/Bezier"
+                },
+                {
+                  "$ref": "#/$defs/Bounce"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Curve"
+        },
+        "duration": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "kind": {
+          "const": "flash",
+          "default": "flash",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "duration"
+      ],
+      "title": "Flash",
+      "type": "object"
+    },
+    "Frames": {
+      "additionalProperties": false,
+      "description": "Absolute time in frames at the project frame rate.",
+      "properties": {
+        "kind": {
+          "const": "frames",
+          "default": "frames",
+          "title": "Kind",
+          "type": "string"
+        },
+        "n": {
+          "title": "N",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "n"
+      ],
+      "title": "Frames",
+      "type": "object"
+    },
+    "Freeze": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "discriminator": {
+            "mapping": {
+              "beat": "#/$defs/BeatRef",
+              "frames": "#/$defs/Frames",
+              "marker": "#/$defs/MarkerRef",
+              "seconds": "#/$defs/Seconds",
+              "word": "#/$defs/WordRef"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Seconds"
+            },
+            {
+              "$ref": "#/$defs/Frames"
+            },
+            {
+              "$ref": "#/$defs/BeatRef"
+            },
+            {
+              "$ref": "#/$defs/WordRef"
+            },
+            {
+              "$ref": "#/$defs/MarkerRef"
+            }
+          ],
+          "title": "At"
+        },
+        "hold": {
+          "exclusiveMinimum": 0,
+          "title": "Hold",
+          "type": "number"
+        },
+        "kind": {
+          "const": "freeze",
+          "default": "freeze",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "hold"
+      ],
+      "title": "Freeze",
+      "type": "object"
+    },
+    "GeneratedCard": {
+      "additionalProperties": false,
+      "description": "Text card rendered at compile time.",
+      "properties": {
+        "bg": {
+          "default": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Bg",
+          "type": "array"
+        },
+        "fg": {
+          "default": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Fg",
+          "type": "array"
+        },
+        "font": {
+          "default": "DejaVuSans",
+          "title": "Font",
+          "type": "string"
+        },
+        "kind": {
+          "const": "generated_card",
+          "default": "generated_card",
+          "title": "Kind",
+          "type": "string"
+        },
+        "size": {
+          "default": 64,
+          "title": "Size",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "GeneratedCard",
+      "type": "object"
+    },
+    "Glitch": {
+      "additionalProperties": false,
+      "properties": {
+        "block_size": {
+          "default": 16,
+          "exclusiveMinimum": 0,
+          "title": "Block Size",
+          "type": "integer"
+        },
+        "intensity": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "kind": {
+          "const": "glitch",
+          "default": "glitch",
+          "title": "Kind",
+          "type": "string"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
+        }
+      },
+      "required": [
+        "intensity"
+      ],
+      "title": "Glitch",
+      "type": "object"
+    },
+    "GlitchTransition": {
+      "additionalProperties": false,
+      "description": "Digital-glitch transition between two segments.\n\nNot a plain ffmpeg ``xfade`` preset - the boundary is rendered as a\nblocky ``pixelize`` dissolve with a chromatic RGB-channel split\n(``rgbashift``) gated to the transition window, giving a genuine\ndigital-corruption look rather than a smooth blend. ``intensity``\nscales the chroma-split magnitude (0 = none, 1 = strong).",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "intensity": {
+          "default": 0.6,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Intensity",
+          "type": "number"
+        },
+        "kind": {
+          "const": "glitch_transition",
+          "default": "glitch_transition",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "GlitchTransition",
+      "type": "object"
+    },
+    "HTMLOverlay": {
+      "additionalProperties": false,
+      "description": "HTML+CSS template rendered via headless Chromium with frame-\ndeterministic virtual-time capture.\n\nThe renderer drives Playwright's headless Chromium, advances the page's\nvirtual clock one frame at a time (Replit's\n``Emulation.setVirtualTimePolicy`` pattern), screenshots each frame,\nand encodes the resulting PNG sequence to mp4 via ffmpeg.\n\nNo JavaScript is executed in the user's template - CSS animations\nonly. Marker sync is achieved by baking extra ``@keyframes`` /\n``animation-delay`` declarations into the page at compile time, one\nrule per marker trigger that falls inside the segment window.\n\nLazy-loaded; requires ``pip install eks-harness[html] && playwright\ninstall chromium``.",
+      "properties": {
+        "kind": {
+          "const": "html_overlay",
+          "default": "html_overlay",
+          "title": "Kind",
+          "type": "string"
+        },
+        "marker_animations": {
+          "items": {
+            "$ref": "#/$defs/MarkerAnimation"
+          },
+          "title": "Marker Animations",
+          "type": "array"
+        },
+        "style_vars": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Style Vars"
+        },
+        "template": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Template"
+        },
+        "transparent": {
+          "default": true,
+          "title": "Transparent",
+          "type": "boolean"
+        },
+        "viewport": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Viewport"
+        }
+      },
+      "required": [
+        "template"
+      ],
+      "title": "HTMLOverlay",
+      "type": "object"
+    },
+    "ImageFile": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "image_file",
+          "default": "image_file",
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Path"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "ImageFile",
+      "type": "object"
+    },
+    "Invert": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "invert",
+          "default": "invert",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "Invert",
+      "type": "object"
+    },
+    "Iris": {
+      "additionalProperties": false,
+      "description": "Circular iris that opens onto or closes off the incoming segment.\n\nRenders via ffmpeg ``xfade=transition=circleopen`` (``mode=\"open\"``) or\n``circleclose`` (``mode=\"close\"``).",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "iris",
+          "default": "iris",
+          "title": "Kind",
+          "type": "string"
+        },
+        "mode": {
+          "default": "open",
+          "enum": [
+            "open",
+            "close"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "Iris",
+      "type": "object"
+    },
+    "Keyframe_float_": {
+      "additionalProperties": false,
+      "properties": {
+        "easing": {
+          "discriminator": {
+            "mapping": {
+              "back_out": "#/$defs/BackOut",
+              "bounce_out": "#/$defs/BounceOut",
+              "cubic_bezier": "#/$defs/CubicBezier",
+              "ease_in": "#/$defs/EaseIn",
+              "ease_in_cubic": "#/$defs/EaseInCubic",
+              "ease_in_out": "#/$defs/EaseInOut",
+              "ease_in_out_cubic": "#/$defs/EaseInOutCubic",
+              "ease_out": "#/$defs/EaseOut",
+              "ease_out_cubic": "#/$defs/EaseOutCubic",
+              "elastic_out": "#/$defs/ElasticOut",
+              "linear": "#/$defs/LinearEasing",
+              "plugin": "#/$defs/PluginEasing"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/LinearEasing"
+            },
+            {
+              "$ref": "#/$defs/EaseIn"
+            },
+            {
+              "$ref": "#/$defs/EaseOut"
+            },
+            {
+              "$ref": "#/$defs/EaseInOut"
+            },
+            {
+              "$ref": "#/$defs/EaseInCubic"
+            },
+            {
+              "$ref": "#/$defs/EaseOutCubic"
+            },
+            {
+              "$ref": "#/$defs/EaseInOutCubic"
+            },
+            {
+              "$ref": "#/$defs/BounceOut"
+            },
+            {
+              "$ref": "#/$defs/ElasticOut"
+            },
+            {
+              "$ref": "#/$defs/BackOut"
+            },
+            {
+              "$ref": "#/$defs/CubicBezier"
+            },
+            {
+              "$ref": "#/$defs/PluginEasing"
+            }
+          ],
+          "title": "Easing"
+        },
+        "interp": {
+          "default": "linear",
+          "enum": [
+            "linear",
+            "bezier",
+            "hold",
+            "spline"
+          ],
+          "title": "Interp",
+          "type": "string"
+        },
+        "t": {
+          "discriminator": {
+            "mapping": {
+              "beat": "#/$defs/BeatRef",
+              "frames": "#/$defs/Frames",
+              "marker": "#/$defs/MarkerRef",
+              "seconds": "#/$defs/Seconds",
+              "word": "#/$defs/WordRef"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Seconds"
+            },
+            {
+              "$ref": "#/$defs/Frames"
+            },
+            {
+              "$ref": "#/$defs/BeatRef"
+            },
+            {
+              "$ref": "#/$defs/WordRef"
+            },
+            {
+              "$ref": "#/$defs/MarkerRef"
+            }
+          ],
+          "title": "T"
+        },
+        "v": {
+          "title": "V",
+          "type": "number"
+        }
+      },
+      "required": [
+        "t",
+        "v"
+      ],
+      "title": "Keyframe[float]",
+      "type": "object"
+    },
+    "LFO": {
+      "additionalProperties": false,
+      "description": "Low-frequency oscillator with a selectable waveform shape.",
+      "properties": {
+        "amp": {
+          "default": 1.0,
+          "title": "Amp",
+          "type": "number"
+        },
+        "freq_hz": {
+          "title": "Freq Hz",
+          "type": "number"
+        },
+        "kind": {
+          "const": "lfo",
+          "default": "lfo",
+          "title": "Kind",
+          "type": "string"
+        },
+        "offset": {
+          "default": 0.0,
+          "title": "Offset",
+          "type": "number"
+        },
+        "phase": {
+          "default": 0.0,
+          "title": "Phase",
+          "type": "number"
+        },
+        "shape": {
+          "enum": [
+            "tri",
+            "saw",
+            "square"
+          ],
+          "title": "Shape",
+          "type": "string"
+        }
+      },
+      "required": [
+        "shape",
+        "freq_hz"
+      ],
+      "title": "LFO",
+      "type": "object"
+    },
+    "LUT": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "lut",
+          "default": "lut",
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "format": "path",
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "LUT",
+      "type": "object"
+    },
+    "Lambda": {
+      "additionalProperties": false,
+      "description": "Sandboxed expression. Only ``t`` (seconds) is exposed.",
+      "properties": {
+        "expr": {
+          "title": "Expr",
+          "type": "string"
+        },
+        "kind": {
+          "const": "lambda",
+          "default": "lambda",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expr"
+      ],
+      "title": "Lambda",
+      "type": "object"
+    },
+    "LightLeak": {
+      "additionalProperties": false,
+      "description": "Crossfade overlaid with a Gaussian brightness bloom peaking mid-window.\n\nNot a plain xfade preset: an ``xfade=transition=fade`` is followed by a\ntime-varying ``eq`` brightness pulse (``eval=frame``) that swells to a\npeak at the centre of the transition window, mimicking a lens light\nleak. ``intensity`` scales the peak brightness (0 = none, 1 = strong).",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "intensity": {
+          "default": 0.7,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Intensity",
+          "type": "number"
+        },
+        "kind": {
+          "const": "light_leak",
+          "default": "light_leak",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "LightLeak",
+      "type": "object"
+    },
+    "LinearEasing": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "linear",
+          "default": "linear",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "LinearEasing",
+      "type": "object"
+    },
+    "LinearEnv": {
+      "additionalProperties": false,
+      "description": "Triangular envelope with explicit rise / fall durations (seconds).",
+      "properties": {
+        "fall": {
+          "title": "Fall",
+          "type": "number"
+        },
+        "kind": {
+          "const": "linear_env",
+          "default": "linear_env",
+          "title": "Kind",
+          "type": "string"
+        },
+        "rise": {
+          "title": "Rise",
+          "type": "number"
+        }
+      },
+      "required": [
+        "rise",
+        "fall"
+      ],
+      "title": "LinearEnv",
+      "type": "object"
+    },
+    "LoudnessNormalize": {
+      "additionalProperties": false,
+      "description": "EBU R128 loudness normalization applied to the post-mix track bus.\n\nDefaults target short-form social platforms (TikTok / Reels / Shorts).",
+      "properties": {
+        "lra": {
+          "default": 11.0,
+          "title": "Lra",
+          "type": "number"
+        },
+        "target_lufs": {
+          "default": -16.0,
+          "title": "Target Lufs",
+          "type": "number"
+        },
+        "true_peak_db": {
+          "default": -1.5,
+          "title": "True Peak Db",
+          "type": "number"
+        }
+      },
+      "title": "LoudnessNormalize",
+      "type": "object"
+    },
+    "LowerThird": {
+      "additionalProperties": false,
+      "properties": {
+        "bg_color": {
+          "default": [
+            0,
+            0,
+            0,
+            180
+          ],
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Bg Color",
+          "type": "array"
+        },
+        "color": {
+          "default": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Color",
+          "type": "array"
+        },
+        "font": {
+          "default": "Inter",
+          "title": "Font",
+          "type": "string"
+        },
+        "kind": {
+          "const": "lower_third",
+          "default": "lower_third",
+          "title": "Kind",
+          "type": "string"
+        },
+        "margin": {
+          "default": 120,
+          "title": "Margin",
+          "type": "integer"
+        },
+        "position": {
+          "default": "left",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ],
+          "title": "Position",
+          "type": "string"
+        },
+        "subtitle": {
+          "default": "",
+          "title": "Subtitle",
+          "type": "string"
+        },
+        "subtitle_size": {
+          "default": 36,
+          "title": "Subtitle Size",
+          "type": "integer"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "title_size": {
+          "default": 72,
+          "title": "Title Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "LowerThird",
+      "type": "object"
+    },
+    "LumaWipe": {
+      "additionalProperties": false,
+      "description": "Soft gradient (luma) wipe in the given direction.\n\nRenders via ffmpeg's built-in gradient wipes\n``xfade=transition=smooth<direction>`` (smoothleft / smoothright /\nsmoothup / smoothdown) - a feathered edge rather than the hard edge of\n:class:`Wipe`.",
+      "properties": {
+        "direction": {
+          "default": "right",
+          "enum": [
+            "left",
+            "right",
+            "up",
+            "down"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "luma_wipe",
+          "default": "luma_wipe",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "LumaWipe",
+      "type": "object"
+    },
+    "MarkerAnimation": {
+      "additionalProperties": false,
+      "description": "Binds a CSS ``@keyframes`` animation to a marker stream.\n\nAt compile time, the HTML renderer generates one CSS rule per trigger\ntime in ``markers.streams[stream]`` that falls inside the segment's\n``[start, end]`` window. Each rule applies ``animation_name`` to the\ngiven ``selector`` at ``trigger_t - segment_start + offset_ms / 1000``\nseconds.\n\nThe user's HTML template must declare the corresponding\n``@keyframes <animation_name> { ... }`` in its own CSS. No JavaScript\nis involved; marker sync is purely declarative.",
+      "properties": {
+        "animation_name": {
+          "title": "Animation Name",
+          "type": "string"
+        },
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "offset_ms": {
+          "default": 0.0,
+          "title": "Offset Ms",
+          "type": "number"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "stream": {
+          "title": "Stream",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stream",
+        "selector",
+        "animation_name",
+        "duration"
+      ],
+      "title": "MarkerAnimation",
+      "type": "object"
+    },
+    "MarkerRef": {
+      "additionalProperties": false,
+      "description": "Reference to a named marker (e.g. scene cut).",
+      "properties": {
+        "index": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Index"
+        },
+        "kind": {
+          "const": "marker",
+          "default": "marker",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "MarkerRef",
+      "type": "object"
+    },
+    "MarkerSource": {
+      "discriminator": {
+        "mapping": {
+          "beat_tracker": "#/$defs/BeatTracker",
+          "energy_markers": "#/$defs/EnergyMarkers",
+          "face_markers": "#/$defs/FaceMarkers",
+          "momentum_markers": "#/$defs/MomentumMarkers",
+          "motion_markers": "#/$defs/MotionMarkers",
+          "onset_markers": "#/$defs/OnsetMarkers",
+          "scene_markers": "#/$defs/SceneMarkers",
+          "silence_markers": "#/$defs/SilenceMarkers",
+          "stt_markers": "#/$defs/STTMarkers"
+        },
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/BeatTracker"
+        },
+        {
+          "$ref": "#/$defs/STTMarkers"
+        },
+        {
+          "$ref": "#/$defs/SceneMarkers"
+        },
+        {
+          "$ref": "#/$defs/SilenceMarkers"
+        },
+        {
+          "$ref": "#/$defs/OnsetMarkers"
+        },
+        {
+          "$ref": "#/$defs/EnergyMarkers"
+        },
+        {
+          "$ref": "#/$defs/MomentumMarkers"
+        },
+        {
+          "$ref": "#/$defs/FaceMarkers"
+        },
+        {
+          "$ref": "#/$defs/MotionMarkers"
+        }
+      ]
+    },
+    "MatAnyoneRemove": {
+      "additionalProperties": false,
+      "description": "Background matting. Current backend: ``rembg`` + BiRefNet-portrait\n(per-frame, no temporal propagation). The native MatAnyone 2 integration\nis pending - for now this and :class:`BiRefNetRemove` share the rembg\nbackend. Requires ``pip install eks-harness[matting]``.",
+      "properties": {
+        "background": {
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Background",
+          "type": "array"
+        },
+        "kind": {
+          "const": "matanyone_remove",
+          "default": "matanyone_remove",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "MatAnyoneRemove",
+      "type": "object"
+    },
+    "MediaSource": {
+      "discriminator": {
+        "mapping": {
+          "audio_file": "#/$defs/AudioFile",
+          "generated_card": "#/$defs/GeneratedCard",
+          "html_overlay": "#/$defs/HTMLOverlay",
+          "image_file": "#/$defs/ImageFile",
+          "separated_stem": "#/$defs/SeparatedStem",
+          "solid": "#/$defs/Solid",
+          "tts_generated": "#/$defs/TTSGenerated",
+          "video_file": "#/$defs/VideoFile"
+        },
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/VideoFile"
+        },
+        {
+          "$ref": "#/$defs/ImageFile"
+        },
+        {
+          "$ref": "#/$defs/Solid"
+        },
+        {
+          "$ref": "#/$defs/GeneratedCard"
+        },
+        {
+          "$ref": "#/$defs/AudioFile"
+        },
+        {
+          "$ref": "#/$defs/TTSGenerated"
+        },
+        {
+          "$ref": "#/$defs/SeparatedStem"
+        },
+        {
+          "$ref": "#/$defs/HTMLOverlay"
+        }
+      ]
+    },
+    "Mirror": {
+      "additionalProperties": false,
+      "properties": {
+        "axis": {
+          "default": "horizontal",
+          "enum": [
+            "horizontal",
+            "vertical",
+            "both"
+          ],
+          "title": "Axis",
+          "type": "string"
+        },
+        "kind": {
+          "const": "mirror",
+          "default": "mirror",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "Mirror",
+      "type": "object"
+    },
+    "MomentumMarkers": {
+      "additionalProperties": false,
+      "description": "Musical momentum analysis: drops, builds, breaks, sections and peaks.\n\nFuses loudness, onset density, low-end weight and spectral brightness\ninto one smoothed ``momentum`` curve in ``[0, 1]`` and publishes the\nstructural moments of the song as separate streams named\n``<name>.drop``, ``<name>.build``, ``<name>.break``, ``<name>.section``\nand ``<name>.peak``. ``MarkerRef(name=\"<name>.drop\", index=0)`` lands\non the first drop. Drops and breaks snap to the strongest onset within\n``snap_window`` seconds so cuts hit the transient, not the envelope.\n\n``curve_out`` (workspace-relative) also writes the sampled curve and\nevery event with its strength as JSON, for planning a timeline.",
+      "properties": {
+        "break_threshold": {
+          "default": 0.2,
+          "exclusiveMinimum": 0.0,
+          "maximum": 1.0,
+          "title": "Break Threshold",
+          "type": "number"
+        },
+        "curve_out": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Curve Out"
+        },
+        "drop_threshold": {
+          "default": 0.22,
+          "exclusiveMinimum": 0.0,
+          "maximum": 1.0,
+          "title": "Drop Threshold",
+          "type": "number"
+        },
+        "kind": {
+          "const": "momentum_markers",
+          "default": "momentum_markers",
+          "title": "Kind",
+          "type": "string"
+        },
+        "min_build": {
+          "default": 1.5,
+          "exclusiveMinimum": 0.0,
+          "title": "Min Build",
+          "type": "number"
+        },
+        "min_section": {
+          "default": 4.0,
+          "exclusiveMinimum": 0.0,
+          "title": "Min Section",
+          "type": "number"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "smoothing": {
+          "default": 0.75,
+          "exclusiveMinimum": 0.0,
+          "title": "Smoothing",
+          "type": "number"
+        },
+        "snap_window": {
+          "default": 0.12,
+          "minimum": 0.0,
+          "title": "Snap Window",
+          "type": "number"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "source"
+      ],
+      "title": "MomentumMarkers",
+      "type": "object"
+    },
+    "MotionMarkers": {
+      "additionalProperties": false,
+      "description": "High-motion markers from a video source.\n\nEmits a marker for every frame whose mean absolute difference against\nthe previous frame exceeds ``threshold``. Backed by OpenCV.",
+      "properties": {
+        "kind": {
+          "const": "motion_markers",
+          "default": "motion_markers",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "threshold": {
+          "default": 30.0,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "source"
+      ],
+      "title": "MotionMarkers",
+      "type": "object"
+    },
+    "Noise": {
+      "additionalProperties": false,
+      "description": "Deterministic uniform random noise in ``[min_value, max_value]``.\n\nWith ``hold == 0`` a fresh sample is drawn every frame. With ``hold > 0``\neach sample is held for ``hold`` seconds before redrawing (sample-and-hold).\nThe seed is salted with the project-level ``random_seed`` (if set) so\nseveral curves in the same project can be jittered together.",
+      "properties": {
+        "hold": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Hold",
+          "type": "number"
+        },
+        "kind": {
+          "const": "noise",
+          "default": "noise",
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_value": {
+          "default": 1.0,
+          "title": "Max Value",
+          "type": "number"
+        },
+        "min_value": {
+          "default": 0.0,
+          "title": "Min Value",
+          "type": "number"
+        },
+        "seed": {
+          "title": "Seed",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seed"
+      ],
+      "title": "Noise",
+      "type": "object"
+    },
+    "OnsetMarkers": {
+      "additionalProperties": false,
+      "description": "Generic audio onset markers.\n\nBroader than :class:`BeatTracker`: any perceptible onset, not just\nmusical pulses. Useful for sound-design cues, foley hits, or\nspeech-onset alignment.",
+      "properties": {
+        "kind": {
+          "const": "onset_markers",
+          "default": "onset_markers",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "sensitivity": {
+          "default": 0.5,
+          "title": "Sensitivity",
+          "type": "number"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "source"
+      ],
+      "title": "OnsetMarkers",
+      "type": "object"
+    },
+    "Pan": {
+      "additionalProperties": false,
+      "properties": {
+        "dx": {
+          "$ref": "#/$defs/Animated_int_"
+        },
+        "dy": {
+          "$ref": "#/$defs/Animated_int_"
+        },
+        "kind": {
+          "const": "pan",
+          "default": "pan",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dx",
+        "dy"
+      ],
+      "title": "Pan",
+      "type": "object"
+    },
+    "Pixelize": {
+      "additionalProperties": false,
+      "description": "Mosaic pixelisation blend between segments.\n\nRenders via ffmpeg ``xfade=transition=pixelize``.",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "pixelize",
+          "default": "pixelize",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "Pixelize",
+      "type": "object"
+    },
+    "PluginEasing": {
+      "additionalProperties": false,
+      "description": "Deferred reference to an ``EasingPlugin`` looked up by name at render time.",
+      "properties": {
+        "kind": {
+          "const": "plugin",
+          "default": "plugin",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "PluginEasing",
+      "type": "object"
+    },
+    "PluginRequirement": {
+      "additionalProperties": false,
+      "description": "Pinned plugin requirement declared at project level.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "version_spec": {
+          "default": "*",
+          "title": "Version Spec",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "PluginRequirement",
+      "type": "object"
+    },
+    "PluginTransition": {
+      "additionalProperties": false,
+      "description": "A transition rendered by a registered transition plugin (``name``).",
+      "properties": {
+        "duration": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "plugin",
+          "default": "plugin",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "PluginTransition",
+      "type": "object"
+    },
+    "Posterize": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "posterize",
+          "default": "posterize",
+          "title": "Kind",
+          "type": "string"
+        },
+        "levels": {
+          "$ref": "#/$defs/Animated_int_"
+        }
+      },
+      "required": [
+        "levels"
+      ],
+      "title": "Posterize",
+      "type": "object"
+    },
+    "PunchIn": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "punch_in",
+          "default": "punch_in",
+          "title": "Kind",
+          "type": "string"
+        },
+        "track_speaker": {
+          "default": true,
+          "title": "Track Speaker",
+          "type": "boolean"
+        },
+        "trigger": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "beat": "#/$defs/BeatRef",
+                  "frames": "#/$defs/Frames",
+                  "marker": "#/$defs/MarkerRef",
+                  "seconds": "#/$defs/Seconds",
+                  "word": "#/$defs/WordRef"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Seconds"
+                },
+                {
+                  "$ref": "#/$defs/Frames"
+                },
+                {
+                  "$ref": "#/$defs/BeatRef"
+                },
+                {
+                  "$ref": "#/$defs/WordRef"
+                },
+                {
+                  "$ref": "#/$defs/MarkerRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trigger"
+        },
+        "zoom": {
+          "$ref": "#/$defs/Animated_float_"
+        }
+      },
+      "title": "PunchIn",
+      "type": "object"
+    },
+    "Push": {
+      "additionalProperties": false,
+      "description": "Incoming segment pushes outgoing one off-screen.\n\nRenders via ffmpeg ``xfade=transition=squeeze<direction>`` - the\nsqueeze presets are the closest analogue to a true push in ffmpeg's\nbuilt-in xfade set.",
+      "properties": {
+        "direction": {
+          "default": "left",
+          "enum": [
+            "left",
+            "right",
+            "up",
+            "down"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "push",
+          "default": "push",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "Push",
+      "type": "object"
+    },
+    "RGBShiftWipe": {
+      "additionalProperties": false,
+      "description": "Directional wipe with a chromatic RGB-channel split over the boundary.\n\nNot a plain xfade preset: an ``xfade=transition=wipe<direction>`` is\nfollowed by an ``rgbashift`` gated to the transition window, splitting the\nred and blue channels apart for a chromatic-aberration edge. ``intensity``\nscales the channel-split magnitude (0 = none, 1 = strong).",
+      "properties": {
+        "direction": {
+          "default": "right",
+          "enum": [
+            "left",
+            "right",
+            "up",
+            "down"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "intensity": {
+          "default": 0.6,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Intensity",
+          "type": "number"
+        },
+        "kind": {
+          "const": "rgb_shift_wipe",
+          "default": "rgb_shift_wipe",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "RGBShiftWipe",
+      "type": "object"
+    },
+    "RGBSplit": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "rgb_split",
+          "default": "rgb_split",
+          "title": "Kind",
+          "type": "string"
+        },
+        "offset_x": {
+          "$ref": "#/$defs/Animated_int_"
+        },
+        "offset_y": {
+          "$ref": "#/$defs/Animated_int_"
+        }
+      },
+      "required": [
+        "offset_x"
+      ],
+      "title": "RGBSplit",
+      "type": "object"
+    },
+    "Radial": {
+      "additionalProperties": false,
+      "description": "Radial sweep wipe around the frame centre.\n\nRenders via ffmpeg ``xfade=transition=radial``.",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "radial",
+          "default": "radial",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "Radial",
+      "type": "object"
+    },
+    "RandomChoice": {
+      "additionalProperties": false,
+      "description": "Discrete random pick from ``values``, holding each pick for ``hold`` seconds.\n\nSalted with the project-level ``random_seed`` like :class:`Noise`.",
+      "properties": {
+        "hold": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "title": "Hold",
+          "type": "number"
+        },
+        "kind": {
+          "const": "random_choice",
+          "default": "random_choice",
+          "title": "Kind",
+          "type": "string"
+        },
+        "seed": {
+          "title": "Seed",
+          "type": "integer"
+        },
+        "values": {
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "seed",
+        "values"
+      ],
+      "title": "RandomChoice",
+      "type": "object"
+    },
+    "RenderSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "bitrate_kbps": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bitrate Kbps"
+        },
+        "color_primaries": {
+          "default": "bt709",
+          "title": "Color Primaries",
+          "type": "string"
+        },
+        "color_trc": {
+          "default": "bt709",
+          "title": "Color Trc",
+          "type": "string"
+        },
+        "colorspace": {
+          "default": "bt709",
+          "title": "Colorspace",
+          "type": "string"
+        },
+        "crf": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Crf"
+        },
+        "encoder": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Encoder"
+        },
+        "pix_fmt": {
+          "default": "yuv420p",
+          "title": "Pix Fmt",
+          "type": "string"
+        },
+        "preset": {
+          "default": "tiktok-1080-h264",
+          "title": "Preset",
+          "type": "string"
+        },
+        "quality_profile": {
+          "default": "final",
+          "enum": [
+            "preview",
+            "draft",
+            "final"
+          ],
+          "title": "Quality Profile",
+          "type": "string"
+        }
+      },
+      "title": "RenderSettings",
+      "type": "object"
+    },
+    "Reverb": {
+      "additionalProperties": false,
+      "description": "Algorithmic reverb via a tuned ``aecho`` tap chain.\n\n``room_size`` and ``damping`` shape the underlying echo taps; ``wet``\nis the post-effect mix amount (0..1, animatable).",
+      "properties": {
+        "damping": {
+          "default": 0.5,
+          "title": "Damping",
+          "type": "number"
+        },
+        "room_size": {
+          "default": 0.5,
+          "title": "Room Size",
+          "type": "number"
+        },
+        "wet": {
+          "$ref": "#/$defs/Animated_float_"
+        }
+      },
+      "title": "Reverb",
+      "type": "object"
+    },
+    "SAM3Track": {
+      "additionalProperties": false,
+      "description": "SAM 3 (Meta, 2025) - open-vocabulary segmentation + tracking.\n\nLazy-loaded; requires ``pip install eks-harness[sam3]``.",
+      "properties": {
+        "confidence_threshold": {
+          "default": 0.5,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence Threshold",
+          "type": "number"
+        },
+        "kind": {
+          "const": "sam3_track",
+          "default": "sam3_track",
+          "title": "Kind",
+          "type": "string"
+        },
+        "output": {
+          "default": "mask",
+          "enum": [
+            "mask",
+            "matte",
+            "highlight"
+          ],
+          "title": "Output",
+          "type": "string"
+        },
+        "prompt": {
+          "title": "Prompt",
+          "type": "string"
+        }
+      },
+      "required": [
+        "prompt"
+      ],
+      "title": "SAM3Track",
+      "type": "object"
+    },
+    "STTMarkers": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "default": "faster-whisper",
+          "enum": [
+            "faster-whisper",
+            "whisperx",
+            "mlx-whisper"
+          ],
+          "title": "Backend",
+          "type": "string"
+        },
+        "kind": {
+          "const": "stt_markers",
+          "default": "stt_markers",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "source"
+      ],
+      "title": "STTMarkers",
+      "type": "object"
+    },
+    "Saturation": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "kind": {
+          "const": "saturation",
+          "default": "saturation",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "amount"
+      ],
+      "title": "Saturation",
+      "type": "object"
+    },
+    "SceneMarkers": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "scene_markers",
+          "default": "scene_markers",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "threshold": {
+          "default": 27.0,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "source"
+      ],
+      "title": "SceneMarkers",
+      "type": "object"
+    },
+    "Seconds": {
+      "additionalProperties": false,
+      "description": "Absolute time in seconds from project start.",
+      "properties": {
+        "kind": {
+          "const": "seconds",
+          "default": "seconds",
+          "title": "Kind",
+          "type": "string"
+        },
+        "t": {
+          "title": "T",
+          "type": "number"
+        }
+      },
+      "required": [
+        "t"
+      ],
+      "title": "Seconds",
+      "type": "object"
+    },
+    "Segment": {
+      "additionalProperties": false,
+      "description": "A clip placed on a video ``Track``.",
+      "properties": {
+        "effects": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "auto_reframe": "#/$defs/AutoReframe",
+                "birefnet_remove": "#/$defs/BiRefNetRemove",
+                "blur": "#/$defs/Blur",
+                "brightness": "#/$defs/Brightness",
+                "captions": "#/$defs/Captions",
+                "chroma_key": "#/$defs/ChromaKey",
+                "color_grade": "#/$defs/ColorGrade",
+                "contrast": "#/$defs/Contrast",
+                "crop": "#/$defs/Crop",
+                "datamosh": "#/$defs/Datamosh",
+                "fade": "#/$defs/Fade",
+                "film_grain": "#/$defs/FilmGrain",
+                "flash": "#/$defs/Flash",
+                "freeze": "#/$defs/Freeze",
+                "glitch": "#/$defs/Glitch",
+                "invert": "#/$defs/Invert",
+                "lower_third": "#/$defs/LowerThird",
+                "lut": "#/$defs/LUT",
+                "matanyone_remove": "#/$defs/MatAnyoneRemove",
+                "mirror": "#/$defs/Mirror",
+                "pan": "#/$defs/Pan",
+                "posterize": "#/$defs/Posterize",
+                "punch_in": "#/$defs/PunchIn",
+                "rgb_split": "#/$defs/RGBSplit",
+                "sam3_track": "#/$defs/SAM3Track",
+                "saturation": "#/$defs/Saturation",
+                "shake": "#/$defs/Shake",
+                "sharpen": "#/$defs/Sharpen",
+                "speed_ramp": "#/$defs/SpeedRamp",
+                "sticker": "#/$defs/StickerOverlay",
+                "text_overlay": "#/$defs/TextOverlay",
+                "vhs": "#/$defs/VHS",
+                "vignette": "#/$defs/Vignette",
+                "watermark": "#/$defs/Watermark",
+                "zoom": "#/$defs/Zoom"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Brightness"
+              },
+              {
+                "$ref": "#/$defs/Contrast"
+              },
+              {
+                "$ref": "#/$defs/Saturation"
+              },
+              {
+                "$ref": "#/$defs/Crop"
+              },
+              {
+                "$ref": "#/$defs/Mirror"
+              },
+              {
+                "$ref": "#/$defs/Zoom"
+              },
+              {
+                "$ref": "#/$defs/Pan"
+              },
+              {
+                "$ref": "#/$defs/SpeedRamp"
+              },
+              {
+                "$ref": "#/$defs/Freeze"
+              },
+              {
+                "$ref": "#/$defs/ChromaKey"
+              },
+              {
+                "$ref": "#/$defs/ColorGrade"
+              },
+              {
+                "$ref": "#/$defs/Fade"
+              },
+              {
+                "$ref": "#/$defs/Blur"
+              },
+              {
+                "$ref": "#/$defs/Sharpen"
+              },
+              {
+                "$ref": "#/$defs/Vignette"
+              },
+              {
+                "$ref": "#/$defs/FilmGrain"
+              },
+              {
+                "$ref": "#/$defs/LUT"
+              },
+              {
+                "$ref": "#/$defs/Invert"
+              },
+              {
+                "$ref": "#/$defs/Posterize"
+              },
+              {
+                "$ref": "#/$defs/TextOverlay"
+              },
+              {
+                "$ref": "#/$defs/LowerThird"
+              },
+              {
+                "$ref": "#/$defs/Watermark"
+              },
+              {
+                "$ref": "#/$defs/StickerOverlay"
+              },
+              {
+                "$ref": "#/$defs/Flash"
+              },
+              {
+                "$ref": "#/$defs/RGBSplit"
+              },
+              {
+                "$ref": "#/$defs/Glitch"
+              },
+              {
+                "$ref": "#/$defs/Shake"
+              },
+              {
+                "$ref": "#/$defs/VHS"
+              },
+              {
+                "$ref": "#/$defs/Datamosh"
+              },
+              {
+                "$ref": "#/$defs/Captions"
+              },
+              {
+                "$ref": "#/$defs/MatAnyoneRemove"
+              },
+              {
+                "$ref": "#/$defs/BiRefNetRemove"
+              },
+              {
+                "$ref": "#/$defs/SAM3Track"
+              },
+              {
+                "$ref": "#/$defs/AutoReframe"
+              },
+              {
+                "$ref": "#/$defs/PunchIn"
+              }
+            ]
+          },
+          "title": "Effects",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "in": {
+          "discriminator": {
+            "mapping": {
+              "beat": "#/$defs/BeatRef",
+              "frames": "#/$defs/Frames",
+              "marker": "#/$defs/MarkerRef",
+              "seconds": "#/$defs/Seconds",
+              "word": "#/$defs/WordRef"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Seconds"
+            },
+            {
+              "$ref": "#/$defs/Frames"
+            },
+            {
+              "$ref": "#/$defs/BeatRef"
+            },
+            {
+              "$ref": "#/$defs/WordRef"
+            },
+            {
+              "$ref": "#/$defs/MarkerRef"
+            }
+          ],
+          "title": "In"
+        },
+        "media": {
+          "discriminator": {
+            "mapping": {
+              "audio_file": "#/$defs/AudioFile",
+              "generated_card": "#/$defs/GeneratedCard",
+              "html_overlay": "#/$defs/HTMLOverlay",
+              "image_file": "#/$defs/ImageFile",
+              "separated_stem": "#/$defs/SeparatedStem",
+              "solid": "#/$defs/Solid",
+              "tts_generated": "#/$defs/TTSGenerated",
+              "video_file": "#/$defs/VideoFile"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/VideoFile"
+            },
+            {
+              "$ref": "#/$defs/ImageFile"
+            },
+            {
+              "$ref": "#/$defs/Solid"
+            },
+            {
+              "$ref": "#/$defs/GeneratedCard"
+            },
+            {
+              "$ref": "#/$defs/AudioFile"
+            },
+            {
+              "$ref": "#/$defs/TTSGenerated"
+            },
+            {
+              "$ref": "#/$defs/SeparatedStem"
+            },
+            {
+              "$ref": "#/$defs/HTMLOverlay"
+            }
+          ],
+          "title": "Media"
+        },
+        "out": {
+          "discriminator": {
+            "mapping": {
+              "beat": "#/$defs/BeatRef",
+              "frames": "#/$defs/Frames",
+              "marker": "#/$defs/MarkerRef",
+              "seconds": "#/$defs/Seconds",
+              "word": "#/$defs/WordRef"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Seconds"
+            },
+            {
+              "$ref": "#/$defs/Frames"
+            },
+            {
+              "$ref": "#/$defs/BeatRef"
+            },
+            {
+              "$ref": "#/$defs/WordRef"
+            },
+            {
+              "$ref": "#/$defs/MarkerRef"
+            }
+          ],
+          "title": "Out"
+        },
+        "speed": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "start": {
+          "discriminator": {
+            "mapping": {
+              "beat": "#/$defs/BeatRef",
+              "frames": "#/$defs/Frames",
+              "marker": "#/$defs/MarkerRef",
+              "seconds": "#/$defs/Seconds",
+              "word": "#/$defs/WordRef"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Seconds"
+            },
+            {
+              "$ref": "#/$defs/Frames"
+            },
+            {
+              "$ref": "#/$defs/BeatRef"
+            },
+            {
+              "$ref": "#/$defs/WordRef"
+            },
+            {
+              "$ref": "#/$defs/MarkerRef"
+            }
+          ],
+          "title": "Start"
+        },
+        "transition_in": {
+          "discriminator": {
+            "mapping": {
+              "beat_flash": "#/$defs/BeatFlash",
+              "beat_glitch": "#/$defs/BeatGlitch",
+              "blur_through": "#/$defs/BlurThrough",
+              "crossfade": "#/$defs/Crossfade",
+              "cut": "#/$defs/Cut",
+              "dip_to_black": "#/$defs/DipToBlack",
+              "dip_to_white": "#/$defs/DipToWhite",
+              "dissolve": "#/$defs/Dissolve",
+              "fade_grays": "#/$defs/FadeGrays",
+              "film_burn": "#/$defs/FilmBurn",
+              "glitch_transition": "#/$defs/GlitchTransition",
+              "iris": "#/$defs/Iris",
+              "light_leak": "#/$defs/LightLeak",
+              "luma_wipe": "#/$defs/LumaWipe",
+              "pixelize": "#/$defs/Pixelize",
+              "plugin": "#/$defs/PluginTransition",
+              "push": "#/$defs/Push",
+              "radial": "#/$defs/Radial",
+              "rgb_shift_wipe": "#/$defs/RGBShiftWipe",
+              "slide": "#/$defs/Slide",
+              "whip_pan": "#/$defs/WhipPan",
+              "wipe": "#/$defs/Wipe",
+              "zoom": "#/$defs/ZoomTransition"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Cut"
+            },
+            {
+              "$ref": "#/$defs/Crossfade"
+            },
+            {
+              "$ref": "#/$defs/DipToBlack"
+            },
+            {
+              "$ref": "#/$defs/DipToWhite"
+            },
+            {
+              "$ref": "#/$defs/Wipe"
+            },
+            {
+              "$ref": "#/$defs/Slide"
+            },
+            {
+              "$ref": "#/$defs/Push"
+            },
+            {
+              "$ref": "#/$defs/GlitchTransition"
+            },
+            {
+              "$ref": "#/$defs/ZoomTransition"
+            },
+            {
+              "$ref": "#/$defs/Dissolve"
+            },
+            {
+              "$ref": "#/$defs/BlurThrough"
+            },
+            {
+              "$ref": "#/$defs/Iris"
+            },
+            {
+              "$ref": "#/$defs/Radial"
+            },
+            {
+              "$ref": "#/$defs/Pixelize"
+            },
+            {
+              "$ref": "#/$defs/FadeGrays"
+            },
+            {
+              "$ref": "#/$defs/LumaWipe"
+            },
+            {
+              "$ref": "#/$defs/RGBShiftWipe"
+            },
+            {
+              "$ref": "#/$defs/WhipPan"
+            },
+            {
+              "$ref": "#/$defs/LightLeak"
+            },
+            {
+              "$ref": "#/$defs/FilmBurn"
+            },
+            {
+              "$ref": "#/$defs/BeatFlash"
+            },
+            {
+              "$ref": "#/$defs/BeatGlitch"
+            },
+            {
+              "$ref": "#/$defs/PluginTransition"
+            }
+          ],
+          "title": "Transition In"
+        },
+        "transition_out": {
+          "discriminator": {
+            "mapping": {
+              "beat_flash": "#/$defs/BeatFlash",
+              "beat_glitch": "#/$defs/BeatGlitch",
+              "blur_through": "#/$defs/BlurThrough",
+              "crossfade": "#/$defs/Crossfade",
+              "cut": "#/$defs/Cut",
+              "dip_to_black": "#/$defs/DipToBlack",
+              "dip_to_white": "#/$defs/DipToWhite",
+              "dissolve": "#/$defs/Dissolve",
+              "fade_grays": "#/$defs/FadeGrays",
+              "film_burn": "#/$defs/FilmBurn",
+              "glitch_transition": "#/$defs/GlitchTransition",
+              "iris": "#/$defs/Iris",
+              "light_leak": "#/$defs/LightLeak",
+              "luma_wipe": "#/$defs/LumaWipe",
+              "pixelize": "#/$defs/Pixelize",
+              "plugin": "#/$defs/PluginTransition",
+              "push": "#/$defs/Push",
+              "radial": "#/$defs/Radial",
+              "rgb_shift_wipe": "#/$defs/RGBShiftWipe",
+              "slide": "#/$defs/Slide",
+              "whip_pan": "#/$defs/WhipPan",
+              "wipe": "#/$defs/Wipe",
+              "zoom": "#/$defs/ZoomTransition"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Cut"
+            },
+            {
+              "$ref": "#/$defs/Crossfade"
+            },
+            {
+              "$ref": "#/$defs/DipToBlack"
+            },
+            {
+              "$ref": "#/$defs/DipToWhite"
+            },
+            {
+              "$ref": "#/$defs/Wipe"
+            },
+            {
+              "$ref": "#/$defs/Slide"
+            },
+            {
+              "$ref": "#/$defs/Push"
+            },
+            {
+              "$ref": "#/$defs/GlitchTransition"
+            },
+            {
+              "$ref": "#/$defs/ZoomTransition"
+            },
+            {
+              "$ref": "#/$defs/Dissolve"
+            },
+            {
+              "$ref": "#/$defs/BlurThrough"
+            },
+            {
+              "$ref": "#/$defs/Iris"
+            },
+            {
+              "$ref": "#/$defs/Radial"
+            },
+            {
+              "$ref": "#/$defs/Pixelize"
+            },
+            {
+              "$ref": "#/$defs/FadeGrays"
+            },
+            {
+              "$ref": "#/$defs/LumaWipe"
+            },
+            {
+              "$ref": "#/$defs/RGBShiftWipe"
+            },
+            {
+              "$ref": "#/$defs/WhipPan"
+            },
+            {
+              "$ref": "#/$defs/LightLeak"
+            },
+            {
+              "$ref": "#/$defs/FilmBurn"
+            },
+            {
+              "$ref": "#/$defs/BeatFlash"
+            },
+            {
+              "$ref": "#/$defs/BeatGlitch"
+            },
+            {
+              "$ref": "#/$defs/PluginTransition"
+            }
+          ],
+          "title": "Transition Out"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "media",
+        "out"
+      ],
+      "title": "Segment",
+      "type": "object"
+    },
+    "SeparatedStem": {
+      "additionalProperties": false,
+      "description": "Audio source separated via Demucs HTDemucs into vocals/drums/bass/other.\n\nThe renderer runs Demucs once per ``(source path, model)`` pair and caches\nthe four stems on disk; the segment's effective audio is the mix of the\nlisted ``stems``. When a single stem is requested the cached file is used\ndirectly; multiple stems are mixed via ffmpeg ``amix``.\n\nLazy-loaded; requires ``pip install eks-harness[stems]``.",
+      "properties": {
+        "kind": {
+          "const": "separated_stem",
+          "default": "separated_stem",
+          "title": "Kind",
+          "type": "string"
+        },
+        "model": {
+          "default": "htdemucs",
+          "enum": [
+            "htdemucs",
+            "htdemucs_ft",
+            "mdx_extra"
+          ],
+          "title": "Model",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/AudioFile"
+        },
+        "stems": {
+          "items": {
+            "enum": [
+              "vocals",
+              "drums",
+              "bass",
+              "other"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Stems",
+          "type": "array"
+        }
+      },
+      "required": [
+        "source",
+        "stems"
+      ],
+      "title": "SeparatedStem",
+      "type": "object"
+    },
+    "Shake": {
+      "additionalProperties": false,
+      "properties": {
+        "decay": {
+          "default": 0.0,
+          "title": "Decay",
+          "type": "number"
+        },
+        "freq_hz": {
+          "default": 6.0,
+          "title": "Freq Hz",
+          "type": "number"
+        },
+        "intensity": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "kind": {
+          "const": "shake",
+          "default": "shake",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "intensity"
+      ],
+      "title": "Shake",
+      "type": "object"
+    },
+    "Sharpen": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "kind": {
+          "const": "sharpen",
+          "default": "sharpen",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "amount"
+      ],
+      "title": "Sharpen",
+      "type": "object"
+    },
+    "SidechainConfig": {
+      "additionalProperties": false,
+      "description": "Auto-ducking config attaching this track to a source track.",
+      "properties": {
+        "attack_ms": {
+          "default": 10.0,
+          "title": "Attack Ms",
+          "type": "number"
+        },
+        "ratio": {
+          "default": 4.0,
+          "title": "Ratio",
+          "type": "number"
+        },
+        "release_ms": {
+          "default": 200.0,
+          "title": "Release Ms",
+          "type": "number"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "threshold_db": {
+          "default": -20.0,
+          "title": "Threshold Db",
+          "type": "number"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "SidechainConfig",
+      "type": "object"
+    },
+    "SilenceMarkers": {
+      "additionalProperties": false,
+      "description": "Silent-region markers from an audio source.\n\nEmits one marker per detected silent region whose RMS stays below\n``threshold_db`` for at least ``min_duration`` seconds. The marker\nsits at the *start* of each silent region, mirroring how other\nmarker sources publish event times rather than ranges.",
+      "properties": {
+        "kind": {
+          "const": "silence_markers",
+          "default": "silence_markers",
+          "title": "Kind",
+          "type": "string"
+        },
+        "min_duration": {
+          "default": 0.3,
+          "title": "Min Duration",
+          "type": "number"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "threshold_db": {
+          "default": -40.0,
+          "title": "Threshold Db",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "source"
+      ],
+      "title": "SilenceMarkers",
+      "type": "object"
+    },
+    "Sine": {
+      "additionalProperties": false,
+      "properties": {
+        "amp": {
+          "default": 1.0,
+          "title": "Amp",
+          "type": "number"
+        },
+        "freq_hz": {
+          "title": "Freq Hz",
+          "type": "number"
+        },
+        "kind": {
+          "const": "sine",
+          "default": "sine",
+          "title": "Kind",
+          "type": "string"
+        },
+        "offset": {
+          "default": 0.0,
+          "title": "Offset",
+          "type": "number"
+        },
+        "phase": {
+          "default": 0.0,
+          "title": "Phase",
+          "type": "number"
+        }
+      },
+      "required": [
+        "freq_hz"
+      ],
+      "title": "Sine",
+      "type": "object"
+    },
+    "Slide": {
+      "additionalProperties": false,
+      "description": "Incoming segment slides over outgoing one.\n\nRenders via ffmpeg ``xfade=transition=slide<direction>``.",
+      "properties": {
+        "direction": {
+          "default": "right",
+          "enum": [
+            "left",
+            "right",
+            "up",
+            "down"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "slide",
+          "default": "slide",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "Slide",
+      "type": "object"
+    },
+    "Solid": {
+      "additionalProperties": false,
+      "description": "Solid colour fill. Color is RGBA in 0-255.",
+      "properties": {
+        "color": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Color",
+          "type": "array"
+        },
+        "kind": {
+          "const": "solid",
+          "default": "solid",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "color"
+      ],
+      "title": "Solid",
+      "type": "object"
+    },
+    "SpeedRamp": {
+      "additionalProperties": false,
+      "properties": {
+        "factor": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "kind": {
+          "const": "speed_ramp",
+          "default": "speed_ramp",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "factor"
+      ],
+      "title": "SpeedRamp",
+      "type": "object"
+    },
+    "Spring": {
+      "additionalProperties": false,
+      "description": "Physics-based damped harmonic oscillator settling toward ``target``.\n\nIntegrated per-frame with ``dt = 1 / fps`` starting from ``initial``\nposition with zero velocity. ``stiffness`` controls oscillation\nfrequency; ``damping`` controls how quickly oscillations die out.",
+      "properties": {
+        "damping": {
+          "default": 10.0,
+          "exclusiveMinimum": 0,
+          "title": "Damping",
+          "type": "number"
+        },
+        "initial": {
+          "default": 0.0,
+          "title": "Initial",
+          "type": "number"
+        },
+        "kind": {
+          "const": "spring",
+          "default": "spring",
+          "title": "Kind",
+          "type": "string"
+        },
+        "stiffness": {
+          "default": 100.0,
+          "exclusiveMinimum": 0,
+          "title": "Stiffness",
+          "type": "number"
+        },
+        "target": {
+          "title": "Target",
+          "type": "number"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "title": "Spring",
+      "type": "object"
+    },
+    "Step": {
+      "additionalProperties": false,
+      "description": "Deterministic round-robin through ``values``, advancing every ``hold`` seconds.",
+      "properties": {
+        "hold": {
+          "exclusiveMinimum": 0,
+          "title": "Hold",
+          "type": "number"
+        },
+        "kind": {
+          "const": "step",
+          "default": "step",
+          "title": "Kind",
+          "type": "string"
+        },
+        "values": {
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "values",
+        "hold"
+      ],
+      "title": "Step",
+      "type": "object"
+    },
+    "StickerOverlay": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "sticker",
+          "default": "sticker",
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "format": "path",
+          "title": "Path",
+          "type": "string"
+        },
+        "rotation": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "scale": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "x": {
+          "$ref": "#/$defs/Animated_int_"
+        },
+        "y": {
+          "$ref": "#/$defs/Animated_int_"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "StickerOverlay",
+      "type": "object"
+    },
+    "TTSGenerated": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "default": "kokoro",
+          "title": "Backend",
+          "type": "string"
+        },
+        "kind": {
+          "const": "tts_generated",
+          "default": "tts_generated",
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "voice": {
+          "default": "default",
+          "title": "Voice",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "TTSGenerated",
+      "type": "object"
+    },
+    "TextOverlay": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "default": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Color",
+          "type": "array"
+        },
+        "duration": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration"
+        },
+        "font": {
+          "default": "Inter",
+          "title": "Font",
+          "type": "string"
+        },
+        "kind": {
+          "const": "text_overlay",
+          "default": "text_overlay",
+          "title": "Kind",
+          "type": "string"
+        },
+        "size": {
+          "default": 48,
+          "title": "Size",
+          "type": "integer"
+        },
+        "start": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "beat": "#/$defs/BeatRef",
+                  "frames": "#/$defs/Frames",
+                  "marker": "#/$defs/MarkerRef",
+                  "seconds": "#/$defs/Seconds",
+                  "word": "#/$defs/WordRef"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Seconds"
+                },
+                {
+                  "$ref": "#/$defs/Frames"
+                },
+                {
+                  "$ref": "#/$defs/BeatRef"
+                },
+                {
+                  "$ref": "#/$defs/WordRef"
+                },
+                {
+                  "$ref": "#/$defs/MarkerRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "x": {
+          "$ref": "#/$defs/Animated_int_"
+        },
+        "y": {
+          "$ref": "#/$defs/Animated_int_"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "TextOverlay",
+      "type": "object"
+    },
+    "TimeRef": {
+      "discriminator": {
+        "mapping": {
+          "beat": "#/$defs/BeatRef",
+          "frames": "#/$defs/Frames",
+          "marker": "#/$defs/MarkerRef",
+          "seconds": "#/$defs/Seconds",
+          "word": "#/$defs/WordRef"
+        },
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Seconds"
+        },
+        {
+          "$ref": "#/$defs/Frames"
+        },
+        {
+          "$ref": "#/$defs/BeatRef"
+        },
+        {
+          "$ref": "#/$defs/WordRef"
+        },
+        {
+          "$ref": "#/$defs/MarkerRef"
+        }
+      ]
+    },
+    "Track": {
+      "additionalProperties": false,
+      "description": "Video track. ``z`` is the compositing depth (higher = on top).",
+      "properties": {
+        "blend": {
+          "default": "normal",
+          "enum": [
+            "normal",
+            "add",
+            "multiply",
+            "screen",
+            "overlay"
+          ],
+          "title": "Blend",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "opacity": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "segments": {
+          "items": {
+            "$ref": "#/$defs/Segment"
+          },
+          "title": "Segments",
+          "type": "array"
+        },
+        "transitions": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "beat_flash": "#/$defs/BeatFlash",
+                "beat_glitch": "#/$defs/BeatGlitch",
+                "blur_through": "#/$defs/BlurThrough",
+                "crossfade": "#/$defs/Crossfade",
+                "cut": "#/$defs/Cut",
+                "dip_to_black": "#/$defs/DipToBlack",
+                "dip_to_white": "#/$defs/DipToWhite",
+                "dissolve": "#/$defs/Dissolve",
+                "fade_grays": "#/$defs/FadeGrays",
+                "film_burn": "#/$defs/FilmBurn",
+                "glitch_transition": "#/$defs/GlitchTransition",
+                "iris": "#/$defs/Iris",
+                "light_leak": "#/$defs/LightLeak",
+                "luma_wipe": "#/$defs/LumaWipe",
+                "pixelize": "#/$defs/Pixelize",
+                "plugin": "#/$defs/PluginTransition",
+                "push": "#/$defs/Push",
+                "radial": "#/$defs/Radial",
+                "rgb_shift_wipe": "#/$defs/RGBShiftWipe",
+                "slide": "#/$defs/Slide",
+                "whip_pan": "#/$defs/WhipPan",
+                "wipe": "#/$defs/Wipe",
+                "zoom": "#/$defs/ZoomTransition"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Cut"
+              },
+              {
+                "$ref": "#/$defs/Crossfade"
+              },
+              {
+                "$ref": "#/$defs/DipToBlack"
+              },
+              {
+                "$ref": "#/$defs/DipToWhite"
+              },
+              {
+                "$ref": "#/$defs/Wipe"
+              },
+              {
+                "$ref": "#/$defs/Slide"
+              },
+              {
+                "$ref": "#/$defs/Push"
+              },
+              {
+                "$ref": "#/$defs/GlitchTransition"
+              },
+              {
+                "$ref": "#/$defs/ZoomTransition"
+              },
+              {
+                "$ref": "#/$defs/Dissolve"
+              },
+              {
+                "$ref": "#/$defs/BlurThrough"
+              },
+              {
+                "$ref": "#/$defs/Iris"
+              },
+              {
+                "$ref": "#/$defs/Radial"
+              },
+              {
+                "$ref": "#/$defs/Pixelize"
+              },
+              {
+                "$ref": "#/$defs/FadeGrays"
+              },
+              {
+                "$ref": "#/$defs/LumaWipe"
+              },
+              {
+                "$ref": "#/$defs/RGBShiftWipe"
+              },
+              {
+                "$ref": "#/$defs/WhipPan"
+              },
+              {
+                "$ref": "#/$defs/LightLeak"
+              },
+              {
+                "$ref": "#/$defs/FilmBurn"
+              },
+              {
+                "$ref": "#/$defs/BeatFlash"
+              },
+              {
+                "$ref": "#/$defs/BeatGlitch"
+              },
+              {
+                "$ref": "#/$defs/PluginTransition"
+              }
+            ]
+          },
+          "title": "Transitions",
+          "type": "array"
+        },
+        "z": {
+          "default": 0,
+          "title": "Z",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Track",
+      "type": "object"
+    },
+    "Transition": {
+      "discriminator": {
+        "mapping": {
+          "beat_flash": "#/$defs/BeatFlash",
+          "beat_glitch": "#/$defs/BeatGlitch",
+          "blur_through": "#/$defs/BlurThrough",
+          "crossfade": "#/$defs/Crossfade",
+          "cut": "#/$defs/Cut",
+          "dip_to_black": "#/$defs/DipToBlack",
+          "dip_to_white": "#/$defs/DipToWhite",
+          "dissolve": "#/$defs/Dissolve",
+          "fade_grays": "#/$defs/FadeGrays",
+          "film_burn": "#/$defs/FilmBurn",
+          "glitch_transition": "#/$defs/GlitchTransition",
+          "iris": "#/$defs/Iris",
+          "light_leak": "#/$defs/LightLeak",
+          "luma_wipe": "#/$defs/LumaWipe",
+          "pixelize": "#/$defs/Pixelize",
+          "plugin": "#/$defs/PluginTransition",
+          "push": "#/$defs/Push",
+          "radial": "#/$defs/Radial",
+          "rgb_shift_wipe": "#/$defs/RGBShiftWipe",
+          "slide": "#/$defs/Slide",
+          "whip_pan": "#/$defs/WhipPan",
+          "wipe": "#/$defs/Wipe",
+          "zoom": "#/$defs/ZoomTransition"
+        },
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Cut"
+        },
+        {
+          "$ref": "#/$defs/Crossfade"
+        },
+        {
+          "$ref": "#/$defs/DipToBlack"
+        },
+        {
+          "$ref": "#/$defs/DipToWhite"
+        },
+        {
+          "$ref": "#/$defs/Wipe"
+        },
+        {
+          "$ref": "#/$defs/Slide"
+        },
+        {
+          "$ref": "#/$defs/Push"
+        },
+        {
+          "$ref": "#/$defs/GlitchTransition"
+        },
+        {
+          "$ref": "#/$defs/ZoomTransition"
+        },
+        {
+          "$ref": "#/$defs/Dissolve"
+        },
+        {
+          "$ref": "#/$defs/BlurThrough"
+        },
+        {
+          "$ref": "#/$defs/Iris"
+        },
+        {
+          "$ref": "#/$defs/Radial"
+        },
+        {
+          "$ref": "#/$defs/Pixelize"
+        },
+        {
+          "$ref": "#/$defs/FadeGrays"
+        },
+        {
+          "$ref": "#/$defs/LumaWipe"
+        },
+        {
+          "$ref": "#/$defs/RGBShiftWipe"
+        },
+        {
+          "$ref": "#/$defs/WhipPan"
+        },
+        {
+          "$ref": "#/$defs/LightLeak"
+        },
+        {
+          "$ref": "#/$defs/FilmBurn"
+        },
+        {
+          "$ref": "#/$defs/BeatFlash"
+        },
+        {
+          "$ref": "#/$defs/BeatGlitch"
+        },
+        {
+          "$ref": "#/$defs/PluginTransition"
+        }
+      ]
+    },
+    "VHS": {
+      "additionalProperties": false,
+      "properties": {
+        "chroma_blur": {
+          "default": 1.5,
+          "title": "Chroma Blur",
+          "type": "number"
+        },
+        "kind": {
+          "const": "vhs",
+          "default": "vhs",
+          "title": "Kind",
+          "type": "string"
+        },
+        "noise": {
+          "default": 0.05,
+          "title": "Noise",
+          "type": "number"
+        },
+        "scanlines": {
+          "default": true,
+          "title": "Scanlines",
+          "type": "boolean"
+        }
+      },
+      "title": "VHS",
+      "type": "object"
+    },
+    "VideoFile": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "video_file",
+          "default": "video_file",
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Path"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "VideoFile",
+      "type": "object"
+    },
+    "Vignette": {
+      "additionalProperties": false,
+      "properties": {
+        "angle": {
+          "default": 0.628,
+          "title": "Angle",
+          "type": "number"
+        },
+        "kind": {
+          "const": "vignette",
+          "default": "vignette",
+          "title": "Kind",
+          "type": "string"
+        },
+        "x0": {
+          "default": 0.5,
+          "title": "X0",
+          "type": "number"
+        },
+        "y0": {
+          "default": 0.5,
+          "title": "Y0",
+          "type": "number"
+        }
+      },
+      "title": "Vignette",
+      "type": "object"
+    },
+    "Watermark": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "watermark",
+          "default": "watermark",
+          "title": "Kind",
+          "type": "string"
+        },
+        "opacity": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "path": {
+          "format": "path",
+          "title": "Path",
+          "type": "string"
+        },
+        "scale": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "x": {
+          "$ref": "#/$defs/Animated_int_"
+        },
+        "y": {
+          "$ref": "#/$defs/Animated_int_"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "Watermark",
+      "type": "object"
+    },
+    "WhipPan": {
+      "additionalProperties": false,
+      "description": "Motion-blurred whip-pan slide in the given direction.\n\nNot a plain xfade preset: an ``xfade=transition=slide<direction>`` is\nfollowed by a directional ``avgblur`` gated to the transition window,\nsmearing the frame along the pan axis. ``intensity`` scales the blur\nkernel size (0 = none, 1 = strong).",
+      "properties": {
+        "direction": {
+          "default": "right",
+          "enum": [
+            "left",
+            "right",
+            "up",
+            "down"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "intensity": {
+          "default": 0.6,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Intensity",
+          "type": "number"
+        },
+        "kind": {
+          "const": "whip_pan",
+          "default": "whip_pan",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "WhipPan",
+      "type": "object"
+    },
+    "Wipe": {
+      "additionalProperties": false,
+      "description": "Hard-edged wipe in the given direction.\n\nRenders via ffmpeg ``xfade=transition=wipe<direction>``.",
+      "properties": {
+        "direction": {
+          "default": "right",
+          "enum": [
+            "left",
+            "right",
+            "up",
+            "down"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "wipe",
+          "default": "wipe",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "Wipe",
+      "type": "object"
+    },
+    "WordRef": {
+      "additionalProperties": false,
+      "description": "Reference to a word or word-index marker emitted by an STT marker source.",
+      "properties": {
+        "index": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Index"
+        },
+        "kind": {
+          "const": "word",
+          "default": "word",
+          "title": "Kind",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        }
+      },
+      "title": "WordRef",
+      "type": "object"
+    },
+    "Zoom": {
+      "additionalProperties": false,
+      "properties": {
+        "cx": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "cy": {
+          "$ref": "#/$defs/Animated_float_"
+        },
+        "kind": {
+          "const": "zoom",
+          "default": "zoom",
+          "title": "Kind",
+          "type": "string"
+        },
+        "scale": {
+          "$ref": "#/$defs/Animated_float_"
+        }
+      },
+      "required": [
+        "scale"
+      ],
+      "title": "Zoom",
+      "type": "object"
+    },
+    "ZoomTransition": {
+      "additionalProperties": false,
+      "description": "Zoom-blur push into the incoming segment.\n\nRenders via ffmpeg ``xfade=transition=zoomin``. Named ``ZoomTransition``\nrather than ``Zoom`` because :class:`eks_harness.video.ir.effects.Zoom` already\noccupies that name in the public namespace; the discriminator ``kind`` is\nstill ``\"zoom\"``.",
+      "properties": {
+        "duration": {
+          "exclusiveMinimum": 0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "kind": {
+          "const": "zoom",
+          "default": "zoom",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "title": "ZoomTransition",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Root timeline model.\n\nHolds tracks, audio tracks, marker declarations, render settings and a\nlist of plugin requirements. The ``schema_version`` field is reserved for\nfuture migrations.\n\n``random_seed`` is the global salt for reproducible randomness across\nevery ``Noise``, ``RandomChoice``, ``RandomTrigger`` (and similar)\nnode in the project. Per-node seeds are combined with this salt so\nthat a project rendered twice with the same ``random_seed`` produces\nidentical output.",
+  "properties": {
+    "audio_tracks": {
+      "items": {
+        "$ref": "#/$defs/AudioTrack"
+      },
+      "title": "Audio Tracks",
+      "type": "array"
+    },
+    "duration": {
+      "exclusiveMinimum": 0,
+      "title": "Duration",
+      "type": "number"
+    },
+    "fps": {
+      "exclusiveMinimum": 0,
+      "title": "Fps",
+      "type": "number"
+    },
+    "markers": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "beat_tracker": "#/$defs/BeatTracker",
+            "energy_markers": "#/$defs/EnergyMarkers",
+            "face_markers": "#/$defs/FaceMarkers",
+            "momentum_markers": "#/$defs/MomentumMarkers",
+            "motion_markers": "#/$defs/MotionMarkers",
+            "onset_markers": "#/$defs/OnsetMarkers",
+            "scene_markers": "#/$defs/SceneMarkers",
+            "silence_markers": "#/$defs/SilenceMarkers",
+            "stt_markers": "#/$defs/STTMarkers"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/BeatTracker"
+          },
+          {
+            "$ref": "#/$defs/STTMarkers"
+          },
+          {
+            "$ref": "#/$defs/SceneMarkers"
+          },
+          {
+            "$ref": "#/$defs/SilenceMarkers"
+          },
+          {
+            "$ref": "#/$defs/OnsetMarkers"
+          },
+          {
+            "$ref": "#/$defs/EnergyMarkers"
+          },
+          {
+            "$ref": "#/$defs/MomentumMarkers"
+          },
+          {
+            "$ref": "#/$defs/FaceMarkers"
+          },
+          {
+            "$ref": "#/$defs/MotionMarkers"
+          }
+        ]
+      },
+      "title": "Markers",
+      "type": "array"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    },
+    "plugins": {
+      "items": {
+        "$ref": "#/$defs/PluginRequirement"
+      },
+      "title": "Plugins",
+      "type": "array"
+    },
+    "random_seed": {
+      "default": 0,
+      "title": "Random Seed",
+      "type": "integer"
+    },
+    "render_settings": {
+      "$ref": "#/$defs/RenderSettings"
+    },
+    "resolution": {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "integer"
+        }
+      ],
+      "title": "Resolution",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": "0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tracks": {
+      "items": {
+        "$ref": "#/$defs/Track"
+      },
+      "title": "Tracks",
+      "type": "array"
+    }
+  },
+  "required": [
+    "fps",
+    "resolution",
+    "duration"
+  ],
+  "title": "eks-harness video project",
+  "type": "object"
+}

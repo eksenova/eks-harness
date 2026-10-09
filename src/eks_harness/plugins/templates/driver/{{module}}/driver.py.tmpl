@@ -1,0 +1,48 @@
+from __future__ import annotations
+
+from collections.abc import AsyncIterator, Mapping
+from typing import Any
+
+from eks_harness.plugins.sdk import PluginContext
+
+
+class Session:
+    def __init__(self, target: Mapping[str, Any]) -> None:
+        self.target = dict(target)
+
+    def act(self, action: str, **params: Any) -> dict[str, Any]:
+        return {"action": action, "ok": True}
+
+    def observe(self, query: str, **params: Any) -> dict[str, Any]:
+        return {"query": query, "result": None}
+
+    def capture(self, kind: str, **params: Any) -> dict[str, Any]:
+        return {"kind": kind}
+
+    async def events(self) -> AsyncIterator[dict[str, Any]]:
+        if False:
+            yield {}
+
+    def close(self) -> None:
+        pass
+
+
+class Driver:
+    platform = "{{slug}}"
+
+    def __init__(self, context: PluginContext) -> None:
+        self.context = context
+
+    def capabilities(self) -> dict[str, Any]:
+        return {"act": ["tap", "type"], "capture": ["screenshot"]}
+
+    def open(self, target: Mapping[str, Any], *, app: Mapping[str, Any] | None = None) -> Session:
+        return Session(target)
+
+
+class Platform:
+    name = "{{slug}}"
+    label = "{{name}}"
+
+    def __init__(self, context: PluginContext) -> None:
+        self.context = context
