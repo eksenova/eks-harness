@@ -64,16 +64,30 @@ mimetypes.add_type("image/svg+xml", ".svg")
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 
+def packaged_web_dist() -> Path | None:
+    try:
+        return Path(str(resources.files("eks_harness") / "web_dist"))
+    except (ModuleNotFoundError, TypeError):
+        return None
+
+
 def web_dist_dir() -> Path | None:
     override = os.environ.get(WEB_DIST_ENV)
     if override:
         path = Path(override)
         return path if (path / "index.html").is_file() else None
-    try:
-        path = Path(str(resources.files("eks_harness") / "web_dist"))
-    except (ModuleNotFoundError, TypeError):
-        return None
-    return path if (path / "index.html").is_file() else None
+    path = packaged_web_dist()
+    return path if path is not None and (path / "index.html").is_file() else None
+
+
+def web_dist_missing_message() -> str:
+    index = None if os.environ.get(WEB_DIST_ENV) else packaged_web_dist()
+    if index is not None and (index / "index.html").is_symlink():
+        return ("The installed web UI files are symlinks into a uv cache that has since been cleaned. Reinstall "
+                "with copied files: <code>uv tool install --force --reinstall --link-mode copy "
+                "&lt;eks-harness requirement&gt;</code>.")
+    return ("The eks-harness web UI is not built into this installation. Reinstall with Node.js and pnpm on "
+            "PATH: <code>uv tool install --reinstall &lt;eks-harness checkout&gt;</code>.")
 
 
 def build_context(config: Config | None = None, paths: Paths | None = None, *, fake_pools: bool | None = None,
@@ -142,8 +156,7 @@ def _serve_spa(request: Request, path: str) -> Response:
     if dist is None:
         return HTMLResponse(
             "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>eks-harness</title></head>"
-            "<body><p>The eks-harness web UI is not built into this installation. Reinstall with Node.js and "
-            "pnpm on PATH: <code>uv tool install --reinstall &lt;eks-harness checkout&gt;</code>.</p></body></html>",
+            f"<body><p>{web_dist_missing_message()}</p></body></html>",
             status_code=503, headers={"Cache-Control": "no-store"})
     root = dist.absolute()
     relative = spa_relative(path)

@@ -223,7 +223,8 @@ def requirement(repository: str, commit: str, extras: list[str]) -> str:
 
 
 def install_command(repository: str, commit: str, extras: list[str]) -> list[str]:
-    return [uv_binary(), "tool", "install", "--force", "--reinstall", "--quiet", requirement(repository, commit, extras)]
+    return [uv_binary(), "tool", "install", "--force", "--reinstall", "--link-mode", "copy", "--quiet",
+            requirement(repository, commit, extras)]
 
 
 def installed_commit_on_disk() -> str | None:

@@ -8,7 +8,7 @@ machines. Everything app- or company-specific is a plugin.
 ## Install
 
 ```bash
-uv tool install --python 3.13 "git+https://github.com/eksenova/eks-harness"   # needs Node.js 22+ and pnpm for the UI
+uv tool install --python 3.13 --link-mode copy "git+https://github.com/eksenova/eks-harness"   # needs Node.js 22+ and pnpm for the UI
 eks-harness setup                     # config, admin user and API key, service
 eks-harness doctor
 ```

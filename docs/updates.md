@@ -1,10 +1,14 @@
 # Updates
 
 eks-harness updates from its GitHub source. An update installs one exact commit with
-`uv tool install --force --reinstall "eks-harness[<installed extras>] @ git+<repository>@<commit>"`,
+`uv tool install --force --reinstall --link-mode copy "eks-harness[<installed extras>] @ git+<repository>@<commit>"`,
 so the web UI, workers and scene runtime are built on the machine (Node.js 22+ and pnpm on PATH, as for
 the first install), and then restarts the daemon gracefully (leases, devices, browsers and backends are
 kept) and the node agent when its service is installed.
+
+The install always copies its files (`--link-mode copy`), whatever `link-mode` the uv config sets: a
+symlinked install points into the uv cache, and `uv cache clean` or `uv cache prune` then leaves the
+package with dangling files (the web UI first among them).
 
 ## Command
 

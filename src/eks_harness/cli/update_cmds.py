@@ -88,7 +88,7 @@ def cmd_update(args: argparse.Namespace) -> int:
         return EXIT_OK
     if selfupdate.receipt_path() is None:
         fail("this eks-harness was not installed with uv tool install, so it cannot update itself; "
-             f"install it with: uv tool install \"{selfupdate.requirement(repository, status.latest, DEFAULT_EXTRAS)}\"",
+             f"install it with: uv tool install --link-mode copy \"{selfupdate.requirement(repository, status.latest, DEFAULT_EXTRAS)}\"",
              EXIT_ERROR)
     extras = args.extras.split(",") if args.extras is not None else (status.installed.extras or DEFAULT_EXTRAS)
     extras = [e.strip() for e in extras if e.strip()]

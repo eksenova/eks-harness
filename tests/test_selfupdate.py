@@ -209,3 +209,9 @@ def test_cli_check_and_update(monkeypatch, capsys, paths):
     assert main(["update", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["updated"] is False
     assert selfupdate.read_state(paths)["lastUpdate"]["by"] == "cli"
+
+
+def test_install_command_copies_files_whatever_the_uv_link_mode(monkeypatch):
+    monkeypatch.setattr(selfupdate, "uv_binary", lambda: "uv")
+    command = selfupdate.install_command("https://x", "a" * 40, ["video"])
+    assert command[command.index("--link-mode") + 1] == "copy"
