@@ -289,3 +289,27 @@ assert img.source == "MOVIE"
     result = materialize_media(project, _ctx(tmp_path, project, MarkerSet(streams={"beat": [0.25]})))
     assert Path(result.tracks[0].segments[0].media.path).exists()
     assert Path(f"{clip.resolve()}.framemd5").exists()
+
+
+def test_nested_media_is_synced_even_under_an_excluded_folder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    clip = tmp_path / ".cache" / "video" / "take.mov"
+    clip.parent.mkdir(parents=True)
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc=size=64x64:rate={FPS}:duration=1",
+                    "-pix_fmt", "yuv420p", str(clip)], check=True)
+    (tmp_path / "scene.py").write_text(BEAT_SCRIPT)
+    jobs = []
+
+    def capture(job, config):
+        jobs.append(job)
+        raise LookupError("captured")
+
+    monkeypatch.setattr(runner, "find_blender", lambda explicit=None: "blender")
+    monkeypatch.setattr(runner.farm, "run", capture)
+    media = BlenderScene(script="scene.py", engine="BLENDER_WORKBENCH", farm=False, media={"screen": str(clip)},
+                         sync_exclude=["/.cache/video"])
+    project = _project(media, duration=0.5)
+    register_media_renderer(BlenderRenderer())
+    with pytest.raises(LookupError):
+        materialize_media(project, _ctx(tmp_path, project, MarkerSet(streams={"beat": [0.25]})))
+    synced = {p.resolve() for p in jobs[0].sync}
+    assert clip.resolve() in synced and Path(f"{clip.resolve()}.framemd5") in synced

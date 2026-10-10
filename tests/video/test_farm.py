@@ -86,3 +86,18 @@ def test_local_workers_pull_every_item(tmp_path: Path) -> None:
     assert sorted(int(x) for x in seen) == list(range(1, 21))
     assert len(list(out.glob("f_*.png"))) == 20
     assert sum(s.done for s in stats) == 20 and all(s.device == "test-worker" for s in stats)
+
+
+def test_idle_workers_steal_items_pinned_to_a_busy_platform() -> None:
+    from collections import deque
+
+    queues = {"darwin": deque([1, 2, 3, 4]), None: deque()}
+    assert farm.take_item(queues, "darwin", {"darwin", "linux"}) == 1
+    assert farm.take_item(queues, "linux", {"darwin", "linux"}) == 4
+    queues["linux"] = deque([9])
+    assert farm.take_item(queues, "linux", {"darwin", "linux"}) == 9
+    queues[None].append(7)
+    assert farm.take_item(queues, "linux", {"darwin", "linux"}) == 7
+    assert farm.take_item(queues, "darwin", {"darwin"}) == 2
+    assert farm.take_item({"gone": deque([5]), None: deque()}, "darwin", {"darwin"}) == 5
+    assert farm.take_item({None: deque()}, "darwin", {"darwin"}) is None

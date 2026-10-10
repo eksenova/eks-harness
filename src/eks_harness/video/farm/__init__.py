@@ -158,6 +158,7 @@ class WorkerContext:
     env: dict[str, str]
     index: int
     job: FarmJob
+    slot: Slot | None = None
 
     @property
     def remote(self) -> bool:
@@ -259,6 +260,21 @@ def _fetch(host: Host, job: FarmJob, *, check: bool) -> None:
                    check=check, stdout=subprocess.DEVNULL, stderr=None if check else subprocess.DEVNULL)
 
 
+def take_item(queues: dict[str | None, deque], tag: str | None, alive: set[str | None]) -> Any:
+    """The next item for a worker on platform ``tag``: its own platform's queue first, then unpinned items, then
+    items pinned to a platform nobody is serving, and finally the back of the longest queue another live platform
+    still has, so an idle worker never sits out while one platform holds all the work."""
+
+    orphaned = [k for k in queues if k not in (tag, None) and k not in alive]
+    for key in (tag, None, *sorted(orphaned, key=lambda k: -len(queues[k]))):
+        if queues.get(key):
+            return queues[key].popleft()
+    busy = [k for k in queues if k not in (tag, None) and queues[k]]
+    if busy:
+        return queues[max(busy, key=lambda k: len(queues[k]))].pop()
+    return None
+
+
 def run(job: FarmJob, farm: FarmConfig) -> list[WorkerStats]:
     """Run ``job`` on every worker of ``farm``; returns per-worker stats. Raises when items stay unfinished."""
 
@@ -283,7 +299,7 @@ def run(job: FarmJob, farm: FarmConfig) -> list[WorkerStats]:
         for i, slot in enumerate(host.slots):
             env = {**host.env, **slot.env}
             ctx = WorkerContext(name=f"{host.name}#{i}" if len(host.slots) > 1 else host.name, host=host, env=env,
-                                index=len(workers), job=job)
+                                index=len(workers), job=job, slot=slot)
             argv = job.command(ctx)
             if host.node is not None:
                 workers.append(_Worker(ctx=ctx, argv=argv))
@@ -302,11 +318,7 @@ def run(job: FarmJob, farm: FarmConfig) -> list[WorkerStats]:
     stop = threading.Event()
 
     def take(tag: str) -> int | None:
-        orphaned = [k for k in queues if k not in (tag, None) and not any(w.alive and w.ctx.tag == k for w in workers)]
-        for key in (tag, None, *sorted(orphaned, key=lambda k: -len(queues[k]))):
-            if queues.get(key):
-                return queues[key].popleft()
-        return None
+        return take_item(queues, tag, {w.ctx.tag for w in workers if w.alive})
 
     def feed(worker: _Worker) -> None:
         assert worker.proc is not None and worker.proc.stdin is not None

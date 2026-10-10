@@ -19,7 +19,7 @@ for line in sys.stdin:
     line = line.strip()
     if not line or line == "done":
         break
-    (out / f"f_{int(line):06d}.png").write_text(f"{scene}:{line}:{os.environ.get('SLOT_MARK', '')}")
+    (out / f"f_{int(line):06d}.png").write_text(f"{scene}:{line}:{os.environ.get('SLOT_MARK', '')}:{os.environ.get('EKS_HARNESS_SLOT')}")
     print(f"EHX_FRAME {line} fp linux", flush=True)
 """
 
@@ -34,8 +34,10 @@ def test_farm_runs_batches_on_nodes(live_hub, tmp_path: Path, monkeypatch) -> No
     (project / "worker.py").write_text(WORKER, encoding="utf-8")
     with httpx.Client(base_url=base, timeout=60) as client:
         token = client.post("/api/nodes", json={"id": "gpu-box"}).json()["token"]
-        agent = make_agent(tmp_path, base, token, slots=[{"id": "gpu0", "workers": 2, "tags": ["gpu", "cuda"],
-                                                           "env": {"SLOT_MARK": "g0"}}])
+        agent = make_agent(tmp_path, base, token, slots=[{"id": "gpu0", "workers": 1, "tags": ["gpu", "cuda"],
+                                                           "env": {"SLOT_MARK": "g0"}},
+                                                          {"id": "gpu1", "workers": 1, "tags": ["gpu", "cuda"],
+                                                           "env": {"SLOT_MARK": "g1"}}])
         agent.handlers.update({"farm.batch": __import__("eks_harness.nodes.jobs", fromlist=["BUILTIN"]).BUILTIN["farm.batch"]})
         with AgentThread(agent):
             from eks_harness.cli.client import HarnessClient
@@ -56,7 +58,10 @@ def test_farm_runs_batches_on_nodes(live_hub, tmp_path: Path, monkeypatch) -> No
                                requires=["python"], batch=3)
             stats = farm.run(job, farm.FarmConfig(hosts=hosts))
             assert sorted(p.name for p in out_dir.glob("f_*.png")) == [f"f_{i:06d}.png" for i in range(1, 11)]
-            assert (out_dir / "f_000004.png").read_text() == "hello:4:g0"
+            frames = [p.read_text().split(":") for p in out_dir.glob("f_*.png")]
+            assert all(scene == "hello" and mark == "g" + slot[-1] for scene, _, mark, slot in frames)
+            requested = {j["requirements"].get("slot") for j in httpx.get(base + "/api/jobs").json()["items"]}
+            assert requested == {"gpu0", "gpu1"}
             assert len(seen) == 10 and sum(s.done for s in stats) == 10
             hub.close()
     names = []
@@ -66,3 +71,37 @@ def test_farm_runs_batches_on_nodes(live_hub, tmp_path: Path, monkeypatch) -> No
     with tarfile.open(archive) as handle:
         names = handle.getnames()
     assert any(n.endswith("scene.txt") for n in names) and not any("big.bin" in n for n in names)
+
+
+def test_frames_reported_by_two_batches_download_once(tmp_path: Path) -> None:
+    import threading
+    from types import SimpleNamespace
+
+    from eks_harness.video.farm.nodes import NodeFarmSession
+
+    downloads: list[str] = []
+    gate = threading.Barrier(2)
+
+    class Client:
+        def post(self, path, json=None):
+            gate.wait(timeout=5)
+            outputs = [{"name": "f_000001.png", "hash": "h1"}, {"name": "f_000002.png", "hash": "h2"}]
+            return {"id": "j", "state": "done", "result": {"outputs": outputs, "data": {"lines": []}}}
+
+        def download(self, path, dest):
+            downloads.append(path)
+            Path(dest).write_text(path)
+
+    job = farm.FarmJob(name="test", items=[1, 2], command=lambda w: [], out_dir=tmp_path / "frames")
+    session = NodeFarmSession(job, client=Client())
+    session.sync_hash = "s"
+    host = farm.Host(name="box", node="box", slots=[farm.Slot(id="gpu0"), farm.Slot(id="gpu1")])
+    contexts = [farm.WorkerContext(name=f"box#{i}", host=host, env={}, index=i, job=job, slot=host.slots[i])
+                for i in range(2)]
+    threads = [threading.Thread(target=session.run_batch, args=(c, [], [1, 2])) for c in contexts]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sorted(downloads) == ["/api/blobs/h1", "/api/blobs/h2"]
+    assert sorted(p.name for p in (tmp_path / "frames").iterdir()) == ["f_000001.png", "f_000002.png"]

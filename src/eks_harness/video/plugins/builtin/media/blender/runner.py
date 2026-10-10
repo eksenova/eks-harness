@@ -252,8 +252,7 @@ def render(request: MediaRenderRequest, ctx: RenderContext) -> Path:
     outside = [Path(p) for p in (blend, config["script"], *(_absolute(i, base) for i in media.inputs))
                if p and base not in Path(p).resolve().parents]
     for path in config["media"].values():
-        if base not in Path(path).resolve().parents:
-            outside += [Path(path)] + ([Path(path + ".framemd5")] if Path(path + ".framemd5").exists() else [])
+        outside += [Path(path)] + ([Path(path + ".framemd5")] if Path(path + ".framemd5").exists() else [])
 
     def command(worker: farm.WorkerContext) -> list[str]:
         payload = json.dumps(worker.remap(config))

@@ -7,6 +7,7 @@ import tarfile
 import tempfile
 import threading
 import time
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -108,6 +109,8 @@ class NodeFarmSession:
         self.job = job
         self.client = client or _client()
         self.lock = threading.Lock()
+        self.fetch_lock = threading.Lock()
+        self.fetched: dict[str, str] = {}
         self.sync_hash: str | None = None
 
     def _upload_sync(self) -> str:
@@ -126,7 +129,7 @@ class NodeFarmSession:
 
     def run_batch(self, ctx: WorkerContext, argv: list[str], items: list[int]) -> list[str]:
         digest = self._upload_sync()
-        slot_id = next((s.id for s in ctx.host.slots if s.id), "")
+        slot_id = ctx.slot.id if ctx.slot is not None and ctx.slot.id else ""
         payload = {"argv": argv, "env": ctx.env, "items": items, "outDir": ctx.path(self.job.out_dir),
                    "outPattern": self.job.out_pattern, "name": self.job.name, "syncHash": digest}
         requirements: dict[str, Any] = {"node": ctx.host.node}
@@ -151,7 +154,11 @@ class NodeFarmSession:
             target = (self.job.out_dir / output["name"]).resolve()
             if not target.is_relative_to(self.job.out_dir.resolve()):
                 continue
-            tmp = target.with_suffix(target.suffix + ".part")
+            with self.fetch_lock:
+                if self.fetched.get(output["name"]) == output["hash"]:
+                    continue
+                self.fetched[output["name"]] = output["hash"]
+            tmp = target.with_name(f"{target.name}.{uuid.uuid4().hex}")
             self.client.download(f"/api/blobs/{output['hash']}", tmp)
             tmp.replace(target)
         data = result.get("data") or {}
