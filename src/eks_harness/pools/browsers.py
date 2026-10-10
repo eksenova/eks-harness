@@ -21,6 +21,7 @@ from eks_harness.pools.backends import (
     pid_started,
     process_table,
     repo_cache_root,
+    run,
 )
 from eks_harness.pools.base import BrowserPool as BrowserPoolBase
 from eks_harness.pools.base import LiveSource, PoolError, PoolHost, browser_resource, iso_now, parse_browser_resource
@@ -51,6 +52,10 @@ KNOWN_BROWSERS = {
 CONTROL_SERVER_ROLE = "web-ctl"
 WEB_DRIVER_MARKER = "eks-harness-web-driver"
 LOCK_FILES = ("SingletonLock", "SingletonSocket", "SingletonCookie")
+CODE_SIGN_CLONE_GRACE_SECONDS = 600
+CODE_SIGN_CLONE_LAUNCH_WINDOW_SECONDS = 10
+APP_EXECUTABLE = re.compile(r"/(?:Google Chrome(?: Beta| Dev| Canary| for Testing)?|Chromium|Microsoft Edge"
+                            r"(?: Beta| Dev| Canary)?|Brave Browser)\.app(?:\.bundle)?/Contents/MacOS/")
 
 
 def user_data_pattern(root: Path) -> re.Pattern[str]:
@@ -92,6 +97,67 @@ def resolve_browser(command: str) -> str:
         elif Path(candidate).exists():
             return candidate
     raise PoolError(f"browser '{command}' is not installed on this machine")
+
+
+def code_sign_clone_roots() -> list[Path]:
+    if platform.system() != "Darwin":
+        return []
+    temp = run(["getconf", "DARWIN_USER_TEMP_DIR"])
+    if not temp:
+        return []
+    return sorted(Path(temp).parent.joinpath("X").glob("*.code_sign_clone"))
+
+
+def clone_birth(path: Path) -> float:
+    info = path.stat()
+    return getattr(info, "st_birthtime", info.st_mtime)
+
+
+def browser_start_times(table: dict[int, tuple[int, str]]) -> tuple[list[float], set[str]]:
+    starts: list[float] = []
+    referenced: set[str] = set()
+    for pid, (_, command) in table.items():
+        if not APP_EXECUTABLE.search(command):
+            continue
+        for match in re.finditer(r"code_sign_clone\.[A-Za-z0-9]+", command):
+            referenced.add(match.group(0))
+        if "--type=" in command or "MacAppCodeSignClone" in command:
+            continue
+        lstart = " ".join(pid_started(pid).split())
+        try:
+            starts.append(time.mktime(time.strptime(lstart, "%a %b %d %H:%M:%S %Y")))
+        except ValueError:
+            continue
+    return starts, referenced
+
+
+def orphaned_code_sign_clones(roots: list[Path], starts: list[float], referenced: set[str], now: float,
+                              grace: float = CODE_SIGN_CLONE_GRACE_SECONDS,
+                              born: Callable[[Path], float] = clone_birth) -> list[Path]:
+    orphans = []
+    for root in roots:
+        for clone in sorted(root.glob("code_sign_clone.*")):
+            if clone.name in referenced:
+                continue
+            try:
+                birth = born(clone)
+            except OSError:
+                continue
+            if now - birth < grace:
+                continue
+            if any(start - 2 <= birth <= start + CODE_SIGN_CLONE_LAUNCH_WINDOW_SECONDS for start in starts):
+                continue
+            orphans.append(clone)
+    return orphans
+
+
+def remove_tree(path: Path) -> None:
+    def unlock(function: Callable, target: str, _: BaseException) -> None:
+        os.chmod(Path(target).parent, 0o700)
+        os.chmod(target, 0o700)
+        function(target)
+
+    shutil.rmtree(path, onexc=unlock)
 
 
 class BrowserPool(BrowserPoolBase):
@@ -335,7 +401,24 @@ class BrowserPool(BrowserPoolBase):
                 kill_group(pid, None, grace=5)
                 report["strayBrowsers"].append(pid)
                 self.host.log(f"legacy harness browser stopped: pid {pid}")
+        report["codeSignClones"] = self.sweep_code_sign_clones(table)
         return report
+
+    def sweep_code_sign_clones(self, table: dict[int, tuple[int, str]]) -> list[str]:
+        roots = code_sign_clone_roots()
+        if not roots:
+            return []
+        starts, referenced = browser_start_times(table)
+        removed = []
+        for clone in orphaned_code_sign_clones(roots, starts, referenced, time.time()):
+            try:
+                remove_tree(clone)
+            except OSError as error:
+                self.host.log(f"orphaned browser code-sign clone not removed: {clone} ({error})")
+                continue
+            removed.append(str(clone))
+            self.host.log(f"orphaned browser code-sign clone removed: {clone}")
+        return removed
 
     def harness_trees(self) -> list[str]:
         trees: set[str] = set()
