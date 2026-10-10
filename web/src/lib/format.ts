@@ -156,6 +156,7 @@ export function formatWaiting(seconds: number): string {
 export const KIND_LABELS: Record<string, string> = {
   screenshot: "Screenshot",
   video: "Video",
+  audio: "Audio",
   dom: "DOM",
   mhtml: "MHTML",
   a11y: "Accessibility tree",

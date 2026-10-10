@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from eks_harness.drivers.workers import encoder_command
 
@@ -107,6 +109,24 @@ def pace_from_config(config: Any) -> dict[str, int]:
         except (KeyError, TypeError, ValueError):
             continue
     return out
+
+
+log = logging.getLogger("eks_harness.drivers.profile")
+
+
+def project_hide_selectors(client: Any, project: str | None) -> list[str]:
+    from eks_harness.cli.client import ApiClientError
+
+    if client is None or not project or "/" not in project:
+        return []
+    owner, name = project.split("/", 1)
+    try:
+        data = client.request("GET", f"/api/projects/{quote(owner, safe='')}/{quote(name, safe='')}")
+    except ApiClientError as error:
+        log.warning("could not read the hidden selectors of %s: %s", project, error)
+        return []
+    settings = (data or {}).get("settings") or {}
+    return [str(item) for item in settings.get("capture.hideSelectors") or []]
 
 
 def node_modules_dir(paths: Any) -> Path:

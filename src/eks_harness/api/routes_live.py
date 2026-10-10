@@ -23,6 +23,8 @@ SERVICE = "live"
 BOUNDARY = "frame"
 MEDIA_TYPE = f"multipart/x-mixed-replace; boundary={BOUNDARY}"
 FIRST_FRAME_WAIT = 12.0
+FIRST_FRAME_LIMIT = 90.0
+FIRST_FRAME_POLL = 2.0
 KEEPALIVE_SECONDS = 5.0
 RECHECK_SECONDS = 5.0
 STREAM_HEADERS = {
@@ -95,13 +97,19 @@ async def _stream(request: Request, ctx: AppContext, principal: Principal, targe
     viewer = hub.attach(target.resource, factory, loop, label=principal.username)
     try:
         first = await viewer.next_frame(FIRST_FRAME_WAIT)
+        deadline = time.monotonic() + FIRST_FRAME_LIMIT - FIRST_FRAME_WAIT
+        while first is None and not viewer.closed and time.monotonic() < deadline:
+            if await request.is_disconnected():
+                raise ApiError(499, "client_closed", "The viewer went away before the first frame.")
+            first = await viewer.next_frame(FIRST_FRAME_POLL)
     except BaseException:
         hub.detach(viewer)
         raise
-    if first is None and viewer.closed:
-        error = viewer.error or "the stream ended"
+    if first is None:
+        error = viewer.error or ("the stream ended" if viewer.closed
+                                 else f"no frame arrived within {FIRST_FRAME_LIMIT:.0f} s")
         hub.detach(viewer)
-        raise ApiError(502, "live_failed", f"The live view of {target.label} failed: {error}")
+        raise ApiError(502 if viewer.closed else 504, "live_failed", f"The live view of {target.label} failed: {error}")
     interval = 1.0 / max(1, int(ctx.config["live.maxFps"]))
     recheck: Callable[[], bool] = lambda: _allowed(ctx.db, principal, target)
     return StreamingResponse(_body(request, hub, viewer, first, interval, recheck, max_frames),

@@ -40,6 +40,7 @@ export interface NodeOut {
   state: "online" | "offline" | "disabled";
   online: boolean;
   disabled: boolean;
+  host?: boolean;
   createdAt: number;
   lastSeenAt: number | null;
   version?: string;

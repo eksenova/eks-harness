@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from eks_harness import project_settings
 from eks_harness.db.common import UNSET, assignments, now
 from eks_harness.ids import parse_project_id
 
@@ -18,6 +19,7 @@ class Project:
     retention_days: int | None
     created_at: float
     updated_at: float
+    settings: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -35,7 +37,8 @@ def _row(row: sqlite3.Row | None) -> Project | None:
         return None
     return Project(id=row["id"], owner=row["owner"], name=row["name"], title=row["title"],
                    description=row["description"], implicit=bool(row["implicit"]),
-                   retention_days=row["retention_days"], created_at=row["created_at"], updated_at=row["updated_at"])
+                   retention_days=row["retention_days"], created_at=row["created_at"], updated_at=row["updated_at"],
+                   settings=project_settings.parse(row["settings"] if "settings" in row.keys() else None))
 
 
 def get(conn: sqlite3.Connection, project_id: str) -> Project | None:
@@ -71,8 +74,9 @@ def ensure(conn: sqlite3.Connection, project_id: str) -> tuple[Project, bool]:
 
 
 def update(conn: sqlite3.Connection, project_id: str, *, title=UNSET, description=UNSET,
-           retention_days=UNSET) -> Project | None:
-    sql, params = assignments({"title": title, "description": description, "retention_days": retention_days})
+           retention_days=UNSET, settings=UNSET) -> Project | None:
+    sql, params = assignments({"title": title, "description": description, "retention_days": retention_days,
+                               "settings": settings if settings is UNSET else project_settings.dump(settings)})
     if sql:
         conn.execute(f"UPDATE projects SET {sql}, implicit = 0, updated_at = ? WHERE id = ?",
                      (*params, now(), project_id))

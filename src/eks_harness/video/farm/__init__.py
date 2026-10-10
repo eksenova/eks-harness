@@ -139,7 +139,7 @@ def load(workspace: Path | None = None, *, local_workers: int = 1,
     if nodes_section.get("enabled"):
         from eks_harness.video.farm.nodes import node_hosts
 
-        hosts.extend(node_hosts(nodes_section))
+        hosts.extend(node_hosts(nodes_section, skip_this_machine=bool(local.get("enabled", True))))
     if not hosts:
         raise ValueError(f"{path}: the farm has no local, remote or node workers")
     return FarmConfig(hosts=hosts, source=path)

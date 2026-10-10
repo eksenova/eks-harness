@@ -717,6 +717,7 @@
 
 .share-viewer[data-stage="image"],
 .share-viewer[data-stage="video"],
+.share-viewer[data-stage="audio"],
 .share-viewer[data-stage="frame"] {
   height: calc(100vh - 150px);
   min-height: 420px;
@@ -725,6 +726,7 @@
 @media (max-width: 699px) {
   .share-viewer[data-stage="image"],
   .share-viewer[data-stage="video"],
+  .share-viewer[data-stage="audio"],
   .share-viewer[data-stage="frame"] {
     height: 70vh;
     min-height: 320px;

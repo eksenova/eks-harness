@@ -26,7 +26,15 @@ FFMPEG_DEMUXERS = {
     "video/mp4": "mov",
     "video/quicktime": "mov",
     "video/webm": "matroska",
+    "audio/mpeg": "mp3",
+    "audio/aac": "aac",
+    "audio/wav": "wav",
+    "audio/ogg": "ogg",
+    "audio/flac": "flac",
+    "audio/mp4": "mov",
 }
+WAVEFORM_COLOR = "0xd4a017"
+WAVEFORM_BACKGROUND = "0x16171b"
 
 HTMLISH_KINDS = frozenset({"dom", "mhtml", "site"})
 TEXT_KINDS = frozenset({"a11y", "console", "log", "har"})
@@ -55,6 +63,14 @@ EXTENSION_MIMES = {
     ".mp4": "video/mp4",
     ".m4v": "video/mp4",
     ".mov": "video/quicktime",
+    ".mp3": "audio/mpeg",
+    ".aac": "audio/aac",
+    ".wav": "audio/wav",
+    ".ogg": "audio/ogg",
+    ".oga": "audio/ogg",
+    ".opus": "audio/ogg",
+    ".flac": "audio/flac",
+    ".m4a": "audio/mp4",
     ".woff2": "font/woff2",
     ".woff": "font/woff",
     ".js": "text/javascript",
@@ -99,9 +115,23 @@ def sniff_mime(head: bytes) -> str | None:
             return "image/avif"
         if brand in (b"heic", b"heix", b"mif1"):
             return "image/heic"
+        if brand in (b"M4A ", b"M4B ", b"M4P "):
+            return "audio/mp4"
         return "video/mp4"
     if head.startswith(b"\x1a\x45\xdf\xa3"):
         return "video/webm"
+    if head[:4] == b"RIFF" and head[8:12] == b"WAVE":
+        return "audio/wav"
+    if head.startswith(b"ID3"):
+        return "audio/mpeg"
+    if head.startswith(b"OggS"):
+        return "audio/ogg"
+    if head.startswith(b"fLaC"):
+        return "audio/flac"
+    if len(head) >= 2 and head[0] == 0xFF and head[1] & 0xF6 == 0xF0:
+        return "audio/aac"
+    if len(head) >= 2 and head[0] == 0xFF and head[1] & 0xE0 == 0xE0 and head[1] & 0x06:
+        return "audio/mpeg"
     if head.startswith(b"%PDF-"):
         return "application/pdf"
     if head.startswith(b"PK\x03\x04") or head.startswith(b"PK\x05\x06"):
@@ -141,6 +171,8 @@ def infer_kind(mime: str, filename: str) -> str:
         return "screenshot"
     if mime.startswith("video/"):
         return "video"
+    if mime.startswith("audio/"):
+        return "audio"
     if mime in ("text/html", "application/xhtml+xml"):
         return "dom"
     if "a11y" in lowered or "accessibility" in lowered:
@@ -323,6 +355,37 @@ def demuxer_is_video(demuxer: str) -> bool:
     return demuxer in ("mov", "matroska")
 
 
+def probe_audio(path: Path) -> int | None:
+    demuxer = demuxer_for(path)
+    if demuxer is None:
+        return None
+    binary = ffprobe_binary()
+    if binary is None:
+        log.warning("ffprobe is not on PATH; audio duration of %s is unknown", path.name)
+        return None
+    try:
+        result = subprocess.run(
+            [binary, "-v", "error", "-protocol_whitelist", "file", "-f", demuxer, "-select_streams", "a:0",
+             "-show_entries", "stream=duration:format=duration", "-of", "json", f"file:{path}"],
+            capture_output=True, text=True, timeout=FFPROBE_TIMEOUT, check=False)
+    except (OSError, subprocess.TimeoutExpired) as problem:
+        log.warning("ffprobe failed on %s: %s", path.name, problem)
+        return None
+    if result.returncode != 0:
+        log.warning("ffprobe failed on %s: %s", path.name, result.stderr.strip()[:300])
+        return None
+    try:
+        data = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        return None
+    stream = (data.get("streams") or [{}])[0]
+    duration = stream.get("duration") or (data.get("format") or {}).get("duration")
+    try:
+        return int(round(float(duration) * 1000)) if duration not in (None, "N/A") else None
+    except (TypeError, ValueError):
+        return None
+
+
 def probe(path: Path, mime: str) -> Probe:
     sniffed = sniff_file(path)
     if sniffed != mime:
@@ -335,14 +398,20 @@ def probe(path: Path, mime: str) -> Probe:
     if mime.startswith("video/"):
         width, height, duration_ms = probe_video(path)
         return Probe(mime, width, height, duration_ms)
+    if mime.startswith("audio/"):
+        return Probe(mime, duration_ms=probe_audio(path))
     return Probe(mime)
 
 
 def make_thumbnail(source: Path, dest: Path, mime: str, width: int = THUMB_WIDTH) -> bool:
+    if mime.startswith("audio/"):
+        return _waveform(source, dest, mime, width, width * 9 // 16)
     return _extract_frame(source, dest, mime, f"scale='max(2,trunc(min({width},iw)/2)*2)':-2:flags=bicubic")
 
 
 def make_poster(source: Path, dest: Path, mime: str, box: int = POSTER_BOX) -> bool:
+    if mime.startswith("audio/"):
+        return _waveform(source, dest, mime, box, box * 9 // 16)
     return _extract_frame(source, dest, mime,
                           f"scale='min({box},iw)':'min({box},ih)':force_original_aspect_ratio=decrease:flags=bicubic,"
                           "scale='max(2,trunc(iw/2)*2)':'max(2,trunc(ih/2)*2)'")
@@ -353,6 +422,41 @@ def poster_size(width: int | None, height: int | None, box: int = POSTER_BOX) ->
         return None
     scale = min(1.0, box / width, box / height)
     return max(2, int(width * scale) // 2 * 2), max(2, int(height * scale) // 2 * 2)
+
+
+def _waveform(source: Path, dest: Path, mime: str, width: int, height: int) -> bool:
+    sniffed = sniff_file(source)
+    demuxer = FFMPEG_DEMUXERS.get(sniffed or "")
+    if demuxer is None or sniffed != mime:
+        return False
+    binary = ffmpeg_binary()
+    if binary is None:
+        log.warning("ffmpeg is not on PATH; no waveform for %s", source.name)
+        return False
+    width -= width % 2
+    height -= height % 2
+    wave_height = height * 3 // 5 // 2 * 2
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".tmp.jpg")
+    graph = (f"[0:a:0]aformat=channel_layouts=mono,"
+             f"showwavespic=s={width}x{wave_height}:split_channels=0:colors={WAVEFORM_COLOR}:scale=sqrt:draw=full[wave];"
+             f"color=c={WAVEFORM_BACKGROUND}:s={width}x{height}[bg];"
+             f"[bg][wave]overlay=0:(H-h)/2:format=auto,format=yuvj420p[out]")
+    command = [binary, "-nostdin", "-v", "error", "-y", "-protocol_whitelist", "file",
+               "-f", demuxer, "-i", f"file:{source}", "-filter_complex", graph, "-map", "[out]",
+               "-frames:v", "1", "-q:v", "4", "-f", "image2", "-c:v", "mjpeg", str(tmp)]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=FFMPEG_TIMEOUT, check=False)
+    except (OSError, subprocess.TimeoutExpired) as problem:
+        log.warning("waveform of %s failed: %s", source.name, problem)
+        tmp.unlink(missing_ok=True)
+        return False
+    if result.returncode != 0 or not tmp.is_file() or tmp.stat().st_size == 0:
+        log.warning("waveform of %s failed: %s", source.name, result.stderr.strip()[:300])
+        tmp.unlink(missing_ok=True)
+        return False
+    tmp.replace(dest)
+    return True
 
 
 def _extract_frame(source: Path, dest: Path, mime: str, scale: str) -> bool:

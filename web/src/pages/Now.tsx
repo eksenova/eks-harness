@@ -51,7 +51,7 @@ export function NowPage() {
         </div>
       </header>
       <div className="now-grid">
-        <Section title="Recent sessions" count={recent.length < total ? `${recent.length} of ${total}` : total} flush actions={<Link to="/evidence" className="link">Evidence</Link>}>
+        <Section title="Recent sessions" count={recent.length < total ? `${recent.length} of ${total}` : total} flush actions={<Link to="/sessions" className="link">All sessions</Link>}>
           {state ?? (recent.length ? (
             <ol className="contact-rows">
               {recent.map((session) => (

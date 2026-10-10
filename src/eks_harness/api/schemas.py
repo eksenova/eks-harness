@@ -23,7 +23,7 @@ AcquireStatus = Literal["granted", "preparing", "queued", "failed"]
 BackendStatus = Literal["stopped", "preparing", "starting", "running", "stopping", "failed"]
 SettingSource = Literal["default", "file", "env"]
 TimelineEntryType = Literal["event", "note", "artifact"]
-ARTIFACT_KINDS = ("screenshot", "video", "dom", "mhtml", "a11y", "har", "console", "log", "site", "file")
+ARTIFACT_KINDS = ("screenshot", "video", "audio", "dom", "mhtml", "a11y", "har", "console", "log", "site", "file")
 SHARE_EXPIRY_PRESETS = ("1h", "1d", "7d", "30d")
 
 
@@ -134,6 +134,7 @@ class EventList(ApiModel):
 
 class SettingOut(ApiModel):
     key: str
+    label: str = ""
     value: Any = None
     default: Any = None
     description: str
@@ -346,7 +347,24 @@ class ProjectOut(ApiModel):
     project_file_count: int = 0
     active_leases: int = 0
     access: AccessLevel | None = None
+    settings: dict[str, Any] = Field(default_factory=dict)
     url: str
+
+
+class ProjectSettingOut(ApiModel):
+    key: str
+    label: str
+    description: str
+    type: str
+    group: str
+    group_title: str
+    default: Any = None
+    value: Any = None
+    is_set: bool = False
+
+
+class ProjectSettingsOut(ApiModel):
+    items: list[ProjectSettingOut]
 
 
 class ProjectList(ApiModel):
@@ -373,6 +391,7 @@ class ProjectUpdate(ApiModel):
     title: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=10000)
     retention_days: int | None = Field(default=None, ge=0, le=36500)
+    settings: dict[str, Any] | None = None
 
 
 class DeleteSummary(ApiModel):

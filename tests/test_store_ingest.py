@@ -85,6 +85,50 @@ def test_video_duration_and_thumbnail(client):
     assert body["thumbnailUrl"]
 
 
+def wav_bytes(seconds: float = 1.0, rate: int = 8000) -> bytes:
+    import math
+    import wave
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        frames = bytearray()
+        for index in range(int(seconds * rate)):
+            value = int(12000 * math.sin(2 * math.pi * 440 * index / rate))
+            frames += value.to_bytes(2, "little", signed=True)
+        handle.writeframes(bytes(frames))
+    return buffer.getvalue()
+
+
+@needs_ffprobe
+@needs_ffmpeg
+def test_audio_duration_and_waveform_thumbnail(client):
+    body = upload(client, wav_bytes(), "voiceover.wav", "application/octet-stream", project="acme/mobile",
+                  session="main").json()
+    assert body["kind"] == "audio"
+    assert body["mime"] == "audio/wav"
+    assert 900 <= body["durationMs"] <= 1100
+    thumb = client.get(local_path(body["thumbnailUrl"]))
+    assert thumb.status_code == 200
+    assert thumb.content.startswith(b"\xff\xd8")
+
+
+@pytest.mark.parametrize(("head", "expected"), [
+    (b"ID3\x04\x00\x00\x00\x00\x00\x00", "audio/mpeg"),
+    (b"\xff\xfb\x90\x64\x00", "audio/mpeg"),
+    (b"\xff\xf1\x50\x80\x00", "audio/aac"),
+    (b"OggS\x00\x02", "audio/ogg"),
+    (b"fLaC\x00\x00\x00\x22", "audio/flac"),
+    (b"RIFF\x24\x00\x00\x00WAVEfmt ", "audio/wav"),
+    (b"\x00\x00\x00\x20ftypM4A \x00\x00\x00\x00", "audio/mp4"),
+    (b"\xff\xd8\xff\xe0", "image/jpeg"),
+])
+def test_audio_is_sniffed(head, expected):
+    from eks_harness.store import media
+    assert media.sniff_mime(head) == expected
+
+
 @pytest.mark.parametrize(("filename", "mime", "kind", "expected_kind", "expected_mime"), [
     ("network.har", "application/octet-stream", None, "har", "application/json"),
     ("page.mhtml", "application/octet-stream", None, "mhtml", "multipart/related"),
@@ -92,6 +136,7 @@ def test_video_duration_and_thumbnail(client):
     ("device.log", "text/plain", None, "log", "text/plain"),
     ("accessibility.txt", "text/plain", None, "a11y", "text/plain"),
     ("blob.bin", "application/octet-stream", None, "file", "application/octet-stream"),
+    ("song.mp3", "audio/mpeg", None, "audio", "audio/mpeg"),
     ("output.txt", "text/plain", "console", "console", "text/plain"),
     ("notes.txt", "text/plain", "custom-kind", "custom-kind", "text/plain"),
 ])

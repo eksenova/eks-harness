@@ -137,6 +137,7 @@ class NodeHub:
             item = node.public()
             online = connection is not None and time.time() - connection.last_seen < offline_after
             item["online"] = online
+            item["host"] = bool(node.config.get("host"))
             item["state"] = "disabled" if node.disabled else "online" if online else "offline"
             if connection is not None:
                 item["version"] = connection.version

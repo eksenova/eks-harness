@@ -1,4 +1,5 @@
 import { ButtonLink } from "../components/Button";
+import { AudioViewer } from "./AudioViewer";
 import { DefList } from "../components/Misc";
 import { formatCount, formatSize } from "../lib/format";
 import { localPath } from "../lib/url";
@@ -35,6 +36,8 @@ export function Viewer(props: ViewerProps) {
       return <ImageViewer {...props} />;
     case "video":
       return <VideoViewer {...props} />;
+    case "audio":
+      return <AudioViewer {...props} />;
     case "frame":
       return <FrameViewer {...props} />;
     case "har":

@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from eks_harness.pools.base import (
+    AppTargets,
     device_name,
     BackendError,
     BackendManager,
@@ -277,9 +278,10 @@ class FakeDevicePool(DevicePool):
                 self.host.devices.pop(key, None)
                 self.host.save()
 
-    def clean_app(self, key: str) -> None:
+    def clean_app(self, key: str, apps: AppTargets) -> None:
         self._device(key)
-        self._log(key, f"removed {self.config['apps.iosBundleId'] if key.startswith('ios') else self.config['apps.androidPackage']}")
+        removed = apps.ios if key.startswith("ios") else apps.android
+        self._log(key, f"removed {', '.join(removed) if removed else 'no apps'}")
 
     def refresh(self) -> None:
         return None

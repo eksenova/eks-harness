@@ -4,7 +4,9 @@ from fastapi import APIRouter, Body, Depends, Query, Request
 
 from eks_harness.api.deps import ProjectAccess, current_principal, get_ctx, get_scope, require_admin, require_project
 from eks_harness.api.errors import bad_request, conflict
-from eks_harness.api.schemas import DeleteSummary, ProjectCreate, ProjectList, ProjectOut, ProjectUpdate
+from eks_harness import project_settings
+from eks_harness.api.schemas import (DeleteSummary, ProjectCreate, ProjectList, ProjectOut, ProjectSettingOut,
+                                     ProjectSettingsOut, ProjectUpdate)
 from eks_harness.auth.core import Principal
 from eks_harness.daemon import events as ev
 from eks_harness.db.common import UNSET
@@ -88,8 +90,15 @@ def update_project(body: ProjectUpdate, request: Request, access: ProjectAccess 
         "title": body.title.strip() if "title" in sent and body.title is not None else UNSET,
         "description": body.description if "description" in sent and body.description is not None else UNSET,
         "retention_days": body.retention_days if "retention_days" in sent else UNSET,
+        "settings": UNSET,
     }
     with ctx.db.transaction() as conn:
+        if "settings" in sent and body.settings is not None:
+            current = projects_repo.get(conn, access.project.id)
+            try:
+                fields["settings"] = project_settings.merge(current.settings if current else {}, body.settings)
+            except project_settings.ProjectSettingError as problem:
+                raise bad_request(str(problem), error="invalid_project_setting") from None
         project = projects_repo.update(conn, access.project.id, **fields)
     changed = sorted(k for k, v in fields.items() if v is not UNSET)
     if changed:
@@ -97,6 +106,12 @@ def update_project(body: ProjectUpdate, request: Request, access: ProjectAccess 
                            detail={"project": project.id, "changed": changed})
     return views.projects_for(ctx.db.conn(), ctx.links, scope, access.principal.user_id, [project],
                               default_retention_days(ctx.config))[0]
+
+
+@router.get("/{owner}/{name}/settings", response_model=ProjectSettingsOut)
+def get_project_settings(access: ProjectAccess = Depends(require_project("viewer"))) -> ProjectSettingsOut:
+    items = project_settings.describe(access.project.settings)
+    return ProjectSettingsOut(items=[ProjectSettingOut(**item) for item in items])
 
 
 @router.delete("/{owner}/{name}", response_model=DeleteSummary)

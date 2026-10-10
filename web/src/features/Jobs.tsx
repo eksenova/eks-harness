@@ -105,6 +105,15 @@ export function slotCells(node: NodeOut) {
   );
 }
 
+function NodeName({ node }: { node: NodeOut }) {
+  return (
+    <span>
+      <Mono>{node.id}</Mono>
+      {node.host ? <span className="ink-3"> (this hub)</span> : null}
+    </span>
+  );
+}
+
 export function NodeRack({ nodes, compact = false }: { nodes: NodeOut[]; compact?: boolean }) {
   return (
     <Rack
@@ -115,12 +124,12 @@ export function NodeRack({ nodes, compact = false }: { nodes: NodeOut[]; compact
       columns={
         compact
           ? [
-              { key: "id", label: "Node", width: "minmax(0, 0.8fr)", render: (n) => <Mono>{n.id}</Mono> },
+              { key: "id", label: "Node", width: "minmax(0, 0.8fr)", render: (n) => <NodeName node={n} /> },
               { key: "state", label: "State", width: "minmax(0, 0.7fr)", render: (n) => <StateLine state={n.state} /> },
               { key: "slots", label: "Slots", width: "minmax(0, 1.4fr)", render: (n) => (n.online ? slotCells(n) : <span className="ink-3">{lastSeen(n)}</span>) },
             ]
           : [
-              { key: "id", label: "Node", width: "minmax(120px, 0.8fr)", render: (n) => <Mono>{n.id}</Mono> },
+              { key: "id", label: "Node", width: "minmax(120px, 0.8fr)", render: (n) => <NodeName node={n} /> },
               { key: "state", label: "State", width: "minmax(120px, 0.7fr)", render: (n) => <StateLine state={n.state} detail={n.online ? null : lastSeen(n)} /> },
               { key: "system", label: "System", width: "minmax(0, 0.9fr)", render: (n) => systemText(n) },
               { key: "gpus", label: "GPUs", width: "minmax(0, 1.1fr)", render: (n) => nodeGpuLabel(n) },

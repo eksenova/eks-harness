@@ -30,6 +30,7 @@ from eks_harness.live import LiveHub, LiveUnavailable, StreamSettings, profile_t
 from eks_harness.live import ios as ios_module
 from eks_harness.live.android import AndroidLiveSource
 from eks_harness.live.chrome import ChromeScreencastSource
+from eks_harness.live.common import LiveError
 from eks_harness.live.h264 import AnnexBCutter, AvcConfig, MovStreamDemuxer, StreamSyncError, find_avcc, parse_avcc
 from eks_harness.live.ios import IosLiveSource
 from eks_harness.live.jpeg import JpegSplitter, is_jpeg
@@ -476,6 +477,12 @@ FAKE_SIMCTL = textwrap.dedent("""
         sys.exit(0)
     if mode == "replace" and os.path.exists(target) and stat.S_ISFIFO(os.stat(target).st_mode):
         os.unlink(target)
+    final = target
+    if mode == "staging":
+        if os.path.exists(target):
+            os.unlink(target)
+        open(target, "wb").close()
+        target = target + ".sb-22f710ee-UhJgCp"
     out = open(target, "wb", buffering=0)
     for i in range(0, len(streaming), 1024):
         if stop["now"]:
@@ -484,6 +491,8 @@ FAKE_SIMCTL = textwrap.dedent("""
         time.sleep(0.04)
     while not stop["now"]:
         time.sleep(0.02)
+    if final != target:
+        os.replace(target, final)
     sys.exit(0)
 """)
 
@@ -535,6 +544,19 @@ def test_ios_source_reads_the_growing_file_when_simctl_replaces_the_fifo(tmp_pat
     assert len(frames) >= 10 and all(is_jpeg(f) for f in frames)
     assert source.transport == "file"
     assert ios_module.fifo_rejection("FAKE-UDID-FILE")
+
+
+@needs_ffmpeg
+@pytest.mark.skipif(sys.platform == "win32", reason="FIFOs are POSIX only")
+def test_ios_source_follows_the_staging_file_simctl_writes_before_renaming(tmp_path: Path) -> None:
+    source = _ios_source(tmp_path, "FAKE-UDID-STAGING", "staging")
+    frames = []
+    collector = threading.Thread(target=lambda: _take(source.frames(), 10, 20, frames), daemon=True)
+    collector.start()
+    collector.join(30)
+    source.close()
+    assert len(frames) >= 10 and all(is_jpeg(f) for f in frames)
+    assert source.transport == "file"
 
 
 class FakeChrome:
@@ -647,6 +669,33 @@ def test_chrome_screencast_without_reported_contexts_skips_the_default_window() 
     try:
         assert _take(iterator, 2, 10) == [TINY_JPEG] * 2
         assert chrome.attached == ["A"]
+    finally:
+        source.close()
+        iterator.close()
+        chrome.close()
+
+
+def test_chrome_screencast_with_stale_contexts_fails_clearly_when_shared() -> None:
+    chrome = FakeChrome()
+    source = ChromeScreencastSource(chrome.url, StreamSettings(), name="Chrome 1 profile 1", context_ids=["GONE"])
+    iterator = source.frames()
+    try:
+        with pytest.raises(LiveError, match="no longer exist"):
+            _take(iterator, 1, 10)
+    finally:
+        source.close()
+        chrome.close()
+
+
+def test_chrome_screencast_with_stale_contexts_shows_any_page_when_exclusive() -> None:
+    chrome = FakeChrome()
+    chrome.targets = chrome.targets[:2]
+    source = ChromeScreencastSource(chrome.url, StreamSettings(), name="Chrome 1 profile 1", context_ids=["GONE"],
+                                    exclusive=True)
+    iterator = source.frames()
+    try:
+        assert _take(iterator, 2, 10) == [TINY_JPEG] * 2
+        assert chrome.attached
     finally:
         source.close()
         iterator.close()

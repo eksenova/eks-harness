@@ -20,7 +20,8 @@ The manager writes `config.json` (mode 600) into `<state>/workers/<kind>-<sid>/`
 `worker.json` (`{ready, port, pid, ...}`) and heartbeats its lease sids every 20 s.
 
 Web keys: `baseUrl`, `sid`, `home`, `locale`, `timezone`, `nav` (`location`, `next`, `hook` for
-`window.__ehxNavigate`), `apiBaseUrl`, `viewports.{desktop,mobile}`, `hideSelectors`,
+`window.__ehxNavigate`), `apiBaseUrl`, `viewports.{desktop,mobile}`, `hideSelectors` (the project's
+`capture.hideSelectors` setting plus app.toml `[web] hide`),
 `networkIgnore`, `wsIgnore` (regex strings), `appOrigins`, `theme`, `pace`, `encoder`,
 `playwrightFrom`, `extensions`, `options` (`settleReact`, `heartbeatMs`, `bypassCsp`, `insecureTls`, ...).
 

@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api, encodeSegment, errorText, projectPath, uploadForm } from "../api/client";
-import { keys, normalizeAssets, useAnnotationVersions, useProjectAssets, useProjects } from "../api/queries";
+import { keys, normalizeAssets, useAnnotationVersions, useProjectAssets } from "../api/queries";
 import type {
   AnnotateResponse,
   AnnotationCrop,
@@ -12,7 +12,7 @@ import type {
 } from "../api/types";
 import { Button } from "../components/Button";
 import { ConfirmDialog } from "../components/Dialog";
-import { Select, TextInput } from "../components/Form";
+import { TextInput } from "../components/Form";
 import { DefList, Mono, RelTime } from "../components/Misc";
 import { Notice, ResultText } from "../components/Notice";
 import { formatSize } from "../lib/format";
@@ -370,26 +370,20 @@ export function AnnotationPanels({ artifact, state, editable, projectId }: { art
   );
 }
 
-export function AnnotationAssets() {
+export function AnnotationAssets({ projectId, editable }: { projectId: string; editable: boolean }) {
   const client = useQueryClient();
-  const projects = useProjects();
-  const [projectId, setProjectId] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState("");
   const [removing, setRemoving] = useState<ProjectAssetOut | null>(null);
-  const assetsQuery = useProjectAssets(projectId || null);
+  const assetsQuery = useProjectAssets(projectId);
   const assets = assetsQuery.data ?? [];
 
   const add = async () => {
     setError("");
     setResult("");
-    if (!projectId) {
-      setError("Choose a project first.");
-      return;
-    }
     if (!file) {
       setError("Choose a file to upload.");
       return;
@@ -412,19 +406,10 @@ export function AnnotationAssets() {
   };
 
   return (
-    <section className="inspector-section">
-      <h2 className="inspector-title">Annotation assets</h2>
-      <p className="field-helper">Custom icons and images for annotation specs, per project. PNG, JPEG, WebP or SVG.</p>
-      <Select value={projectId} onChange={(event) => { setProjectId(event.target.value); setError(""); setResult(""); }} aria-label="Project for assets">
-        <option value="">Choose a project…</option>
-        {(projects.data?.items ?? []).map((project) => (
-          <option key={project.id} value={project.id}>
-            {project.id}
-          </option>
-        ))}
-      </Select>
-      {projectId ? (
-        assetsQuery.isPending ? (
+    <section className="section">
+      <h2 className="section-title">Annotation assets</h2>
+      <p className="field-helper">Custom icons and images that this project's annotation specs reference by name. PNG, JPEG, WebP or SVG.</p>
+      {assetsQuery.isPending ? (
           <p className="muted">Loading assets…</p>
         ) : assetsQuery.isError ? (
           <p className="muted">Assets are unavailable.</p>
@@ -437,23 +422,26 @@ export function AnnotationAssets() {
                   {asset.filename}
                   {typeof asset.size === "number" ? `, ${formatSize(asset.size)}` : ""}
                 </span>
-                <button type="button" className="link" onClick={() => setRemoving(asset)}>
-                  Remove
-                </button>
+                {editable ? (
+                  <button type="button" className="link" onClick={() => setRemoving(asset)}>
+                    Remove
+                  </button>
+                ) : null}
               </li>
             ))}
           </ul>
         ) : (
           <p className="muted">No assets in this project.</p>
-        )
+      )}
+      {editable ? (
+        <div className="rerender-row">
+          <input type="file" accept=".png,.jpg,.jpeg,.webp,.svg" aria-label="Asset file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+          <TextInput value={name} onChange={(event) => setName(event.target.value)} placeholder="Name, empty uses filename" aria-label="Asset name" />
+          <Button busy={busy} busyLabel={"Adding…"} onClick={() => void add()}>
+            Add asset
+          </Button>
+        </div>
       ) : null}
-      <div className="rerender-row">
-        <input type="file" accept=".png,.jpg,.jpeg,.webp,.svg" aria-label="Asset file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-        <TextInput value={name} onChange={(event) => setName(event.target.value)} placeholder="Name, empty uses filename" aria-label="Asset name" />
-        <Button busy={busy} busyLabel={"Adding…"} onClick={() => void add()}>
-          Add asset
-        </Button>
-      </div>
       {error ? (
         <Notice variant="error">{error}</Notice>
       ) : null}

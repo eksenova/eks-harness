@@ -41,7 +41,7 @@ const nowRoute = createRoute({ getParentRoute: () => appRoute, path: "/", compon
 const projectsRoute = createRoute({ getParentRoute: () => appRoute, path: "projects", component: ProjectsPage });
 const machinesRoute = createRoute({ getParentRoute: () => appRoute, path: "machines", component: () => <Navigate to="/lab" replace /> });
 const labRoute = createRoute({ getParentRoute: () => appRoute, path: "lab", component: MachinesPage });
-const evidenceRoute = createRoute({ getParentRoute: () => appRoute, path: "evidence", component: SessionsPage });
+const evidenceRoute = createRoute({ getParentRoute: () => appRoute, path: "evidence", component: ProjectsPage });
 const studioRoute = createRoute({ getParentRoute: () => appRoute, path: "studio", component: StudioPage });
 const studioEditRoute = createRoute({ getParentRoute: () => appRoute, path: "studio/edit", component: StudioEditPage });
 const scoreRoute = createRoute({ getParentRoute: () => appRoute, path: "studio/score", component: ScorePage });

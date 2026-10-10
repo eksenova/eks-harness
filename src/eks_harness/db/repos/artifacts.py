@@ -11,7 +11,7 @@ from typing import Any
 
 from eks_harness.db.common import UNSET, dumps, loads, now, placeholders
 
-KNOWN_KINDS = ("screenshot", "video", "dom", "mhtml", "a11y", "har", "console", "log", "site", "file")
+KNOWN_KINDS = ("screenshot", "video", "audio", "dom", "mhtml", "a11y", "har", "console", "log", "site", "file")
 SOURCES = ("agent", "cli", "ui", "mcp")
 TAG_PATTERN = re.compile(r"^[\w.:/+-]{1,64}$", re.UNICODE)
 

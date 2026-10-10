@@ -19,6 +19,7 @@ import type {
   ProfileList,
   ProjectAssetList,
   ProjectAssetOut,
+  ProjectSettingsOut,
   ProjectList,
   ProjectOut,
   SearchResponse,
@@ -75,6 +76,7 @@ export const keys = {
   sid: (sid: string) => ["sid", sid] as const,
   annotations: (id: string) => ["annotations", id] as const,
   assets: (projectId: string) => ["assets", projectId] as const,
+  projectSettings: (projectId: string) => ["project-settings", projectId] as const,
 };
 
 export interface ArtifactParams {
@@ -144,6 +146,7 @@ export const fetchers = {
   logs: (query: Query) => api.get<LogResponse>("/api/logs", { query, timeoutMs: 30_000 }),
   annotations: (id: string) => api.get<AnnotationVersionsResponse>(`/api/artifacts/${encodeSegment(id)}/annotations`),
   assets: (projectId: string) => api.get<ProjectAssetList | ProjectAssetOut[]>(`${projectPath(projectId)}/assets`),
+  projectSettings: (projectId: string) => api.get<ProjectSettingsOut>(`${projectPath(projectId)}/settings`),
 };
 
 export function backendPath(id: string): string {
@@ -225,6 +228,10 @@ export function useProjectAssets(projectId: string | null, enabled = true) {
     enabled: enabled && Boolean(projectId),
     retry: false,
   });
+}
+
+export function useProjectSettings(projectId: string) {
+  return useQuery({ queryKey: keys.projectSettings(projectId), queryFn: () => fetchers.projectSettings(projectId) });
 }
 
 export function useTimeline(projectId: string | null, slug: string) {

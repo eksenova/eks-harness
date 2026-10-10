@@ -14,6 +14,7 @@ from eks_harness.daemon.context import AppContext
 from eks_harness.daemon.hooks import on_shutdown, on_startup
 from eks_harness.db.repos import nodes as repo
 from eks_harness.nodes.blobs import BlobError
+from eks_harness.nodes.host_node import HOST_FLAG, SERVICE as HOST_SERVICE, HostNode
 from eks_harness.nodes.hub import NodeError, hub
 
 router = APIRouter(tags=["nodes"])
@@ -94,7 +95,10 @@ def patch_node(node_id: str, request: Request, body: dict = Body(...), _: Princi
         if "config" in body:
             if not isinstance(body["config"], dict):
                 raise bad_request("config must be an object")
-            nodes.update_config(node_id, body["config"])
+            config = dict(body["config"])
+            if _is_host_node(ctx, node_id):
+                config[HOST_FLAG] = True
+            nodes.update_config(node_id, config)
         if "disabled" in body:
             nodes.set_disabled(node_id, bool(body["disabled"]))
         if "label" in body:
@@ -105,8 +109,20 @@ def patch_node(node_id: str, request: Request, body: dict = Body(...), _: Princi
     return _one(ctx, node_id)
 
 
+def _is_host_node(ctx: AppContext, node_id: str) -> bool:
+    node = repo.get_node(ctx.db.conn(), node_id)
+    return bool(node and node.config.get(HOST_FLAG))
+
+
+def _refuse_host_node(ctx: AppContext, node_id: str, action: str) -> None:
+    if _is_host_node(ctx, node_id) and ctx.config["nodes.hostNode"]:
+        raise bad_request(f"{node_id} is this hub machine's own node; {action} is not possible while it runs. "
+                          f"Disable it, or turn off nodes.hostNode and restart the daemon.", error="host_node")
+
+
 @router.delete("/api/nodes/{node_id}")
 def delete_node(node_id: str, request: Request, _: Principal = Depends(require_admin)) -> dict:
+    _refuse_host_node(get_ctx(request), node_id, "removing it")
     if not hub(get_ctx(request)).remove_node(node_id):
         raise not_found(f"No node {node_id}.", error="node_not_found")
     return {"removed": node_id}
@@ -115,6 +131,7 @@ def delete_node(node_id: str, request: Request, _: Principal = Depends(require_a
 @router.post("/api/nodes/{node_id}/token")
 def rotate(node_id: str, request: Request, _: Principal = Depends(require_admin)) -> dict:
     ctx = get_ctx(request)
+    _refuse_host_node(ctx, node_id, "a new token")
     try:
         token = hub(ctx).rotate_token(node_id)
     except NodeError as error:
@@ -230,10 +247,16 @@ def _start(ctx: AppContext) -> None:
     nodes.blobs.prune(float(ctx.config["nodes.blobRetentionDays"]) * 86400)
     with ctx.db.transaction() as conn:
         repo.prune_jobs(conn, time.time() - 90 * 86400)
+    if ctx.config["nodes.hostNode"] and not ctx.pools.fake:
+        host_node = HostNode(ctx)
+        ctx.register_service(HOST_SERVICE, host_node)
+        host_node.start()
 
 
 @on_shutdown(order=5)
 def _stop(ctx: AppContext) -> None:
+    if ctx.has_service(HOST_SERVICE):
+        ctx.service(HOST_SERVICE).stop()
     if ctx.has_service("nodes"):
         for node_id in list(hub(ctx).connections):
             hub(ctx).disconnect(node_id, "hub stopping")

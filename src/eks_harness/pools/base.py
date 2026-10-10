@@ -7,6 +7,7 @@ import logging
 import threading
 import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from collections.abc import Callable, Iterator
 from datetime import datetime, timezone
 from pathlib import Path
@@ -254,9 +255,16 @@ class BrowserPool(ABC):
         raise NotImplementedError
 
 
+@dataclass(frozen=True)
+class AppTargets:
+    ios: tuple[str, ...] = ()
+    android: tuple[str, ...] = ()
+
+
 class DevicePool(ABC):
     def __init__(self, host: PoolHost) -> None:
         self.host = host
+        self.stray_patterns: Callable[[], list[str]] = lambda: []
 
     @property
     def config(self) -> Config:
@@ -287,7 +295,7 @@ class DevicePool(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def clean_app(self, key: str) -> None:
+    def clean_app(self, key: str, apps: AppTargets) -> None:
         raise NotImplementedError
 
     @abstractmethod

@@ -3,8 +3,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useId, useMemo, useState } from "react";
 import { api, ApiError, errorText, projectPath } from "../api/client";
-import { keys, useGrants, useProject, useSessions, useUsers } from "../api/queries";
-import type { GrantOut, ProjectOut, SessionOut } from "../api/types";
+import { keys, useGrants, useProject, useProjectSettings, useSessions, useUsers } from "../api/queries";
+import type { GrantOut, ProjectOut, ProjectSettingOut, SessionOut } from "../api/types";
 import { Button } from "../components/Button";
 import { ConfirmDialog } from "../components/Dialog";
 import { Field, NumberInput, Radio, Select, SearchInput, Textarea, TextInput } from "../components/Form";
@@ -12,6 +12,7 @@ import { OverflowMenu, separator } from "../components/Menu";
 import { AbsTime, Combobox, Forbidden, Mono, PageHeader, queryState, RelTime, Tabs } from "../components/Misc";
 import { EmptyState, Notice, ResultText } from "../components/Notice";
 import { DataTable, sortPatch, sortRows, useSort, type Column, type Natural } from "../components/Table";
+import { AnnotationAssets } from "../features/annotations";
 import { ArtifactBrowser } from "../features/ArtifactBrowser";
 import { setSessionSeen } from "../features/artifactActions";
 import { DropTarget } from "../features/DropTarget";
@@ -327,8 +328,80 @@ function projectRetentionText(project: ProjectOut): string {
     : "Global default: kept forever.";
 }
 
+function settingLines(value: unknown): string {
+  return Array.isArray(value) ? value.map(String).join("\n") : "";
+}
+
+function settingDrafts(settings: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(Object.entries(settings ?? {}).map(([key, value]) => [key, settingLines(value)]));
+}
+
+function parseLines(text: string): string[] {
+  return [...new Set(text.split("\n").map((line) => line.trim()).filter(Boolean))];
+}
+
+function groupSettings(items: ProjectSettingOut[]): { title: string; items: ProjectSettingOut[] }[] {
+  const groups: { title: string; items: ProjectSettingOut[] }[] = [];
+  for (const item of items) {
+    const group = groups.find((g) => g.title === item.groupTitle);
+    if (group) group.items.push(item);
+    else groups.push({ title: item.groupTitle, items: [item] });
+  }
+  return groups;
+}
+
+function ProjectSettingsView({ project, items }: { project: ProjectOut; items: ProjectSettingOut[] }) {
+  return (
+    <>
+      {groupSettings(items).map((group) => (
+        <section key={group.title} className="section">
+          <h2 className="section-title">{group.title}</h2>
+          <dl className="deflist">
+            {group.items.map((item) => {
+              const values = Array.isArray(project.settings?.[item.key]) ? (project.settings[item.key] as unknown[]) : [];
+              return (
+                <div key={item.key} className="deflist-row">
+                  <dt>{item.label}</dt>
+                  <dd>{values.length ? values.map((value) => <Mono key={String(value)}>{String(value)}</Mono>).reduce<React.ReactNode[]>((all, node, index) => (index ? [...all, ", ", node] : [node]), []) : <span className="muted">None</span>}</dd>
+                </div>
+              );
+            })}
+          </dl>
+        </section>
+      ))}
+    </>
+  );
+}
+
+function ProjectSettingsFields({ items, drafts, onChange }: { items: ProjectSettingOut[]; drafts: Record<string, string>; onChange: (key: string, value: string) => void }) {
+  return (
+    <>
+      {groupSettings(items).map((group) => (
+        <section key={group.title} className="section">
+          <h2 className="section-title">{group.title}</h2>
+          {group.items.map((item) => (
+            <ProjectSettingField key={item.key} item={item} value={drafts[item.key] ?? ""} onChange={(value) => onChange(item.key, value)} />
+          ))}
+        </section>
+      ))}
+    </>
+  );
+}
+
+function ProjectSettingField({ item, value, onChange }: { item: ProjectSettingOut; value: string; onChange: (value: string) => void }) {
+  const id = useId();
+  return (
+    <Field label={item.label} htmlFor={id} sub={<p className="setting-key mono">{item.key}</p>} helper={`${item.description} One per line.`}>
+      <Textarea id={id} value={value} onChange={(event) => onChange(event.target.value)} mono />
+    </Field>
+  );
+}
+
 function SettingsTab({ project, editable, onDelete }: { project: ProjectOut; editable: boolean; onDelete: () => void }) {
   const client = useQueryClient();
+  const settingsQuery = useProjectSettings(project.id);
+  const settingItems = settingsQuery.data?.items ?? [];
+  const [drafts, setDrafts] = useState<Record<string, string>>(() => settingDrafts(project.settings));
   const [title, setTitle] = useState(project.title);
   const [description, setDescription] = useState(project.description);
   const [mode, setMode] = useState<RetentionMode>(retentionMode(project));
@@ -345,6 +418,7 @@ function SettingsTab({ project, editable, onDelete }: { project: ProjectOut; edi
     setDescription(project.description);
     setMode(retentionMode(project));
     setDays(String(project.retentionDays || 30));
+    setDrafts(settingDrafts(project.settings));
   }, [project.id]);
 
   if (!editable) {
@@ -367,6 +441,8 @@ function SettingsTab({ project, editable, onDelete }: { project: ProjectOut; edi
             </div>
           </dl>
         </section>
+        <ProjectSettingsView project={project} items={settingItems} />
+        <AnnotationAssets projectId={project.id} editable={false} />
       </div>
     );
   }
@@ -382,8 +458,11 @@ function SettingsTab({ project, editable, onDelete }: { project: ProjectOut; edi
     setBusy(true);
     try {
       const retentionDays = mode === "days" ? value : mode === "forever" ? 0 : null;
-      const updated = await api.patch<ProjectOut>(projectPath(project.id), { title, description, retentionDays });
+      const settings = Object.fromEntries(settingItems.map((item) => [item.key, parseLines(drafts[item.key] ?? "")]));
+      const updated = await api.patch<ProjectOut>(projectPath(project.id), { title, description, retentionDays, ...(settingItems.length ? { settings } : {}) });
       client.setQueryData(keys.project(project.id), updated);
+      setDrafts(settingDrafts(updated.settings));
+      void client.invalidateQueries({ queryKey: keys.projectSettings(project.id) });
       void client.invalidateQueries({ queryKey: keys.projects });
       setSaved(`Saved at ${nowTime()}`);
     } catch (err) {
@@ -394,6 +473,7 @@ function SettingsTab({ project, editable, onDelete }: { project: ProjectOut; edi
   };
 
   return (
+    <>
     <form
       className="form-grid"
       onSubmit={(event) => {
@@ -432,6 +512,8 @@ function SettingsTab({ project, editable, onDelete }: { project: ProjectOut; edi
           <p className="field-helper">Pinned artifacts are always kept. An artifact's own retention overrides this.</p>
         </fieldset>
       </section>
+      {settingsQuery.isError ? <Notice variant="error">{errorText(settingsQuery.error, "load", "the project settings", project.id)}</Notice> : null}
+      <ProjectSettingsFields items={settingItems} drafts={drafts} onChange={(key, value) => { setDrafts((current) => ({ ...current, [key]: value })); setSaved(""); }} />
       <div className="button-row">
         <Button type="submit" variant="primary" busy={busy} busyLabel={"Saving…"}>
           Save changes
@@ -439,6 +521,9 @@ function SettingsTab({ project, editable, onDelete }: { project: ProjectOut; edi
         <ResultText>{saved}</ResultText>
       </div>
       {error ? <Notice variant="error">{error}</Notice> : null}
+    </form>
+    <div className="form-grid">
+      <AnnotationAssets projectId={project.id} editable />
       <section className="section">
         <h2 className="section-title">Delete project</h2>
         <p>
@@ -450,7 +535,8 @@ function SettingsTab({ project, editable, onDelete }: { project: ProjectOut; edi
           </Button>
         </div>
       </section>
-    </form>
+    </div>
+    </>
   );
 }
 

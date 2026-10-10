@@ -96,10 +96,12 @@ export function NodePage({ id }: { id: string }) {
           auth.isAdmin ? (
             <div className="action-row">
               <Button onClick={() => void toggle()}>{n.disabled ? "Enable" : "Disable"}</Button>
-              <Button onClick={() => setConfirm("token")}>New token</Button>
-              <Button variant="danger" onClick={() => setConfirm("remove")}>
-                Remove
-              </Button>
+              {n.host ? null : <Button onClick={() => setConfirm("token")}>New token</Button>}
+              {n.host ? null : (
+                <Button variant="danger" onClick={() => setConfirm("remove")}>
+                  Remove
+                </Button>
+              )}
             </div>
           ) : null
         }
@@ -108,7 +110,7 @@ export function NodePage({ id }: { id: string }) {
             <MetaItem>
               <StateLine state={n.state} detail={n.online ? null : lastSeen(n)} />
             </MetaItem>
-            {n.label ? <MetaItem>{n.label}</MetaItem> : null}
+            {n.host ? <MetaItem>This hub machine; the daemon runs it (nodes.hostNode)</MetaItem> : n.label ? <MetaItem>{n.label}</MetaItem> : null}
             {n.version ? <MetaItem>version <Mono>{n.version}</Mono></MetaItem> : null}
           </>
         }
@@ -152,7 +154,7 @@ export function NodePage({ id }: { id: string }) {
                 caps.diskFreeGb !== undefined ? { label: "Disk", value: `${caps.diskFreeGb} GB free of ${caps.diskTotalGb} GB` } : null,
                 caps.jobKinds?.length ? { label: "Job kinds", value: <Mono>{caps.jobKinds.join(", ")}</Mono> } : null,
                 { label: "Slots", value: n.slots.length ? slotCells(n) : "none" },
-                n.tokenPrefix ? { label: "Token", value: <Mono>ehn_{n.tokenPrefix}_...</Mono> } : null,
+                n.tokenPrefix && !n.host ? { label: "Token", value: <Mono>ehn_{n.tokenPrefix}_...</Mono> } : null,
               ]}
             />
           </Section>

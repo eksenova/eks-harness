@@ -11,7 +11,6 @@ import { OverflowMenu, separator, type MenuItem } from "../components/Menu";
 import { AbsTime, CopyField, DefList, EXACT_ACTIVE, Mono, NO_ACTIVE_PROPS, RelTime, queryState } from "../components/Misc";
 import { EmptyState, Notice, ResultText } from "../components/Notice";
 import { DataTable, type Column } from "../components/Table";
-import { AnnotationAssets } from "../features/annotations";
 import { useAuth } from "../lib/auth";
 import { markRestarting, useConnection } from "../lib/events";
 import { formatClock, formatFull, formatRelative } from "../lib/format";
@@ -28,6 +27,10 @@ export const SETTING_GROUPS: { id: string; label: string; prefixes: string[] }[]
   { id: "leases", label: "Leases", prefixes: ["lease."] },
   { id: "backends", label: "Backends", prefixes: ["backend."] },
   { id: "storage", label: "Storage", prefixes: ["storage.", "retention.", "events."] },
+  { id: "nodes", label: "Nodes and rendering", prefixes: ["nodes.", "render."] },
+  { id: "video", label: "Video", prefixes: ["video."] },
+  { id: "plugins", label: "Plugins", prefixes: ["plugins."] },
+  { id: "updates", label: "Updates", prefixes: ["update.", "service."] },
 ];
 
 const OTHER_PAGES: { id: string; label: string; admin: boolean }[] = [
@@ -36,65 +39,6 @@ const OTHER_PAGES: { id: string; label: string; admin: boolean }[] = [
   { id: "grants", label: "Grants", admin: true },
   { id: "daemon", label: "Daemon", admin: true },
 ];
-
-const LABELS: Record<string, string> = {
-  "server.host": "Listen address",
-  "server.port": "Port",
-  "server.publicUrl": "Public URL",
-  "server.trustedProxies": "Trusted proxies",
-  "server.cloudflare": "Trust Cloudflare headers (CF-Connecting-IP, X-Forwarded-Proto)",
-  "auth.enabled": "Require sign-in",
-  "auth.sessionHours": "Web session lifetime",
-  "auth.cookieSecure": "Send the session cookie over HTTPS only",
-  "browser.command": "Browser",
-  "browser.instances": "Browser processes",
-  "browser.profilesPerInstance": "Profiles per process",
-  "browser.idleSeconds": "Quit an unused browser after",
-  "browser.extraArgs": "Extra browser arguments",
-  "devices.ios": "iOS simulators",
-  "devices.android": "Android emulators",
-  "devices.maxRunning": "Devices running at once",
-  "devices.idleSeconds": "Shut down a free device after",
-  "devices.iosDeviceType": "Simulator device type",
-  "devices.androidBaseAvd": "Base AVD",
-  "devices.androidPortBase": "First emulator console port",
-  "apps.iosBundleId": "iOS app bundle id",
-  "apps.androidPackage": "Android app package",
-  "live.idleStopSeconds": "Stop a live stream after the last viewer leaves",
-  "live.maxFps": "Live stream frame rate",
-  "live.jpegQuality": "Live stream JPEG quality",
-  "capture.pace.moveMs": "Pointer move time",
-  "capture.pace.dwellMs": "Dwell before each action",
-  "capture.pace.typeMsPerChar": "Typing speed",
-  "capture.pace.holdMs": "Hold after each interaction",
-  "capture.pace.screenHoldMs": "Hold on new screens",
-  "capture.pace.mobilePressMs": "Mobile press marker time",
-  "capture.trim.keepBeforeSec": "Keep before each interaction",
-  "capture.trim.keepAfterSec": "Keep after each interaction",
-  "capture.trim.maxSpeedup": "Fastest idle speedup",
-  "capture.trim.minScreenSec": "Shortest screen time",
-  "capture.hideSelectors": "Hidden selectors during capture",
-  "capture.annotate.matchPx": "Annotation re-measure tolerance",
-  "capture.annotate.minContrast": "Annotation minimum contrast",
-  "capture.annotate.minContrastLarge": "Annotation large-text contrast",
-  "capture.annotate.minTextPx": "Annotation minimum text size",
-  "capture.pointer": "Video pointer",
-  "lease.idleSeconds": "Release a lease without heartbeat after",
-  "lease.agentStopGraceSeconds": "Idle limit after an agent's turn ends",
-  "lease.queueTimeoutSeconds": "Drop a queued request without a poll after",
-  "backend.idleGraceSeconds": "Stop an unbound backend after",
-  "backend.portRangeStart": "First backend port",
-  "backend.portRangeEnd": "Last backend port",
-  "backend.definitionDirs": "Backend definition folders",
-  "daemon.idleExitSeconds": "Exit when idle after",
-  "daemon.tickSeconds": "Housekeeping interval",
-  "daemon.sweepSeconds": "Sweep interval",
-  "storage.maxUploadMb": "Largest upload",
-  "storage.quotaGb": "Storage quota",
-  "retention.defaultDays": "Default retention",
-  "retention.checkMinutes": "Retention check interval",
-  "events.retentionDays": "Keep activity events for",
-};
 
 function unitFor(key: string): string {
   const last = key.split(".").pop() ?? "";
@@ -115,6 +59,7 @@ function isList(setting: SettingOut): boolean {
 
 function toDraft(setting: SettingOut, value: unknown): string | boolean {
   if (setting.type === "bool") return Boolean(value);
+  if (setting.type === "dict") return JSON.stringify(value ?? {}, null, 2);
   if (isList(setting)) return Array.isArray(value) ? value.join("\n") : "";
   if (value === null || value === undefined) return "";
   return String(value);
@@ -123,6 +68,15 @@ function toDraft(setting: SettingOut, value: unknown): string | boolean {
 function fromDraft(setting: SettingOut, draft: string | boolean): { value: unknown; error?: string } {
   if (setting.type === "bool") return { value: Boolean(draft) };
   const text = String(draft);
+  if (setting.type === "dict") {
+    try {
+      const parsed: unknown = JSON.parse(text.trim() || "{}");
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return { value: null, error: "Enter a JSON object." };
+      return { value: parsed };
+    } catch {
+      return { value: null, error: "Enter valid JSON." };
+    }
+  }
   if (isList(setting)) return { value: text.split(/[\n,]/).map((s) => s.trim()).filter(Boolean) };
   if (setting.type === "int" || setting.type === "float") {
     if (!text.trim()) return setting.nullable ? { value: null } : { value: null, error: "Enter a number." };
@@ -411,7 +365,6 @@ function SettingsGroupForm({ group }: { group: (typeof SETTING_GROUPS)[number] }
         />
       ) : null}
     </form>
-    {group.id === "capture" ? <AnnotationAssets /> : null}
     </>
   );
 }
@@ -419,9 +372,9 @@ function SettingsGroupForm({ group }: { group: (typeof SETTING_GROUPS)[number] }
 function SettingField({ setting, value, error, onChange, onDefault, usingDefault, savedRestart }: { setting: SettingOut; value: string | boolean; error?: string; onChange: (value: string | boolean) => void; onDefault: () => void; usingDefault: boolean; savedRestart: boolean }) {
   const id = useId();
   const errorId = useId();
-  const label = LABELS[setting.key] ?? setting.key;
+  const label = setting.label || setting.key;
   const unit = unitFor(setting.key);
-  const defaultText = setting.default === null || setting.default === undefined || setting.default === "" || (Array.isArray(setting.default) && !setting.default.length) ? "empty" : Array.isArray(setting.default) ? setting.default.join(", ") : String(setting.default);
+  const defaultText = setting.default === null || setting.default === undefined || setting.default === "" || (Array.isArray(setting.default) && !setting.default.length) || (setting.type === "dict" && !Object.keys(setting.default as object).length) ? "empty" : Array.isArray(setting.default) ? setting.default.join(", ") : typeof setting.default === "object" ? JSON.stringify(setting.default) : String(setting.default);
   const differs = !usingDefault && !same(fromDraft(setting, value).value, setting.default);
   const fromEnv = setting.source === "env";
   const aside = savedRestart ? <span className="strong">Saved, applies after restart</span> : setting.restartRequired ? <span className="strong">Needs restart</span> : null;
@@ -452,6 +405,8 @@ function SettingField({ setting, value, error, onChange, onDefault, usingDefault
         ))}
       </Select>
     );
+  } else if (setting.type === "dict") {
+    input = <Textarea id={id} value={String(value)} onChange={(event) => onChange(event.target.value)} invalid={Boolean(error)} aria-describedby={errorId} mono disabled={fromEnv} />;
   } else if (isList(setting)) {
     input = <Textarea id={id} value={String(value)} onChange={(event) => onChange(event.target.value)} invalid={Boolean(error)} aria-describedby={errorId} mono disabled={fromEnv} />;
   } else if (setting.type === "int" || setting.type === "float") {

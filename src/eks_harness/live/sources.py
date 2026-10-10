@@ -80,6 +80,12 @@ def _meta_contexts(meta: dict) -> tuple[str, ...]:
     return ()
 
 
+def other_holders(db: Database, target: LiveTarget) -> list:
+    prefix = f"browser:{target.index}:"
+    return [lease for lease in leases_repo.holding(db.conn(), "browser")
+            if lease.resource and lease.resource.startswith(prefix) and lease.resource != target.resource]
+
+
 def profile_contexts(db: Database, target: LiveTarget) -> tuple[str, ...] | None:
     conn = db.conn()
     holder = leases_repo.holder_of(conn, target.resource)
@@ -89,9 +95,7 @@ def profile_contexts(db: Database, target: LiveTarget) -> tuple[str, ...] | None
     reported = _meta_contexts(holder.meta or {})
     if reported:
         return reported
-    prefix = f"browser:{target.index}:"
-    others = [lease for lease in leases_repo.holding(conn, "browser")
-              if lease.resource and lease.resource.startswith(prefix) and lease.resource != target.resource]
+    others = other_holders(db, target)
     if others:
         raise LiveUnavailable(
             409, "profile_contexts_unknown",
@@ -136,7 +140,7 @@ def check_ready(pools: Pools, target: LiveTarget) -> None:
 
 
 def pool_source(host: PoolHost, resource: str, *, cdp_url: str | None = None,
-                context_ids: Iterable[str] | None = None) -> LiveSource:
+                context_ids: Iterable[str] | None = None, exclusive: bool = False) -> LiveSource:
     settings = StreamSettings.from_config(host.config)
     if resource.startswith("browser:"):
         index, profile = parse_browser_resource(resource)
@@ -144,7 +148,7 @@ def pool_source(host: PoolHost, resource: str, *, cdp_url: str | None = None,
         if not url:
             raise LiveError(f"Chrome {index} is not running")
         return ChromeScreencastSource(url, settings, name=f"Chrome {index} profile {profile}",
-                                      context_ids=context_ids)
+                                      context_ids=context_ids, exclusive=exclusive)
     kind, _, _ = resource.partition(":")
     device = host.devices.get(resource)
     if device is None:
@@ -170,6 +174,8 @@ def prepare(pools: Pools, db: Database, target: LiveTarget) -> Callable[[], Live
         return lambda: pool.live_source(target.resource)
     if target.is_browser:
         contexts = profile_contexts(db, target)
+        exclusive = not other_holders(db, target)
         cdp_url = pools.browsers.cdp_url(target.index)
-        return lambda: pool_source(pools.host, target.resource, cdp_url=cdp_url, context_ids=contexts)
+        return lambda: pool_source(pools.host, target.resource, cdp_url=cdp_url, context_ids=contexts,
+                                   exclusive=exclusive)
     return lambda: pool_source(pools.host, target.resource)

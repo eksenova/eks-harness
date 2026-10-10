@@ -14,7 +14,7 @@ export type AuthVia = "local" | "key" | "cookie";
 export type SettingSource = "default" | "file" | "env";
 export type TimelineEntryType = "event" | "note" | "artifact";
 
-export const ARTIFACT_KINDS = ["screenshot", "video", "dom", "mhtml", "a11y", "har", "console", "log", "site", "file"] as const;
+export const ARTIFACT_KINDS = ["screenshot", "video", "audio", "dom", "mhtml", "a11y", "har", "console", "log", "site", "file"] as const;
 export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
 
 export interface ErrorResponse {
@@ -80,6 +80,7 @@ export interface EventList {
 
 export interface SettingOut {
   key: string;
+  label: string;
   value: unknown;
   default: unknown;
   description: string;
@@ -275,7 +276,24 @@ export interface ProjectOut {
   projectFileCount: number;
   activeLeases: number;
   access: AccessLevel | null;
+  settings: Record<string, unknown>;
   url: string;
+}
+
+export interface ProjectSettingOut {
+  key: string;
+  label: string;
+  description: string;
+  type: string;
+  group: string;
+  groupTitle: string;
+  default: unknown;
+  value: unknown;
+  isSet: boolean;
+}
+
+export interface ProjectSettingsOut {
+  items: ProjectSettingOut[];
 }
 
 export type ProjectRetentionSource = "project" | "forever" | "global";

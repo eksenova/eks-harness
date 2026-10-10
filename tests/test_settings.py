@@ -173,3 +173,12 @@ def test_settings_patch_by_cookie_needs_csrf(auth_env: AuthEnv) -> None:
     assert client.patch("/api/settings", json={"values": {"live.maxFps": 4}}).status_code == 403
     assert client.patch("/api/settings", json={"values": {"live.maxFps": 4}},
                         headers={"X-CSRF-Token": csrf}).status_code == 200
+
+
+def test_every_setting_has_a_label_and_group_title():
+    from eks_harness.config import _SETTINGS, GROUPS, LABELS
+
+    keys = {setting.key for setting in _SETTINGS}
+    assert sorted(keys - set(LABELS)) == []
+    assert sorted(set(LABELS) - keys) == []
+    assert sorted({setting.group for setting in _SETTINGS} - set(GROUPS)) == []

@@ -24,7 +24,8 @@ from eks_harness.pools.backends import (
     repo_cache_root,
 )
 from eks_harness.pools.base import DevicePool as DevicePoolBase
-from eks_harness.pools.base import LiveSource, PoolError, PoolHost, device_key, device_name, iso_now, parse_device_key
+from eks_harness.pools.base import (AppTargets, LiveSource, PoolError, PoolHost, device_key, device_name, iso_now,
+                                    parse_device_key)
 
 MOBILE_DRIVER_MARKER = "eks-harness-mobile-driver"
 IOS_READY_TEXT = "Recording started"
@@ -515,19 +516,21 @@ class DevicePool(DevicePoolBase):
     def fingerprints_dir(self) -> Path:
         return self.repo_root / "state" / "devices"
 
-    def clean_app(self, key: str) -> None:
+    def clean_app(self, key: str, apps: AppTargets) -> None:
         device = self.device(key)
         if device["kind"] == "ios" and device.get("udid"):
-            udid, bundle = device["udid"], str(self.config["apps.iosBundleId"])
+            udid = device["udid"]
             if self.ios_state(udid) == "Booted":
-                sh(["xcrun", "simctl", "terminate", udid, bundle], timeout=30)
-                sh(["xcrun", "simctl", "uninstall", udid, bundle], timeout=60)
+                for bundle in apps.ios:
+                    sh(["xcrun", "simctl", "terminate", udid, bundle], timeout=30)
+                    sh(["xcrun", "simctl", "uninstall", udid, bundle], timeout=60)
                 sh(["xcrun", "simctl", "keychain", udid, "reset"], timeout=30)
             (self.fingerprints_dir() / f"{udid}.ios-fingerprint").unlink(missing_ok=True)
         elif device["kind"] == "android":
             adb = tool("adb")
             if adb and self.android_running(device):
-                sh([adb, "-s", device["serial"], "uninstall", str(self.config["apps.androidPackage"])], timeout=60)
+                for package in apps.android:
+                    sh([adb, "-s", device["serial"], "uninstall", package], timeout=60)
                 sh([adb, "-s", device["serial"], "reverse", "--remove-all"], timeout=15)
             folder = self.fingerprints_dir()
             if folder.is_dir():
@@ -653,7 +656,7 @@ class DevicePool(DevicePoolBase):
                 pool.update(descendant_pids(entry.pid, table))
         pool.update(d.get("pid") for d in self.host.devices.values() if d.get("pid"))
         base_avd = str(self.config["devices.androidBaseAvd"] or "")
-        stray_patterns = [str(p) for p in (self.config["devices.strayProcessPatterns"] or [])]
+        stray_patterns = [str(p) for p in self.stray_patterns() if p]
         found = []
         for pid, (_, command) in table.items():
             mobile = (MOBILE_DRIVER_MARKER in command

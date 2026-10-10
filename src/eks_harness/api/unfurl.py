@@ -23,7 +23,8 @@ PREVIEW_BOTS = re.compile(
     r"Embedly|Mattermost-Bot|Rocket\.Chat|Synapse \(bot|ZulipURLPreview|NotionEmbedder|Snap URL Preview|"
     r"kakaotalk-scrap|line-poker|Google-PageRenderer|XING-contenttabreceiver|Yahoo Link Preview",
     re.IGNORECASE)
-KIND_LABELS = {"screenshot": "Screenshot", "video": "Video", "dom": "DOM snapshot", "mhtml": "Page snapshot",
+KIND_LABELS = {"screenshot": "Screenshot", "video": "Video", "audio": "Audio", "dom": "DOM snapshot",
+               "mhtml": "Page snapshot",
                "a11y": "Accessibility tree", "har": "Network log (HAR)", "console": "Console log", "log": "Log",
                "site": "Site", "file": "File"}
 _POSTER_LOCK = threading.Lock()

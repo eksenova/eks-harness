@@ -113,7 +113,7 @@ def _await_reply(ws: ClientConnection, message_id: int, timeout: float) -> dict:
 class ChromeScreencastSource(LiveSource):
     def __init__(self, cdp_url: str, settings: StreamSettings, *, name: str,
                  context_ids: Iterable[str] | None = None, target_id: str | None = None,
-                 no_page_timeout: float = NO_PAGE_TIMEOUT) -> None:
+                 no_page_timeout: float = NO_PAGE_TIMEOUT, exclusive: bool = False) -> None:
         self.cdp_url = cdp_url
         self.settings = settings
         self.name = name
@@ -129,6 +129,8 @@ class ChromeScreencastSource(LiveSource):
         self._order = itertools.count()
         self._session: str | None = None
         self._known_default: set[str] = set()
+        self.exclusive = exclusive
+        self._any_context = False
         self._stop = threading.Event()
         self._lock = threading.Lock()
 
@@ -181,6 +183,8 @@ class ChromeScreencastSource(LiveSource):
         if str(info.get("url", "")).startswith(SKIPPED_URL_PREFIXES):
             return False
         context = info.get("browserContextId")
+        if self._any_context:
+            return True
         if self.context_ids is None:
             return bool(context) and context not in self._known_default
         return context in self.context_ids
@@ -304,10 +308,17 @@ class ChromeScreencastSource(LiveSource):
             raise LiveError(f"the DevTools connection of {self.name} failed: {error}") from error
 
     def _screencast(self) -> Iterator[bytes]:
-        if self.context_ids is None:
-            created = frozenset(self._request("Target.getBrowserContexts").get("browserContextIds") or [])
-        else:
-            created = self.context_ids
+        live = frozenset(self._request("Target.getBrowserContexts").get("browserContextIds") or [])
+        if self.context_ids is not None and not self.context_ids & live:
+            if not self.exclusive:
+                raise LiveError(f"the browser contexts the harness reported for {self.name} no longer exist (the "
+                                f"browser restarted after the lease opened them); release the lease and acquire it "
+                                f"again")
+            log.warning("the browser contexts reported for %s no longer exist; showing any page of the browser",
+                        self.name)
+            self.context_ids = None
+            self._any_context = True
+        created = live if self.context_ids is None else self.context_ids
         self._request("Target.setDiscoverTargets", {"discover": True})
         for info in self._request("Target.getTargets").get("targetInfos") or []:
             context = info.get("browserContextId")

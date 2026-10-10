@@ -23,6 +23,8 @@ import { TagColorDialog } from "../features/tagColors";
 import { Viewer } from "../viewers/Viewer";
 import { viewerKind } from "../viewers/types";
 
+const MEDIA_KINDS = new Set(["video", "audio"]);
+
 let flash: { text: string; until: number } | null = null;
 
 export function setFlash(text: string): void {
@@ -116,7 +118,7 @@ export function ArtifactPage({ owner, name, slug, id, shared = false }: { owner?
   useEffect(() => {
     if (!data || markedFor.current === data.id) return;
     markedFor.current = data.id;
-    if (!data.seen && viewerKind(data) !== "video") {
+    if (!data.seen && !MEDIA_KINDS.has(viewerKind(data))) {
       setSeen(client, [data.id], true, projectId).catch(() => undefined);
     }
   }, [data, client, projectId]);
@@ -161,6 +163,7 @@ export function ArtifactPage({ owner, name, slug, id, shared = false }: { owner?
 
   useKeydown((event) => {
     if (!data) return;
+    if (event.key === "Escape" && document.fullscreenElement) return;
     if (event.key === "Escape" && shortcutAllowed(event) && !(document.activeElement instanceof HTMLElement && document.activeElement.closest(".har-table"))) {
       event.preventDefault();
       void navigate({ to: backHref });
@@ -168,7 +171,8 @@ export function ArtifactPage({ owner, name, slug, id, shared = false }: { owner?
     }
     if (!shortcutAllowed(event)) return;
     const target = event.target as HTMLElement;
-    const inViewer = target.closest?.(".har-table, .video-stage, .video-chrome, .text-frame, .json-tree");
+    const media = MEDIA_KINDS.has(viewerKind(data));
+    const inViewer = media || target.closest?.(".har-table, .text-frame, .json-tree");
     switch (event.key) {
       case "ArrowLeft":
         if (inViewer) return;
@@ -176,6 +180,12 @@ export function ArtifactPage({ owner, name, slug, id, shared = false }: { owner?
         break;
       case "ArrowRight":
         if (inViewer) return;
+        if (nextId) void navigate({ to: hrefFor(nextId) });
+        break;
+      case "[":
+        if (prevId) void navigate({ to: hrefFor(prevId) });
+        break;
+      case "]":
         if (nextId) void navigate({ to: hrefFor(nextId) });
         break;
       case "s":

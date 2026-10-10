@@ -6,6 +6,7 @@ from typing import Any
 
 from eks_harness.drivers.client import WorkerError
 from eks_harness.drivers.profile import (
+    project_hide_selectors,
     LEASE_KINDS,
     WORKER_KINDS,
     load_profile,
@@ -57,8 +58,12 @@ class WorkerDriver:
         pace = pace_from_config(self.context.config)
         manager = WorkerManager(self.context.paths)
         if self.platform == "web":
-            config = web_worker_config(profile, sid=sid, extensions=extensions, pace=pace,
-                                       hide=list(self.context.config["capture.hideSelectors"] or []),
+            from eks_harness.cli.client import HarnessClient
+
+            project = profile.project or self.context.project.project_id
+            with HarnessClient(paths=self.context.paths, config=self.context.config) as client:
+                hide = project_hide_selectors(client, project)
+            config = web_worker_config(profile, sid=sid, extensions=extensions, pace=pace, hide=hide,
                                        playwright_dirs=[node_modules_dir(self.context.paths)])
             handle = manager.ensure("web", sid, config)
         else:

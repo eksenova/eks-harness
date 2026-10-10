@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Sequence
 
+from eks_harness import project_settings
 from eks_harness.api.links import Links
 from eks_harness.api.schemas import (
     LeaseBrief,
@@ -106,7 +107,8 @@ def project_out(links: Links, project: Project, stats: ProjectStats | None, *, a
         created_at=ts_to_datetime(project.created_at), updated_at=ts_to_datetime(project.updated_at),
         session_count=stats.session_count, artifact_count=stats.artifact_count, unseen_count=stats.unseen_count,
         size_bytes=stats.size_bytes, last_activity_at=ts_to_datetime(stats.last_activity_at),
-        project_file_count=stats.project_file_count, active_leases=active_leases, access=access, url=links.project(project.id))
+        project_file_count=stats.project_file_count, active_leases=active_leases, access=access,
+        settings=project_settings.effective(project.settings), url=links.project(project.id))
 
 
 def active_lease_counts(conn: sqlite3.Connection, project_ids: Sequence[str]) -> dict[str, int]:

@@ -17,6 +17,7 @@ from eks_harness.drivers.profile import (
     mobile_worker_config,
     node_modules_dir,
     pace_from_config,
+    project_hide_selectors,
     web_worker_config,
 )
 from eks_harness.drivers.registry import driver_extensions, flow_helpers
@@ -187,7 +188,7 @@ def prepare_app(request: FlowRequest, *, client: Any, paths: Any, config: Any, h
     manager = manager or WorkerManager(paths)
     if platform == "web":
         worker_config = web_worker_config(profile, sid=sid, extensions=extensions, pace=pace,
-                                          hide=list(config["capture.hideSelectors"] or []),
+                                          hide=project_hide_selectors(client, project),
                                           playwright_dirs=[node_modules_dir(paths)])
     else:
         worker_config = mobile_worker_config(profile, sids={platform: sid}, extensions=extensions, pace=pace)

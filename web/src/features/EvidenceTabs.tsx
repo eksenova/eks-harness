@@ -5,8 +5,8 @@ export function EvidenceTabs({ active }: { active: "sessions" | "projects" | "se
     <Tabs
       label="Evidence"
       items={[
-        { label: "Sessions", to: "/evidence", active: active === "sessions" },
-        { label: "Projects", to: "/projects", active: active === "projects" },
+        { label: "Projects", to: "/evidence", active: active === "projects" },
+        { label: "Sessions", to: "/sessions", active: active === "sessions" },
         { label: "Search", to: "/search", active: active === "search" },
         { label: "Clean up", to: "/cleanup", active: active === "cleanup" },
       ]}

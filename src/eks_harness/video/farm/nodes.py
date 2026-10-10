@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import logging
+import platform
 import tarfile
 import tempfile
 import threading
@@ -32,7 +33,7 @@ def _tag(caps: dict[str, Any]) -> str:
     return f"{system}-{machine}" if system else ""
 
 
-def node_hosts(section: dict[str, Any], client: Any = None) -> list[Host]:
+def node_hosts(section: dict[str, Any], client: Any = None, *, skip_this_machine: bool = False) -> list[Host]:
     wanted = set(section.get("nodes") or [])
     skip = set(section.get("exclude") or [])
     owned = client is None
@@ -50,6 +51,8 @@ def node_hosts(section: dict[str, Any], client: Any = None) -> list[Host]:
         if not item.get("online") or item["id"] in skip or (wanted and item["id"] not in wanted):
             continue
         caps = item.get("capabilities") or {}
+        if skip_this_machine and caps.get("hostname") and caps.get("hostname") == platform.node():
+            continue
         slots: list[Slot] = []
         for slot in item.get("slots") or []:
             if section.get("gpu_only", True) and "gpu" not in (slot.get("tags") or []) and any(

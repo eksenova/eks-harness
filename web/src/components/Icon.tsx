@@ -27,7 +27,10 @@ export type IconName =
   | "home"
   | "back"
   | "rotate"
-  | "camera";
+  | "camera"
+  | "volume"
+  | "volume-muted"
+  | "shrink";
 
 const PATHS: Record<IconName, string> = {
   play: "M4.75 2.75v10.5L12.5 8z",
@@ -59,6 +62,9 @@ const PATHS: Record<IconName, string> = {
   back: "M6.25 4L2.75 7.5l3.5 3.5M2.75 7.5h7a3.5 3.5 0 0 1 0 7h-1.5",
   rotate: "M12.75 6.25A5 5 0 1 0 13 9.5M12.75 2.75v3.5h-3.5",
   camera: "M2.75 5.25h2.5l1-1.5h3.5l1 1.5h2.5v7.5h-10.5zM8 6.75a2 2 0 1 0 0 4a2 2 0 1 0 0-4z",
+  volume: "M2.25 6h2.5l3.5-2.75v9.5L4.75 10h-2.5zM10.25 5.75a3 3 0 0 1 0 4.5M12 4a5.5 5.5 0 0 1 0 8",
+  "volume-muted": "M2.25 6h2.5l3.5-2.75v9.5L4.75 10h-2.5zM10.25 6.25l3.5 3.5M13.75 6.25l-3.5 3.5",
+  shrink: "M13.25 6.25h-3.5v-3.5M9.75 6.25l3.5-3.5M2.75 9.75h3.5v3.5M6.25 9.75l-3.5 3.5",
 };
 
 export function Icon({ name, size = 16, className }: { name: IconName; size?: number; className?: string }) {

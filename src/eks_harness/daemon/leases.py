@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from eks_harness import project_settings
 from eks_harness.api.errors import ApiError, bad_request, conflict, lease_released, not_found
 from eks_harness.daemon import events as ev
 from eks_harness.daemon.hooks import on_shutdown, on_startup
@@ -20,7 +21,7 @@ from eks_harness.db.repos import users as users_repo
 from eks_harness.db.repos.leases import Lease
 from eks_harness.ids import is_sid, parse_project_id
 from eks_harness.pools.backends import InstanceRegistry, alive, repo_cache_root
-from eks_harness.pools.base import PoolError, parse_browser_resource
+from eks_harness.pools.base import AppTargets, PoolError, parse_browser_resource
 
 if TYPE_CHECKING:
     from eks_harness.daemon.context import AppContext
@@ -76,6 +77,14 @@ class LeaseManager:
         self.preparing: dict[str, int] = {}
         self.host.binding_source = self.bindings_for_backend
         self.pools.browsers.contexts_for = self.browser_contexts_for
+        self.pools.devices.stray_patterns = self.stray_patterns
+
+    def stray_patterns(self) -> list[str]:
+        return project_settings.union(self.db.conn(), "devices.strayProcessPatterns")
+
+    def app_targets(self, lease: Lease) -> AppTargets:
+        settings = project_settings.for_project(self.db.conn(), lease.project_id)
+        return AppTargets(ios=tuple(settings["apps.iosBundleIds"]), android=tuple(settings["apps.androidPackages"]))
 
     def conn(self):
         return self.db.conn()
@@ -350,7 +359,7 @@ class LeaseManager:
                     time.sleep(1)
                 self.pools.devices.boot(resource)
                 if lease.owner_kind != "manual":
-                    self.pools.devices.clean_app(resource)
+                    self.pools.devices.clean_app(resource, self.app_targets(lease))
             with self.lock:
                 with self.db.transaction() as conn:
                     current = leases_repo.get(conn, lease_id)
@@ -548,7 +557,7 @@ class LeaseManager:
                     self.discard_recording(resource, lease)
                     if lease.owner_kind != "manual" and lease.phase in ("ready", "failed") \
                             and not (self.host.devices.get(resource) or {}).get("busy"):
-                        self.pools.devices.clean_app(resource)
+                        self.pools.devices.clean_app(resource, self.app_targets(lease))
                     with self.lock:
                         device = self.host.devices.get(resource)
                         if device is not None:

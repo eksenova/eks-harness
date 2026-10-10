@@ -20,6 +20,8 @@ eks-harness config set devices.ios 3
 - Leases queue when the pool is busy; `--wait` bounds how long a flow waits.
 - A lease holds its resource while heartbeats arrive (workers heartbeat every 20 s); after
   `lease.idleSeconds` without one it is released and the app or profile is cleaned up.
-- The daemon sweeps strays (`devices.strayProcessPatterns`) and retired simulators
-  (`devices.retireNamePrefixes`).
+- The daemon sweeps strays (each project's `devices.strayProcessPatterns`, on the project's Settings
+  tab) and retired simulators (`devices.retireNamePrefixes`).
+- On release and take-over the apps in the lease project's `apps.iosBundleIds` and
+  `apps.androidPackages` (project settings, lists) are removed from the device.
 - Live views of every device and profile are in the UI (Lab); `eks-harness logs ios:1` reads device logs.

@@ -41,6 +41,7 @@ COPY_CHUNK = 1024 * 1024
 DEFAULT_FILENAMES = {
     "screenshot": "screenshot.png",
     "video": "video.mp4",
+    "audio": "audio.mp3",
     "dom": "dom.html",
     "mhtml": "page.mhtml",
     "a11y": "accessibility.txt",

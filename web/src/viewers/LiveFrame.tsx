@@ -156,6 +156,7 @@ export function LiveFrame({ src, name, running, aspect, viewers, onStart, startL
               setLastFrame(new Date(t));
             }
             setState("live");
+            setError("");
           },
           controller.signal,
         );
@@ -216,7 +217,7 @@ export function LiveFrame({ src, name, running, aspect, viewers, onStart, startL
     label = <span className="strong">Stream ended: {name} is not running.</span>;
     button = <Button onClick={retry}>Start viewing</Button>;
   } else if (state === "reconnecting") {
-    label = <span>Reconnecting (attempt {attempt})</span>;
+    label = <span>Reconnecting (attempt {attempt}){error ? `: ${error}` : ""}</span>;
     button = <Button onClick={() => setWanted(false)}>Stop viewing</Button>;
   } else if (state === "connecting") {
     label = <span>{showConnecting ? "Connecting…" : " "}</span>;

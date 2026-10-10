@@ -21,7 +21,7 @@ export interface PickedFile {
 
 type RowState = { status: "waiting" } | { status: "uploading"; pct: number | null } | { status: "done"; url: string } | { status: "failed"; message: string };
 
-const KINDS = ["screenshot", "video", "dom", "mhtml", "a11y", "har", "console", "log", "file"];
+const KINDS = ["screenshot", "video", "audio", "dom", "mhtml", "a11y", "har", "console", "log", "file"];
 
 async function readEntry(entry: FileSystemEntry, prefix: string, out: PickedFile[]): Promise<void> {
   if (entry.isFile) {

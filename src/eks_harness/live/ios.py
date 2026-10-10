@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import errno
+import glob
 import logging
 import os
 import select
@@ -386,8 +387,20 @@ class IosLiveSource(LiveSource):
         if time.monotonic() - segment.opened > NO_WRITER_TIMEOUT:
             raise FifoRejected(f"simctl did not write to the FIFO within {NO_WRITER_TIMEOUT:.0f}s")
 
+    @staticmethod
+    def _staging_file(segment: _Segment) -> Path | None:
+        pattern = glob.escape(str(segment.path)) + ".sb-*"
+        found = []
+        for candidate in glob.glob(pattern):
+            try:
+                found.append((os.stat(candidate).st_mtime, candidate))
+            except FileNotFoundError:
+                continue
+        return Path(max(found)[1]) if found else None
+
     def _read_file(self, segment: _Segment) -> Iterator[bytes]:
         handle = None
+        followed = False
         try:
             while not self._stop.is_set():
                 if handle is None:
@@ -410,6 +423,18 @@ class IosLiveSource(LiveSource):
                     continue
                 if not segment.process.alive():
                     return
+                if not segment.bytes and not followed:
+                    staging = self._staging_file(segment)
+                    if staging is not None:
+                        log.info("simctl records %s into %s; following it", self.name, staging.name)
+                        followed = True
+                        try:
+                            replacement = open(staging, "rb")
+                        except FileNotFoundError:
+                            continue
+                        handle.close()
+                        handle = replacement
+                        continue
                 self._stop.wait(0.05)
         finally:
             if handle is not None:
