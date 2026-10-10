@@ -14,6 +14,8 @@ from eks_harness.review import (
     ExpectationError,
     load_markers,
     make_sheets,
+    media,
+    ocr,
     parse_at,
     parse_expectations,
     parse_markers,
@@ -21,8 +23,7 @@ from eks_harness.review import (
     register,
     run_checks,
 )
-from eks_harness.review import media, ocr
-from eks_harness.review.checks.audio import detect_onsets
+from eks_harness.review.checks.audio import detect_onsets, grid_phase, onset_envelope
 from eks_harness.review.checks.frames import match_template, pixel_box
 from eks_harness.review.sheet import auto_frame_count, layout_for, plan_tiles, split
 
@@ -270,6 +271,71 @@ def test_onset_detector_on_clicks() -> None:
         samples[start:start + 160] = np.sin(np.arange(160) * 0.6) * 0.7
     found = detect_onsets(samples, rate)
     assert [round(t, 3) for t in found] == [0.3, 0.8, 1.55]
+
+
+def _string_runs(rate: int, beat: float, accent_shift: float = 0.0) -> np.ndarray:
+    seconds = 10.0
+    samples = np.zeros(int(rate * seconds), dtype=np.float32)
+    rng = np.random.default_rng(7)
+    burst = np.sin(np.arange(200) * 0.45) * np.hanning(200)
+    sixteenth = beat / 4
+    t = 0.3
+    index = 0
+    while t < seconds - 0.1:
+        start = int((t + (accent_shift if index % 4 == 0 else 0.0)) * rate)
+        gain = 0.9 if index % 4 == 0 else 0.25 + 0.05 * rng.random()
+        samples[start:start + 200] += (burst * gain).astype(np.float32)
+        t += sixteenth
+        index += 1
+    samples[int(0.3 * rate):int(0.3 * rate) + 2000] += np.sin(np.arange(2000) * 0.2) * 3.0
+    return samples
+
+
+def test_onsets_after_a_loud_opening_are_still_found() -> None:
+    rate = 16000
+    samples = np.zeros(rate * 3, dtype=np.float32)
+    samples[int(0.2 * rate):int(0.2 * rate) + 800] = np.sin(np.arange(800) * 0.5) * 8.0
+    for t in (1.0, 1.6, 2.2):
+        start = int(t * rate)
+        samples[start:start + 160] = np.sin(np.arange(160) * 0.6) * 0.3
+    found = detect_onsets(samples, rate)
+    assert [round(t, 2) for t in found if t > 0.5] == [1.0, 1.6, 2.2]
+
+
+def test_grid_phase_finds_a_shifted_grid() -> None:
+    rate, beat = 16000, 0.44
+    samples = _string_runs(rate, beat)
+    flux = onset_envelope(samples, rate)
+    grid = [0.3 + beat * i for i in range(1, 20)]
+    offset, alignment = grid_phase(flux, rate, grid, 30.0)
+    assert abs(offset) < 1 / 30 and alignment > 0.98
+    offset, alignment = grid_phase(flux, rate, [t + beat / 2 for t in grid], 30.0)
+    assert abs(offset + beat / 2) < 1 / 30 and alignment < 0.9
+
+
+def test_beats_check_uses_the_strongest_attack_of_each_beat(tmp_path: Path) -> None:
+    if not synth.have_ffmpeg():
+        pytest.skip("ffmpeg/ffprobe not on PATH")
+    import wave
+
+    rate, beat = 16000, 0.44
+    samples = _string_runs(rate, beat)
+    audio = tmp_path / "runs.wav"
+    with wave.open(str(audio), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(rate)
+        out.writeframes((np.clip(samples / 4.0, -1, 1) * 32767).astype("<i2").tobytes())
+    clip = tmp_path / "runs.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=gray:s=320x240:r=30:d=10",
+                    "-i", str(audio), "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(clip)],
+                   check=True)
+    grid = [0.3 + beat * i for i in range(1, 20)]
+    results = _report(clip, [{"kind": "beats", "params": {"times": grid}},
+                             {"kind": "beats", "params": {"times": [t + beat / 2 for t in grid]}}])
+    assert results[0].status == "pass", results[0].detail
+    assert abs(results[0].data["phaseFrames"]) <= 1
+    assert results[1].status == "fail" and abs(results[1].data["phaseFrames"]) > 4
 
 
 def test_audio_checks_skip_without_audio(silent_clip: Path) -> None:

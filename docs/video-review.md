@@ -125,12 +125,17 @@ frame rate for the frame deltas. Relative template paths resolve against the exp
 | `safe_area` | | `margins` 0.05 (number, [v, h] or [top, right, bottom, left]; fractions or pixels), `background` auto or a colour, `tolerance` 40, `max_fraction` 0.01, `sample_fps` 4, `window` | sampled frames with content in the margins |
 | `loudness` | | `lufs`, `lufs_tolerance` 1, `true_peak_max` -1, `require_audio` | integrated loudness, true peak and range (EBU R128) |
 | `onset` | `t` | `sensitivity` 1, `window`, `require_audio` | nearest audio onset (spectral flux, refined on the envelope) |
-| `beats` | | `times` (or `beats`), `min_ratio` 0.9, `sensitivity` 1, `require_audio` | share of beats with an onset within the tolerance, with per-beat misses |
+| `beats` | | `times` (or `beats`), `min_ratio` 0.9, `reach` 0.25, `require_audio` | for each beat, the strongest attack between it and halfway to its neighbours (at most `reach` s) and its frame delta; passes when `min_ratio` of them are within the tolerance and the whole grid is in phase with the attacks (the offset that collects the most attack energy is within the tolerance) |
 
 Presence modes (`text`, `visual`): `appears` (default) and `disappears` search the window (by default
 `t` +/- max(1.5 s, 3 tolerances)) coarsely and then bisect to the exact frame; `present` and `absent`
 check the frame at `t`, or frames from `t` to `until`. Boxes are `[x, y, w, h]` in source pixels, or
 fractions of the frame when every value is at most 1.
+
+`onset` and the detected onsets list normalize the spectral flux by its 99.5th percentile, so a loud
+opening does not hide the attacks after it. Dense music (string runs, hi-hats) has attacks between the
+beats as loud as the beats themselves: there the grid phase is the reliable measure, and `min_ratio`
+around 0.65 still separates a correct grid (about 0.7) from one half a beat off (about 0.25).
 
 ### Plugin checks
 

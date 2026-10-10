@@ -60,6 +60,11 @@ and the report link to each other on their artifact pages.
 - Boxes are `[x, y, w, h]` in source pixels, or fractions when every value is at most 1.
 - OCR is local: macOS Vision when available, otherwise tesseract (`engine` picks one).
 - Audio checks skip a video without audio unless `require_audio` is true.
+- `beats` proves music sync: each beat's strongest attack (up to halfway to its neighbours) must be
+  on the beat, and the whole grid must be in phase with the attacks (`phaseFrames` in the result). For
+  dense music (string runs, hi-hats) use `min_ratio` about 0.65; the phase still catches a grid that
+  is off by an eighth. Text, logo and stamp rows only prove the video follows the beat sheet, not
+  that the beat sheet follows the music: always add a `beats` row.
 - Repos and plugins add check kinds with a `video_check` contribution (a class or function with
   `kind` and `run(ctx, item)`).
 

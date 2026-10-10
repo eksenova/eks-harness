@@ -4,27 +4,40 @@ import math
 
 import numpy as np
 
-from eks_harness.review.checks import CheckResult, Context, Expectation, ExpectationError, check
+from eks_harness.review.checks import (
+    CheckResult,
+    Context,
+    Expectation,
+    ExpectationError,
+    check,
+)
 
 RATE = 16000
 WINDOW = 512
 HOP = 80
 
 
-def detect_onsets(samples: np.ndarray, rate: int = RATE, *, sensitivity: float = 1.0,
-                  min_gap: float = 0.05) -> list[float]:
+PHASE_REACH = 0.25
+
+
+def onset_envelope(samples: np.ndarray, rate: int = RATE) -> np.ndarray:
     if samples.size < WINDOW * 2:
-        return []
+        return np.zeros(0, dtype=np.float32)
     padded = np.pad(samples.astype(np.float32), (WINDOW // 2, WINDOW // 2))
     count = 1 + (padded.size - WINDOW) // HOP
     index = np.arange(WINDOW)[None, :] + HOP * np.arange(count)[:, None]
     frames = padded[index] * np.hanning(WINDOW).astype(np.float32)
     magnitude = np.log1p(100.0 * np.abs(np.fft.rfft(frames, axis=1)))
     flux = np.maximum(0.0, np.diff(magnitude, axis=0)).sum(axis=1)
-    flux = np.concatenate([[0.0], flux])
-    if flux.max() <= 1e-9:
+    return np.concatenate([[0.0], flux])
+
+
+def detect_onsets(samples: np.ndarray, rate: int = RATE, *, sensitivity: float = 1.0,
+                  min_gap: float = 0.05) -> list[float]:
+    flux = onset_envelope(samples, rate)
+    if flux.size == 0 or flux.max() <= 1e-9:
         return []
-    flux = flux / flux.max()
+    flux = flux / max(float(np.percentile(flux, 99.5)), 1e-9)
     half = 12
     padded_flux = np.pad(flux, (half, half), mode="edge")
     windows = np.lib.stride_tricks.sliding_window_view(padded_flux, 2 * half + 1)
@@ -61,8 +74,43 @@ def refine_onset(samples: np.ndarray, rate: int, t: float, before: float = 0.03,
     return (a + int(rising[0])) / rate if rising.size else t
 
 
+def strongest_attack(samples: np.ndarray, flux: np.ndarray, rate: int, a: float, b: float) -> float | None:
+    lo, hi = max(0, int(np.ceil(a * rate / HOP))), min(flux.size, int(b * rate / HOP) + 1)
+    if hi <= lo or flux[lo:hi].max() <= 1e-9:
+        return None
+    return refine_onset(samples, rate, (lo + int(np.argmax(flux[lo:hi]))) * HOP / rate)
+
+
+def grid_phase(flux: np.ndarray, rate: int, times: list[float], fps: float,
+               reach: float = PHASE_REACH) -> tuple[float, float]:
+    step = HOP / rate
+    width = max(1, round(1.0 / fps / step))
+    offsets = np.arange(-reach, reach + 1e-9, 1.0 / (fps * 8))
+    grid = np.asarray(times, dtype=np.float64)
+
+    def score(offset: float) -> float:
+        index = np.round((grid + offset) / step).astype(int)
+        return float(sum(flux[max(0, i - width):i + width + 1].max() for i in index if 0 <= i < flux.size))
+
+    scores = np.array([score(o) for o in offsets])
+    best = int(np.argmax(scores))
+    if scores[best] <= 0:
+        return 0.0, 0.0
+    lo = hi = best
+    while lo > 0 and scores[lo - 1] >= scores[best] * 0.999:
+        lo -= 1
+    while hi + 1 < scores.size and scores[hi + 1] >= scores[best] * 0.999:
+        hi += 1
+    zero = scores[int(np.argmin(np.abs(offsets)))]
+    return float((offsets[lo] + offsets[hi]) / 2), float(zero / scores[best])
+
+
 def _onsets(ctx: Context, sensitivity: float) -> list[float]:
     return ctx.cached(f"onsets:{sensitivity}", lambda: detect_onsets(ctx.audio(RATE), RATE, sensitivity=sensitivity))
+
+
+def _envelope(ctx: Context) -> np.ndarray:
+    return ctx.cached("onset-envelope", lambda: onset_envelope(ctx.audio(RATE), RATE))
 
 
 def _no_audio(ctx: Context, item: Expectation) -> CheckResult | None:
@@ -118,25 +166,36 @@ def beats(ctx: Context, item: Expectation) -> CheckResult:
     times = item.params.get("times") or item.params.get("beats")
     if not times:
         raise ExpectationError("beats needs params.times (a list of seconds)")
-    found = np.array(_onsets(ctx, float(item.params.get("sensitivity", 1.0))))
-    ctx.cached("onsets", lambda: found.tolist())
+    grid = sorted(float(x) for x in times)
+    samples = ctx.audio(RATE)
+    flux = _envelope(ctx)
+    ctx.cached("onsets", lambda: _onsets(ctx, float(item.params.get("sensitivity", 1.0))))
     tolerance = item.tolerance_frames
+    reach = float(item.params.get("reach", PHASE_REACH))
     rows = []
-    for t in (float(x) for x in times):
-        if found.size == 0:
-            rows.append({"t": t, "measured": None, "deltaFrames": None, "ok": False})
+    for i, t in enumerate(grid):
+        left = (t - grid[i - 1]) / 2 if i else reach
+        right = (grid[i + 1] - t) / 2 if i + 1 < len(grid) else reach
+        found = strongest_attack(samples, flux, RATE, t - min(left, reach), t + min(right, reach))
+        if found is None:
+            rows.append({"t": round(t, 4), "measured": None, "deltaFrames": None, "ok": False})
             continue
-        nearest = float(found[np.abs(found - t).argmin()])
-        delta = round((nearest - t) * ctx.fps)
-        rows.append({"t": round(t, 4), "measured": round(nearest, 4), "deltaFrames": delta,
+        delta = round((found - t) * ctx.fps)
+        rows.append({"t": round(t, 4), "measured": round(found, 4), "deltaFrames": delta,
                      "ok": abs(delta) <= tolerance})
     matched = sum(1 for r in rows if r["ok"])
     ratio = matched / len(rows)
     minimum = float(item.params.get("min_ratio", 0.9))
     deltas = [abs(r["deltaFrames"]) for r in rows if r["deltaFrames"] is not None]
     worst = max(deltas) if deltas else None
-    detail = (f"{matched}/{len(rows)} beats within {tolerance}f (need {minimum:.0%}), "
-              f"median {float(np.median(deltas)) if deltas else 0:.1f}f, worst {worst}f")
+    offset, alignment = grid_phase(flux, RATE, grid, ctx.fps, reach) if flux.size else (0.0, 0.0)
+    phase_frames = offset * ctx.fps
+    phase_ok = abs(phase_frames) <= tolerance or alignment >= 0.98
+    detail = (f"{matched}/{len(rows)} beats have their strongest attack within {tolerance}f (need {minimum:.0%}), "
+              f"median {float(np.median(deltas)) if deltas else 0:.1f}f, worst {worst}f; "
+              f"grid phase {phase_frames:+.1f}f ({alignment:.0%} of the best alignment)")
     misses = [r for r in rows if not r["ok"]]
-    return ctx.result(item, ok=ratio >= minimum, detail=detail,
-                      data={"matched": matched, "total": len(rows), "misses": misses[:40]})
+    return ctx.result(item, ok=ratio >= minimum and phase_ok, detail=detail,
+                      data={"matched": matched, "total": len(rows), "phaseOffset": round(offset, 4),
+                            "phaseFrames": round(phase_frames, 2), "alignment": round(alignment, 3),
+                            "misses": misses[:40]})
