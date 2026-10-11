@@ -35,6 +35,7 @@ export interface MediaState {
   duration: number;
   volume: number;
   muted: boolean;
+  autoMuted: boolean;
   rate: string;
   fullscreen: boolean;
   setRate: (rate: string) => void;
@@ -58,16 +59,19 @@ export interface MediaState {
 export function useMedia(
   ref: RefObject<HTMLMediaElement | null>,
   regionRef: RefObject<HTMLElement | null>,
-  options: { initialTime: number; initialDuration: number; onPause?: (time: number) => void; onEnded?: () => void },
+  options: { initialTime: number; initialDuration: number; autoplay?: boolean; onPause?: (time: number) => void; onEnded?: () => void },
 ): MediaState {
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(options.initialTime);
   const [duration, setDuration] = useState(options.initialDuration);
   const [volume, setVolumeState] = useState(storedVolume);
   const [muted, setMuted] = useState(() => readStored(MUTED_KEY) === "1");
+  const [autoMuted, setAutoMuted] = useState(false);
   const [rate, setRate] = useState("1");
   const [fullscreen, setFullscreen] = useState(false);
   const initialTime = useRef(options.initialTime);
+  const autoplayPending = useRef(Boolean(options.autoplay));
+  const forcedMute = useRef(false);
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
@@ -125,6 +129,8 @@ export function useMedia(
   }, []);
 
   const toggleMute = useCallback(() => {
+    forcedMute.current = false;
+    setAutoMuted(false);
     setMuted((current) => {
       const next = !current;
       writeStored(MUTED_KEY, next ? "1" : "0");
@@ -159,6 +165,17 @@ export function useMedia(
         media.currentTime = Math.min(initialTime.current, Number.isFinite(media.duration) ? media.duration : initialTime.current);
         initialTime.current = 0;
       }
+      if (autoplayPending.current) {
+        autoplayPending.current = false;
+        void media.play().catch((error: unknown) => {
+          if (!(error instanceof DOMException) || error.name !== "NotAllowedError" || media.muted) return;
+          forcedMute.current = true;
+          media.muted = true;
+          setMuted(true);
+          setAutoMuted(true);
+          void media.play().catch(() => undefined);
+        });
+      }
     },
     onDurationChange: () => {
       const media = ref.current;
@@ -167,6 +184,11 @@ export function useMedia(
     onVolumeChange: () => {
       const media = ref.current;
       if (!media) return;
+      if (forcedMute.current) {
+        if (media.muted) return;
+        forcedMute.current = false;
+        setAutoMuted(false);
+      }
       if (media.muted !== muted) {
         setMuted(media.muted);
         writeStored(MUTED_KEY, media.muted ? "1" : "0");
@@ -178,7 +200,7 @@ export function useMedia(
     },
   };
 
-  return { playing, time, duration, volume, muted, rate, fullscreen, setRate, setVolume, toggleMute, toggle, seekTo, seekBy, toggleFullscreen, bind };
+  return { playing, time, duration, volume, muted, autoMuted, rate, fullscreen, setRate, setVolume, toggleMute, toggle, seekTo, seekBy, toggleFullscreen, bind };
 }
 
 function ownsKey(event: KeyboardEvent, region: HTMLElement | null, keyboard: boolean): boolean {

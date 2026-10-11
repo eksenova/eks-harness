@@ -201,7 +201,7 @@ def _fallback_share_page(ctx: AppContext, share: Share, artifact: Artifact) -> H
     elif artifact.mime.startswith("image/") and media.is_inline(artifact.kind, artifact.mime):
         viewer = f'<img src="{raw}" alt="{html.escape(artifact.caption or artifact.filename)}">'
     elif artifact.mime.startswith("video/"):
-        viewer = f'<video src="{raw}" controls preload="metadata"></video>'
+        viewer = f'<video src="{raw}" controls autoplay muted playsinline preload="metadata"></video>'
     elif media.is_inline(artifact.kind, artifact.mime):
         viewer = f'<iframe sandbox src="{raw}" title="{name}"></iframe>'
     else:

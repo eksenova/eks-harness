@@ -446,6 +446,28 @@
   min-height: 320px;
   padding: var(--s-4);
   background: var(--stage);
+  position: relative;
+}
+
+.unmute-pill {
+  position: absolute;
+  top: var(--s-5);
+  left: var(--s-5);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--stage-rule);
+  background: var(--stage-2);
+  color: var(--stage-ink);
+  font: inherit;
+  font-size: var(--fs-13);
+  cursor: pointer;
+}
+
+.unmute-pill:hover,
+.unmute-pill:focus-visible {
+  border-color: var(--stage-ink-2);
 }
 
 @media (max-width: 1099px) {

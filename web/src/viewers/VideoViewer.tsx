@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Icon } from "../components/Icon";
 import { MediaChrome, useMedia, useMediaKeys } from "./media";
 import type { ViewerProps } from "./types";
 
@@ -9,6 +10,7 @@ export function VideoViewer({ artifact, rawUrl, params, setParams, shareMode, on
   const media = useMedia(ref, regionRef, {
     initialTime: Number(params.t) || 0,
     initialDuration: (artifact.durationMs ?? 0) / 1000,
+    autoplay: true,
     onPause: (time) => setParams({ t: time > 0 ? time.toFixed(1) : null }, { replace: true }),
     onEnded: () => {
       if (!shareMode) onEnded?.();
@@ -38,6 +40,12 @@ export function VideoViewer({ artifact, rawUrl, params, setParams, shareMode, on
             onError={() => setFailed(true)}
           />
         )}
+        {!failed && media.autoMuted ? (
+          <button type="button" className="unmute-pill" onClick={media.toggleMute}>
+            <Icon name="volume-muted" />
+            Unmute
+          </button>
+        ) : null}
       </div>
       <MediaChrome media={media} label="video" />
       {!shareMode && !media.fullscreen ? <p className="viewer-note">{artifact.seen ? "Seen" : "Marked as seen when played to the end."}</p> : null}
