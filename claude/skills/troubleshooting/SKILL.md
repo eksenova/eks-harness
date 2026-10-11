@@ -14,7 +14,7 @@ description: "Diagnose eks-harness problems: hub not reachable, auth, stuck leas
 | device will not boot | `eks-harness devices list`; `devices reset <id> --confirm <name>`; `logs ios:1` |
 | worker will not start | `eks-harness driver workers`; `driver install web` (Playwright); the worker log path in its record |
 | flow fails at a step | the report's failure block (url, errors, alerts) and the failure screenshot; rerun with `-v` |
-| backend fails | `eks-harness backend logs --definition <d>` and `--process <p>`; `backend stop --final`, then ensure |
+| backend fails | `eks-harness backend logs --id <backend>` and `--process <p>`; `backend list` shows its error and leases; `backend acquire --restart` replaces it for every holder, `backend stop --cleanup` drops it |
 | render fails | `eks-harness video doctor`; Blender: `EKS_HARNESS_BLENDER` and the plugin enabled; WebScene: `driver install web` |
 | node offline | `eks-harness node show <id>`; on the node run `eks-harness node serve` in the foreground |
 | plugin missing | `eks-harness plugin list` (pending approval, changed, error) and `plugin show <id>` |

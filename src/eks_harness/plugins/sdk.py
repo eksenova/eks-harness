@@ -35,6 +35,68 @@ class ProcessSpec:
 
 
 @dataclass(frozen=True)
+class Secret:
+    value: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"$secret": self.value}
+
+    def __repr__(self) -> str:
+        return "Secret(<redacted>)"
+
+
+def _wire(value: Any) -> Any:
+    if isinstance(value, Secret):
+        return value.as_dict()
+    if isinstance(value, Mapping):
+        return {str(k): _wire(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_wire(v) for v in value]
+    return value
+
+
+@dataclass(frozen=True)
+class BackendInfo:
+    url: str = ""
+    urls: dict[str, str] = field(default_factory=dict)
+    ports: dict[str, int] = field(default_factory=dict)
+    credentials: dict[str, Any] = field(default_factory=dict)
+    env: dict[str, str | Secret] = field(default_factory=dict)
+    secret_env: tuple[str, ...] = ()
+    commit: str = ""
+    branch: str = ""
+    version: str = ""
+    worktree: str = ""
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"url": self.url, "urls": dict(self.urls), "ports": dict(self.ports),
+                "credentials": _wire(self.credentials), "env": _wire(self.env),
+                "secretEnv": sorted(set(self.secret_env)), "commit": self.commit, "branch": self.branch,
+                "version": self.version, "worktree": self.worktree, "extra": _wire(self.extra)}
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> BackendInfo:
+        def reveal(value: Any) -> Any:
+            if isinstance(value, Mapping) and set(value) == {"$secret"}:
+                return value["$secret"]
+            if isinstance(value, Mapping):
+                return {str(k): reveal(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [reveal(v) for v in value]
+            return value
+
+        return cls(url=str(data.get("url") or ""), urls=dict(data.get("urls") or {}),
+                   ports={str(k): int(v) for k, v in (data.get("ports") or {}).items()},
+                   credentials=reveal(dict(data.get("credentials") or {})),
+                   env={str(k): str(reveal(v)) for k, v in (data.get("env") or {}).items()},
+                   secret_env=tuple(data.get("secretEnv") or data.get("secret_env") or ()),
+                   commit=str(data.get("commit") or ""), branch=str(data.get("branch") or ""),
+                   version=str(data.get("version") or ""), worktree=str(data.get("worktree") or ""),
+                   extra=reveal(dict(data.get("extra") or {})))
+
+
+@dataclass(frozen=True)
 class BackendSpec:
     processes: list[ProcessSpec] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
@@ -42,12 +104,15 @@ class BackendSpec:
     files: list[dict[str, Any]] = field(default_factory=list)
     workdir: str | None = None
     inherit_env: bool = True
+    info: BackendInfo | None = None
 
     def as_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"processes": [], "env": self.env, "exports": self.exports, "files": self.files,
                                "inheritEnv": self.inherit_env}
         if self.workdir:
             out["workdir"] = self.workdir
+        if self.info is not None:
+            out["info"] = self.info.as_dict()
         for process in self.processes:
             item: dict[str, Any] = {"name": process.name, "command": process.command, "env": process.env}
             for key in ("port", "cwd"):
@@ -86,6 +151,19 @@ class Backend(Protocol):
     def prepare(self, context: Mapping[str, Any]) -> None: ...
     def spec(self, context: Mapping[str, Any]) -> BackendSpec | dict[str, Any]: ...
     def teardown(self, context: Mapping[str, Any], final: bool = False) -> None: ...
+
+
+@runtime_checkable
+class ManagedBackend(Protocol):
+    def describe(self) -> dict[str, Any]: ...
+    def start(self, context: Mapping[str, Any]) -> BackendInfo | dict[str, Any]: ...
+    def health(self, context: Mapping[str, Any]) -> bool: ...
+    def stop(self, context: Mapping[str, Any]) -> None: ...
+    def cleanup(self, context: Mapping[str, Any]) -> None: ...
+
+
+BACKEND_HOOKS = ("describe", "fingerprint", "prepare", "spec", "start", "health", "info", "stop", "cleanup",
+                 "teardown", "seed", "snapshot", "restore")
 
 
 @runtime_checkable
@@ -189,10 +267,12 @@ Factory = Callable[[PluginContext], Any]
 
 __all__ = [
     "API_VERSION",
+    "BACKEND_HOOKS",
     "ApiRoutes",
     "AppProfile",
     "Backend",
     "BackendChoice",
+    "BackendInfo",
     "BackendPolicy",
     "BackendSpec",
     "CliCommands",
@@ -204,6 +284,7 @@ __all__ = [
     "Fake",
     "Health",
     "LoginProvider",
+    "ManagedBackend",
     "McpTools",
     "NodeCapability",
     "Persona",
@@ -212,5 +293,6 @@ __all__ = [
     "Ready",
     "SceneEngine",
     "ScoreTrack",
+    "Secret",
     "Seeder",
 ]

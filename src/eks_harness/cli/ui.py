@@ -14,9 +14,10 @@ from prompt_toolkit.shortcuts import choice
 from prompt_toolkit.styles import Style
 from prompt_toolkit.validation import ValidationError, Validator
 from rich import box
-from rich.console import Console
+from rich.console import Console, Group
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -48,8 +49,8 @@ PROMPT_STYLE = Style.from_dict({
 
 ASCII_FOLD = str.maketrans("çğıöşüâîûÇĞİÖŞÜÂÎÛ", "cgiosuaiuCGIOSUAIU")
 
-console = Console(highlight=False)
-err = Console(highlight=False, stderr=True)
+console = Console(highlight=False, soft_wrap=True)
+err = Console(highlight=False, stderr=True, soft_wrap=True)
 
 
 class CliExit(Exception):
@@ -75,19 +76,24 @@ def fail(message: str, code: int = EXIT_ERROR) -> NoReturn:
 
 
 def ok(message: str) -> None:
-    err.print(f"[bold green]✓[/] {message}")
+    err.print(f"[bold green]✓[/] {message}", soft_wrap=True)
 
 
 def warn(message: str) -> None:
-    err.print(f"[bold yellow]![/] {message}")
+    err.print(f"[bold yellow]![/] {message}", soft_wrap=True)
 
 
 def error(message: str) -> None:
-    err.print(f"[bold red]✗[/] {message}")
+    err.print(f"[bold red]✗[/] {message}", soft_wrap=True)
 
 
 def info(message: str) -> None:
-    err.print(f"[{HINT}]{message}[/]")
+    err.print(f"[{HINT}]{message}[/]", soft_wrap=True)
+
+
+def write_line(text: str) -> None:
+    sys.stdout.write(f"{text}\n")
+    sys.stdout.flush()
 
 
 def print_json(data: Any) -> None:
@@ -103,13 +109,21 @@ def print_links(links: dict[str, Any], keys: Sequence[str] = ("rawUrl", "url", "
     sys.stdout.flush()
 
 
-def kv_panel(title: str, rows: Iterable[tuple[str, Any]]) -> Panel:
+def is_url(value: Any) -> bool:
+    return isinstance(value, str) and value.startswith(("http://", "https://")) and " " not in value
+
+
+def kv_panel(title: str, rows: Iterable[tuple[str, Any]]) -> Group:
     table = Table.grid(padding=(0, 2))
     table.add_column(style="bold")
     table.add_column()
+    links: list[Text] = []
     for key, value in rows:
-        table.add_row(str(key), "" if value is None else str(value))
-    return Panel(table, title=f"[bold]{title}[/]", border_style=BORDER, box=box.ROUNDED)
+        if is_url(value):
+            links.append(Text(f"{key}: {value}"))
+        else:
+            table.add_row(str(key), "" if value is None else str(value))
+    return Group(Panel(table, title=f"[bold]{title}[/]", border_style=BORDER, box=box.ROUNDED), *links)
 
 
 def table(columns: Sequence[str | tuple[str, dict]], rows: Iterable[Sequence[Any]], title: str | None = None) -> Table:

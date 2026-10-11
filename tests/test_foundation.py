@@ -312,7 +312,6 @@ def test_fake_pools(config: Config, tmp_path: Path) -> None:
     resource = pools.browsers.allocate(set())
     assert resource == "browser:1:1"
     assert pools.browsers.ensure(1).startswith("fake://")
-    pools.host.binding_source = lambda backend_id: ["lease browser:1:1"]
     record = pools.backends.ensure({"definition": "api", "instance": "session:x"})
     assert record["status"] == "running" and record["ports"]["api"] >= 5400 and record["bindings"]
     pools.backends.stop(record["id"], final=True, reason="test")

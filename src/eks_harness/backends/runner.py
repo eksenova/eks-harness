@@ -11,7 +11,9 @@ from eks_harness.config import load as load_config
 from eks_harness.paths import resolve_paths
 from eks_harness.plugins import PluginHost
 
-STEPS = ("describe", "fingerprint", "prepare", "spec", "teardown", "seed", "snapshot", "restore", "health")
+STEPS = ("describe", "fingerprint", "prepare", "spec", "start", "health", "info", "stop", "cleanup", "teardown",
+         "seed", "snapshot", "restore")
+REQUIRED = ("describe", "fingerprint", "spec", "start", "info")
 
 
 def _plain(value: Any) -> Any:
@@ -39,10 +41,10 @@ def main(argv: list[str] | None = None) -> int:
     backend = host.load(host.contribution("backend", args.contribution, tree), tree)
     method = getattr(backend, args.step, None)
     if method is None:
-        if args.step in ("describe", "fingerprint", "spec"):
+        if args.step in REQUIRED:
             print(f"{args.plugin}:{args.contribution} does not implement {args.step}", file=sys.stderr)
             return 2
-        print(json.dumps({}))
+        print(json.dumps({"healthy": True} if args.step == "health" else {}))
         return 0
     kwargs: dict[str, Any] = {}
     if args.step == "teardown":
@@ -55,6 +57,10 @@ def main(argv: list[str] | None = None) -> int:
     result = _plain(result)
     if args.step == "fingerprint" and isinstance(result, str):
         result = {"fingerprint": result}
+    if args.step == "health" and not isinstance(result, dict):
+        result = {"healthy": True if result is None else bool(result)}
+    if args.step == "describe":
+        result = {**(result or {}), "implements": [step for step in STEPS if callable(getattr(backend, step, None))]}
     print(json.dumps(result if result is not None else {}, ensure_ascii=False, default=str))
     return 0
 

@@ -17,7 +17,7 @@ nodes, and renders **videos** and **scores** (one clock for edits, Blender, web 
 | Check a UI change in the running app | a flow: `eks-harness flow run <app>/.harness/flows/x-check.py` | `eks-harness:flows` |
 | Drive a device or page step by step | MCP `driver_act` / `driver_observe` / `driver_capture` | `eks-harness:web`, `:ios`, `:android` |
 | Control a React Native app's state or UI live | RN bridge commands (`patch`, `inject`, `dispatch`, `arm`) | `eks-harness:react-native` |
-| Start the app's backend, seed it, log in as a persona | `eks-harness backend ensure`, `backend seed`, `backend personas` | `eks-harness:backends` |
+| Run the app's backend, seed it, log in as a persona | `eks-harness backend acquire` (a shared lease), `flow run --backend`, `backend seed`, `backend personas` | `eks-harness:backends` |
 | Hand evidence to a PR or a person | `eks-harness share create`, artifact links | `eks-harness:evidence` |
 | Annotate a screenshot | `eks-harness annotate` (images only) | `eks-harness:annotation` |
 | Edit or render a video | `eks-harness video render`, MCP `video_*` | `eks-harness:video-editing` |
@@ -38,8 +38,11 @@ nodes, and renders **videos** and **scores** (one clock for edits, Blender, web 
   per-app `.harness/app.toml`, `.harness/app.py` and `.harness/flows/`.
 - Repo plugins live in `.harness/plugins/<name>/harness-plugin.toml`; they load after approval
   (`eks-harness plugin trust <id>`) or when `project.toml` pre-trusts them.
-- One harness instance per Claude session (`CLAUDE_CODE_SESSION_ID`); leases are released after their
-  idle grace, or explicitly with `eks-harness lease release`.
+- One harness instance per Claude session (`CLAUDE_CODE_SESSION_ID`). Leases come in two kinds: short,
+  exclusive driver leases (browser, simulator, emulator) and shared backend leases. Acquire a backend lease
+  once (or rely on a shared one), take driver leases linked to it (`--backend`) for as short as possible,
+  and release both promptly (`lease release`, `backend release`). Unrenewed leases expire; a backend
+  nobody holds is stopped and cleaned up after its idle timeout.
 - Never start a harness the user did not ask for; when a UI change stays unverified, say so.
 - Every screenshot and contact sheet you produce must be opened with Read before you report; the
   plugin's Stop hook enforces it.

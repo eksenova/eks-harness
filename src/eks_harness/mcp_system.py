@@ -10,7 +10,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from eks_harness.mcp_context import required_tree, working_dir
+from eks_harness.mcp_context import harness_instance, required_tree, working_dir
 from eks_harness.mcp_context import resolve_tree as _tree
 
 if TYPE_CHECKING:
@@ -123,17 +123,22 @@ def register_system_tools(server: MCPServer, tools: HarnessTools) -> None:
     def list_backend_definitions(tree: TreeArg = None) -> dict[str, Any]:
         return tools.call("GET", "/api/backends/definitions", params=_tree_params(tree))
 
-    @server.tool(description="Running and stopped backends with ports, exports and status.", annotations=READ_ONLY)
+    @server.tool(description="Backend instances with status, generation, ports, their leases (holders, expiry), "
+                             "idle countdown and info (URLs, commit, branch; credentials redacted).",
+                 annotations=READ_ONLY)
     def list_backends() -> dict[str, Any]:
         return tools.call("GET", "/api/backends")
 
-    @server.tool(description="Start a backend for an instance (or keep it) and return its record; poll "
-                             "list_backends until status is running.", annotations=WRITE)
-    def ensure_backend(definition: str, instance: Annotated[str, Field(description="Harness instance key, "
-                                                                       "for example session:<id> or tree:<path>")],
+    @server.tool(description="Older entry point: start a backend for an identity (or keep it) with a time-limited "
+                             "hold. Prefer backend_acquire, which returns a lease you renew and release.",
+                 annotations=WRITE)
+    def ensure_backend(definition: str, instance: Annotated[str, Field(description="Identity of the instance, "
+                                                                       "for example tree:<path>")],
                        tree: TreeArg = None) -> dict[str, Any]:
         return tools.call("POST", "/api/backends/ensure", json={"definition": definition, "instance": instance,
                                                                 "tree": _tree(tree)}, timeout=300)
+
+    register_backend_lease_tools(server, tools)
 
     @server.tool(description="Contact sheet of a video artifact: one image with evenly spaced frames labelled by "
                              "time and frame number, highlighted frames at given cues, and the audio waveform with "
@@ -226,6 +231,131 @@ def register_system_tools(server: MCPServer, tools: HarnessTools) -> None:
         return {"path": str(target), "bytes": target.stat().st_size, "tracks": len(built.tracks)}
 
 
+LeaseIdArg = Annotated[str, Field(description="Backend lease id (bl_ followed by 16 hex characters)")]
+TtlArg = Annotated[str | None, Field(description="Seconds or a duration such as 15m; never for no expiry")]
+
+
+def _default_definition(tree: str | None) -> str:
+    from eks_harness.plugins import load_project_config
+    from eks_harness.plugins.project import ProjectConfigError
+
+    resolved = _tree(tree)
+    try:
+        configured = load_project_config(Path(resolved)).section("backends").get("default") if resolved else None
+    except ProjectConfigError:
+        configured = None
+    if not configured:
+        raise ToolError("pass definition (or set [backends] default in .harness/project.toml)")
+    return str(configured)
+
+
+def register_backend_lease_tools(server: MCPServer, tools: HarnessTools) -> None:
+    @server.tool(description="Take a lease on a shared backend instance, starting it when nothing runs yet. Every "
+                             "holder of the same definition, tree, key and params shares one instance; it stays up "
+                             "while any lease is held and is stopped and cleaned up after its idle timeout once the "
+                             "last lease is gone. Renew the lease (backend_renew) before its ttl runs out and "
+                             "release it (backend_release) when done. status is granted once the backend is ready, "
+                             "starting while it comes up (poll backend_lease), or failed. Credentials come back "
+                             "only with secrets=true.", annotations=WRITE)
+    def backend_acquire(definition: Annotated[str | None, Field(description="Backend definition; default: "
+                                                                  "[backends] default of the tree")] = None,
+                        tree: TreeArg = None,
+                        backend_tree: Annotated[str | None, Field(description="Tree the backend runs from when "
+                                                                    "it is not the work tree")] = None,
+                        key: Annotated[str | None, Field(description="Identity instead of the tree")] = None,
+                        params: dict[str, str] | None = None,
+                        holder: Annotated[str | None, Field(description="Label for this lease")] = None,
+                        project: str | None = None, session: str | None = None, ttl: TtlArg = None,
+                        idle_timeout: TtlArg = None, restart: bool = False,
+                        wait: Annotated[float, Field(ge=0, le=120, description="Seconds to wait for "
+                                                     "readiness in this call")] = 60,
+                        secrets: bool = False) -> dict[str, Any]:
+        resolved = _tree(tree)
+        body = {"definition": definition or _default_definition(tree),
+                "tree": _tree(backend_tree) if backend_tree else resolved, "key": key, "params": params or {},
+                "holder": holder or harness_instance(tree), "instance": harness_instance(tree),
+                "project": project, "session": session, "ttl": ttl, "idleTimeout": idle_timeout,
+                "restart": restart}
+        return tools.call("POST", "/api/backend-leases", json=body,
+                          params={"waitSeconds": wait, "secrets": str(secrets).lower()}, timeout=wait + 300)
+
+    @server.tool(description="One backend lease: its backend's status and info; wait blocks until it is ready.",
+                 annotations=READ_ONLY)
+    def backend_lease(lease: LeaseIdArg, wait: Annotated[float, Field(ge=0, le=120)] = 0,
+                      secrets: bool = False) -> dict[str, Any]:
+        return tools.call("GET", f"/api/backend-leases/{quote(lease)}",
+                          params={"waitSeconds": wait, "secrets": str(secrets).lower()}, timeout=wait + 60)
+
+    @server.tool(description="Renew a backend lease so it does not expire (optionally with a new ttl).",
+                 annotations=WRITE)
+    def backend_renew(lease: LeaseIdArg, ttl: TtlArg = None) -> dict[str, Any]:
+        return tools.call("POST", f"/api/backend-leases/{quote(lease)}/renew",
+                          json={"ttl": ttl} if ttl is not None else {})
+
+    @server.tool(description="Release a backend lease. The instance keeps running for its other holders; with none "
+                             "left it stops and runs its cleanup after its idle timeout.", annotations=WRITE)
+    def backend_release(lease: LeaseIdArg, reason: str | None = None) -> dict[str, Any]:
+        return tools.call("POST", f"/api/backend-leases/{quote(lease)}/release", json={"reason": reason})
+
+    @server.tool(description="Backend leases with their holders, linked driver sids and expiry.",
+                 annotations=READ_ONLY)
+    def backend_leases(backend_id: str | None = None) -> dict[str, Any]:
+        return tools.call("GET", "/api/backend-leases", params={"backend": backend_id} if backend_id else None)
+
+    @server.tool(description="What a backend exposes: url and named urls, ports, commit, branch, version, worktree, "
+                             "env and extra values. Credentials and secret values are only returned to a lease "
+                             "holder that asks with secrets=true.", annotations=READ_ONLY)
+    def backend_info(lease: Annotated[str | None, Field(description="Backend lease id")] = None,
+                     backend_id: str | None = None, secrets: bool = False) -> dict[str, Any]:
+        if lease:
+            return tools.call("GET", f"/api/backend-leases/{quote(lease)}/info",
+                              params={"secrets": str(secrets).lower()})
+        if not backend_id:
+            raise ToolError("pass lease (or backend_id for the redacted info)")
+        if secrets:
+            raise ToolError("secrets are only handed to a lease holder: pass lease")
+        record = tools.call("GET", f"/api/backends/{quote(backend_id, safe='@:')}")
+        return record.get("info") or {}
+
+    @server.tool(description="Stop a backend now and end every lease on it (linked driver leases lose their "
+                             "backend). cleanup=true also runs the project's cleanup. Ask the user first when "
+                             "other sessions hold it.", annotations=DESTRUCTIVE)
+    def backend_stop(backend_id: str, cleanup: bool = False, reason: str | None = None) -> dict[str, Any]:
+        return tools.call("POST", f"/api/backends/{quote(backend_id, safe='@:')}/stop",
+                          json={"cleanup": cleanup, "reason": reason or "stopped by an agent"}, timeout=1900)
+
+    @server.tool(description="Take a short browser or device lease (sid), optionally linked to a backend for its "
+                             "lifetime: backend is a backend lease id, a backend id or a definition (started if "
+                             "needed). The lease is granted once the device and the linked backend are ready. "
+                             "Release it with lease_release as soon as you are done.", annotations=WRITE)
+    def lease_acquire(kind: Annotated[str, Field(description="browser, ios or android")], project: str,
+                      session: Annotated[str | None, Field(description="Session (default: the branch)")] = None,
+                      backend: str | None = None, backend_tree: str | None = None, tree: TreeArg = None,
+                      wait: Annotated[float, Field(ge=0, le=120)] = 60) -> dict[str, Any]:
+        resolved = _tree(tree)
+        if not session:
+            from eks_harness.cli.lease_cmds import branch_of
+
+            session = branch_of(Path(resolved)) if resolved else None
+            if not session:
+                raise ToolError("pass session (no git branch to default to)")
+        body = {"kind": kind, "project": project, "session": session, "instance": harness_instance(tree),
+                "tree": resolved, "backend": backend,
+                "backend_tree": _tree(backend_tree) if backend_tree else None, "label": "mcp"}
+        return tools.call("POST", "/api/leases/acquire", json=body, params={"waitSeconds": wait},
+                          timeout=wait + 60)
+
+    @server.tool(description="Release a browser or device lease (and its backend link).", annotations=WRITE)
+    def lease_release(sid: Annotated[str, Field(description="Lease sid")],
+                      reason: str | None = None) -> dict[str, Any]:
+        return tools.call("POST", f"/api/leases/{quote(sid)}/release", json={"reason": reason}, timeout=300)
+
+    @server.tool(description="The backend linked to a driver lease and its info (secrets=true for credentials).",
+                 annotations=READ_ONLY)
+    def lease_backend(sid: Annotated[str, Field(description="Lease sid")], secrets: bool = False) -> dict[str, Any]:
+        return tools.call("GET", f"/api/leases/{quote(sid)}/backend", params={"secrets": str(secrets).lower()})
+
+
 def _worker_session(sid: str) -> Any:
     from eks_harness.drivers.sessions import WorkerSession
     from eks_harness.drivers.workers import WorkerManager
@@ -302,7 +432,10 @@ def register_driver_tools(server: MCPServer, tools: HarnessTools) -> None:
                  code: Annotated[str | None, Field(description="Inline Python with `app` in scope")] = None,
                  platform: Annotated[str | None, Field(description="web, ios or android")] = None,
                  params: Annotated[dict[str, str] | None, Field(description="Values for app.params")] = None,
-                 release: bool = False, tree: TreeArg = None) -> dict[str, Any]:
+                 release: bool = False, tree: TreeArg = None,
+                 backend: Annotated[str | None, Field(description="Backend to link to the lease: a backend lease "
+                                                      "id, a backend id or a definition; none links nothing")] = None,
+                 backend_tree: str | None = None) -> dict[str, Any]:
         if not flow and not code:
             raise ToolError("pass a flow path or inline code")
         argv = [sys.executable, "-m", "eks_harness.cli", "flow", "run", "--json"]
@@ -316,6 +449,10 @@ def register_driver_tools(server: MCPServer, tools: HarnessTools) -> None:
             argv += ["--set", f"{key}={value}"]
         if release:
             argv.append("--release")
+        if backend:
+            argv += ["--backend", backend]
+        if backend_tree:
+            argv += ["--backend-tree", backend_tree]
         out = subprocess.run(argv, cwd=required_tree(tree), capture_output=True, text=True, timeout=3600)
         try:
             return json.loads(out.stdout)

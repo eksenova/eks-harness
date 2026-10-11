@@ -299,6 +299,7 @@ def test_backend_binding_is_reported_by_leases(client: TestClient, ctx) -> None:
     backend = client.post("/api/backends/ensure", json={"definition": "api", "instance": "bind", "hold": 0}).json()
     lease = granted(client, instance="bind", backend=backend["id"])
     detail = client.get(f"/api/backends/{backend['id']}").json()
-    assert detail["bindings"] == ["lease browser:1:1"]
+    assert detail["bindings"] == [f"driver {lease['sid']}"]
+    assert detail["leases"][0]["driverSid"] == lease["sid"] and detail["leases"][0]["kind"] == "driver"
     client.post(f"/api/leases/{lease['sid']}/release", json={})
     assert client.get(f"/api/backends/{backend['id']}").json()["bindings"] == []

@@ -33,6 +33,7 @@ bin = ["docker"]
 [[contributes.backend]]
 id = "api"
 entry = "acme_api.backend:Backend"
+idle_timeout = "15m"            # stop and clean up this long after the last lease (0, never)
 
 [[contributes.driver_extension]]
 path = "web/auth.mjs"

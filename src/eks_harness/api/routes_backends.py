@@ -22,6 +22,7 @@ from eks_harness.backends import choose_backend, personas_for, seeders_for
 from eks_harness.plugins import PluginError
 from eks_harness.daemon.context import AppContext
 from eks_harness.db.repos import leases as leases_repo
+from eks_harness.pools.backend_info import REDACTED, redact_info
 from eks_harness.pools.base import BackendError
 
 router = APIRouter(tags=["backends"])
@@ -32,15 +33,23 @@ PRIVATE_FIELDS = ("captured", "exports", "logs", "logFile", "tree", "definitionP
 
 
 def backend_out(record: dict, ctx: AppContext | None = None, principal: Principal | None = None) -> dict:
-    out = {k: v for k, v in record.items() if k not in ("step", "logOffsets", "adopt", "stopFinal")}
+    out = {k: v for k, v in record.items() if k not in ("step", "logOffsets", "adopt", "stopFinal", "implements",
+                                                        "definitionIdleTimeout", "idleTimeoutRequest",
+                                                        "verifiedAt", "readyAt")}
     out["ports"] = {str(k): int(v) for k, v in (record.get("ports") or {}).items()}
     out["captured"] = {str(k): str(v) for k, v in (record.get("captured") or {}).items()}
-    out["exports"] = {str(k): str(v) for k, v in (record.get("exports") or {}).items()}
+    secret_env = set(((record.get("info") or {}).get("secretEnv")) or [])
+    out["exports"] = {str(k): REDACTED if k in secret_env else str(v)
+                      for k, v in (record.get("exports") or {}).items()}
     out["logs"] = {str(k): str(v) for k, v in (record.get("logs") or {}).items()}
+    out["info"] = redact_info(record["info"]) if record.get("info") else None
     if ctx is not None and principal is not None and not may_see_secrets(ctx, principal, record):
         for key in PRIVATE_FIELDS:
             out.pop(key, None)
         out["captured"], out["exports"], out["logs"] = {}, {}, {}
+        if out.get("info"):
+            out["info"] = {**out["info"], "env": {}, "extra": {}, "worktree": ""}
+        out["leases"] = [{**lease, "id": "", "driverSid": None} for lease in out.get("leases") or []]
         if out.get("error"):
             out["error"] = str(out["error"]).splitlines()[0][:300]
         out["redacted"] = True
@@ -52,7 +61,10 @@ def may_see_secrets(ctx: AppContext, principal: Principal, record: dict) -> bool
         return True
     scope = access_scope(ctx.db, principal)
     bound = leases_repo.list_leases(ctx.db.conn(), states=leases_repo.LIVE_STATES, backend_id=record.get("id"))
-    return any(lease.project_id and scope.can(lease.project_id, lease.session_id, "editor") for lease in bound)
+    if any(lease.project_id and scope.can(lease.project_id, lease.session_id, "editor") for lease in bound):
+        return True
+    return any(lease.get("project") and scope.can(lease["project"], None, "editor")
+               for lease in record.get("leases") or [])
 
 
 def public(ctx: AppContext, backend_id: str, principal: Principal) -> dict:
@@ -137,7 +149,8 @@ async def seed(backend_id: str, request: Request, body: dict = Body(default_fact
     context = ctx.pools.backends.context(record) if hasattr(ctx.pools.backends, "context") else {
         "backendId": record["id"], "definition": record.get("definition"), "tree": record.get("tree"),
         "ports": record.get("ports") or {}, "exports": record.get("exports") or {}}
-    context = {**context, "exports": record.get("exports") or {}}
+    context = {**context, "exports": record.get("exports") or {},
+               "info": ctx.pools.backends.info(backend_id, secrets=True)}
     results = []
     for contribution, seeder in chosen:
         try:
@@ -185,11 +198,12 @@ async def stop(backend_id: str, request: Request, body: BackendStopRequest | Non
     record = ctx.pools.backends.get(backend_id)
     if record is None:
         raise not_found(f"No backend {backend_id}.", error="backend_not_found")
-    await run_in_threadpool(ctx.pools.backends.stop, backend_id, body.final, body.reason or "requested")
+    await run_in_threadpool(ctx.pools.backends.stop_with_leases, backend_id, body.final or body.cleanup,
+                            body.reason or "requested")
     current = ctx.pools.backends.get(backend_id)
     if current is None:
-        final = dict(record)
-        final.update({"status": "stopped", "bindings": [], "alive": {}})
+        final = ctx.pools.backends.public(record)
+        final.update({"status": "stopped", "bindings": [], "alive": {}, "leases": []})
         return backend_out(final)
     return backend_out(ctx.pools.backends.public(current))
 

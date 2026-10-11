@@ -1,7 +1,8 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { captureDevice, heartbeatSids, leaseReleased, linksOf, request as daemonRequest } from "../../kit/src/daemon-client.mjs";
+import { captureDevice, heartbeatSids, leaseBackend, leaseReleased, linksOf, request as daemonRequest } from "../../kit/src/daemon-client.mjs";
+import { createBackendLink } from "../../kit/src/backend-link.mjs";
 import { createRunner, renderText } from "../../kit/src/script-runner.mjs";
 import { CLOSE_NEW_DEBUGGER, DevtoolsLink, HARNESS_BINDING, acceptWebSocket, frontendUrl, listPages, runtimePages } from "../../kit/src/devtools-link.mjs";
 import { loadWorkerConfig } from "../../kit/src/config.mjs";
@@ -887,11 +888,34 @@ function leaseSids() {
   return [...new Set([...Object.values(SIDS), ...Object.values(lanes).map((lane) => lane.sid)].filter(Boolean))];
 }
 
+const backendLinks = {};
+
+function backendLinkFor(sid) {
+  if (!backendLinks[sid]) {
+    const initial = CONFIG.backend && (!CONFIG.backend.sid || CONFIG.backend.sid === sid) ? CONFIG.backend : null;
+    backendLinks[sid] = createBackendLink({
+      initial,
+      fetchInfo: () => leaseBackend(sid),
+      onChange: async (next, previous) => {
+        emitEvent("backend.changed", { sid, id: next?.id ?? null, generation: next?.generation ?? null, url: next?.url ?? null }, "harness");
+        for (const ext of EXTENSIONS) {
+          if (ext.onBackendChange) await Promise.resolve(ext.onBackendChange(next, previous, sid)).catch((error) => process.stdout.write(`${ext.id} backend change failed: ${error.message}\n`));
+        }
+      },
+      log: (line) => process.stdout.write(`${line}\n`),
+    });
+  }
+  return backendLinks[sid];
+}
+
 const beat = () => {
   const sids = leaseSids();
   if (!sids.length) return;
-  heartbeatSids(sids).then(() => {
-    for (const sid of sids) if (leaseReleased(sid)) process.stdout.write(`lease ${sid} is no longer held\n`);
+  heartbeatSids(sids).then(async (results) => {
+    for (const sid of sids) {
+      if (leaseReleased(sid)) process.stdout.write(`lease ${sid} is no longer held\n`);
+      else if (results[sid] && !results[sid].error) await backendLinkFor(sid).observe(results[sid].backend ?? null);
+    }
   }).catch(() => {});
 };
 beat();
@@ -1031,6 +1055,7 @@ function streamEvents(req, res) {
 const KIT = {
   config: CONFIG,
   stateDir: STATE_DIR,
+  backend: (sid) => backendLinkFor(sid ?? leaseSids()[0]).get(),
   log: (line) => process.stdout.write(`${line}\n`),
   bridgeCall,
   pacedBridge,

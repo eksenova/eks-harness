@@ -47,3 +47,30 @@ describe('script runner', () => {
     expect(seen).toContain('add')
   })
 })
+
+describe('backend link', () => {
+  it('follows generation changes and reads the full info once per change', async () => {
+    const { createBackendLink } = await import('../src/backend-link.mjs')
+    const changes = []
+    let fetches = 0
+    const link = createBackendLink({
+      initial: { id: 'api@tree:/x', generation: 1, url: 'http://127.0.0.1:5400' },
+      fetchInfo: async () => {
+        fetches += 1
+        return { lease: { id: 'bl_1' }, backend: { id: 'api@tree:/x', generation: 2, status: 'running' },
+                 info: { url: 'http://127.0.0.1:5401', credentials: { admin: { password: 'pw' } } } }
+      },
+      onChange: async (next, previous) => { changes.push([previous?.generation ?? null, next?.generation ?? null]) },
+    })
+    expect(await link.observe({ id: 'api@tree:/x', generation: 1, status: 'running' })).toBe(false)
+    expect(await link.observe({ id: 'api@tree:/x', generation: 2, status: 'starting' })).toBe(false)
+    expect(await link.observe({ id: 'api@tree:/x', generation: 2, status: 'running' })).toBe(true)
+    expect(link.get().url).toBe('http://127.0.0.1:5401')
+    expect(link.get().credentials.admin.password).toBe('pw')
+    expect(await link.observe({ id: 'api@tree:/x', generation: 2, status: 'running' })).toBe(false)
+    expect(fetches).toBe(1)
+    expect(await link.observe(null)).toBe(true)
+    expect(link.get()).toBe(null)
+    expect(changes).toEqual([[1, 2], [2, null]])
+  })
+})

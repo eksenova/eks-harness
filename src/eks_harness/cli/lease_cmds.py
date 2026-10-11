@@ -113,6 +113,10 @@ def lease_exports(result: dict) -> dict[str, Any]:
     }
     if lease.get("kind") == "browser":
         exports["EKS_CDP_URL"] = lease.get("cdp") or ""
+    backend = result.get("backend") or lease.get("backend") or {}
+    if backend:
+        exports.update({"EKS_BACKEND_ID": backend.get("id"), "EKS_BACKEND_LEASE": backend.get("lease"),
+                        "EKS_BACKEND_URL": backend.get("url") or ""})
     device = lease.get("device") or {}
     if device.get("udid"):
         exports.update({"EKS_DEVICE_UDID": device["udid"], "EKS_DEVICE_NAME": device.get("name")})
@@ -132,10 +136,16 @@ def print_lease_result(result: dict, args: argparse.Namespace) -> None:
     lease = result.get("lease") or {}
     urls = result.get("urls") or {}
     ok(f"{lease.get('kind')} {lease.get('resource')} leased: sid {lease.get('sid')}")
+    backend = result.get("backend") or {}
+    if backend:
+        ok(f"linked to backend {backend.get('id')} (generation {backend.get('generation')}, {backend.get('status')}) "
+           f"through backend lease {backend.get('lease')}; it is released with this lease")
     sys.stdout.write(f"{lease.get('sid')}\n")
     for key in ("session", "ui"):
         if urls.get(key):
             sys.stdout.write(f"{urls[key]}\n")
+    if backend.get("url"):
+        sys.stdout.write(f"{backend['url']}\n")
     sys.stdout.flush()
 
 
@@ -174,6 +184,29 @@ def wait_for_lease(client: HarnessClient, path: str, body: dict, wait: float, ki
             body["sid"] = result["sid"]
 
 
+def backend_link(args: argparse.Namespace) -> dict[str, Any]:
+    if not getattr(args, "backend", None):
+        return {"backend": None}
+    params: dict[str, str] = {}
+    for item in getattr(args, "backend_param", None) or []:
+        if "=" not in item:
+            fail(f"--backend-param takes KEY=VALUE (got {item!r})", EXIT_USAGE)
+        key, _, value = item.partition("=")
+        params[key.strip()] = value
+    backend_tree = getattr(args, "backend_tree", None)
+    return {"backend": args.backend, "backend_tree": str(resolve_tree(backend_tree)) if backend_tree else None,
+            "backend_key": getattr(args, "backend_key", None), "backend_params": params or None}
+
+
+def add_backend_link(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--backend", help="link a backend for the lease's lifetime: a backend lease id (bl_...), a "
+                                          "backend id or a definition name (started if needed)")
+    parser.add_argument("--backend-tree", help="the tree the linked backend runs from (default: --tree)")
+    parser.add_argument("--backend-key", help="identity of the linked backend instead of its tree")
+    parser.add_argument("--backend-param", action="append", metavar="KEY=VALUE",
+                        help="parameter of the linked backend (repeatable)")
+
+
 def acquire_body(args: argparse.Namespace) -> dict:
     tree = resolve_tree(args.tree)
     session = args.session or branch_of(tree)
@@ -182,7 +215,7 @@ def acquire_body(args: argparse.Namespace) -> dict:
     owner_pid, owner_started = owner_process(args)
     instance = instance_key(args.instance, tree)
     return {"kind": normalize_kind(args.kind), "project": args.project, "session": session, "instance": instance,
-            "backend": args.backend, "owner_pid": owner_pid, "owner_started": owner_started,
+            **backend_link(args), "owner_pid": owner_pid, "owner_started": owner_started,
             "tree": str(tree) if tree else None, "state_dir": args.state_dir,
             "label": args.label or (f"{Path(str(tree)).name}" if tree else None),
             "tags": [t for item in (getattr(args, "tag", None) or []) for t in item.split(",") if t.strip()]}
@@ -209,7 +242,7 @@ def cmd_resume(args: argparse.Namespace) -> int:
     owner_pid, owner_started = owner_process(args)
     body = {"sid": args.sid, "instance": args.instance or (instance_key(None, tree) if (
         tree or os.environ.get("EKS_HARNESS_INSTANCE") or os.environ.get("CLAUDE_CODE_SESSION_ID")) else None),
-        "backend": args.backend, "owner_pid": owner_pid, "owner_started": owner_started,
+        **backend_link(args), "owner_pid": owner_pid, "owner_started": owner_started,
         "tree": str(tree) if tree else None, "state_dir": args.state_dir}
     with client_from_args(args) as client:
         wait = 0.0 if args.no_wait else float(args.wait)
@@ -351,9 +384,11 @@ def render_status(status: dict, mine: str | None) -> None:
     console.print(table(("resource", "name", "status", "id"), pool_rows, title="Browsers and devices"))
     backends = status.get("backends") or []
     if backends:
-        console.print(table(("id", "status", "ports", "bound to"), [
-            (b.get("id", "")[-40:], b.get("status"), ", ".join(f"{k}={v}" for k, v in (b.get("ports") or {}).items()),
-             ", ".join(b.get("bindings") or []) or "-") for b in backends], title="Backends"))
+        from eks_harness.cli.backend_cmds import idle_text as backend_idle
+
+        console.print(table(("id", "status", "ports", "leases", "idle"), [
+            (b.get("id", "")[-48:], b.get("status"), ", ".join(f"{k}={v}" for k, v in (b.get("ports") or {}).items()),
+             ", ".join(b.get("bindings") or []) or "-", backend_idle(b)) for b in backends], title="Backends"))
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -397,7 +432,10 @@ def cmd_show(args: argparse.Namespace) -> int:
             ("state", f"{lease.get('state')} ({lease.get('phase') or '-'})"),
             ("project", lease.get("projectId")), ("session", lease.get("sessionName")),
             ("instance", lease.get("ownerInstance")), ("owner", lease.get("ownerKind")),
-            ("backend", lease.get("backendId")), ("device", device.get("name")), ("CDP", lease.get("cdp")),
+            ("backend", lease.get("backendId")),
+            ("backend lease", (lease.get("backend") or {}).get("lease")),
+            ("backend URL", (lease.get("backend") or {}).get("url")),
+            ("device", device.get("name")), ("CDP", lease.get("cdp")),
             ("idle", idle_text(lease.get("idleSeconds"))), ("reason", lease.get("reason")),
             ("error", lease.get("error")), ("previous sid", lease.get("previousSid")),
             ("session URL", urls.get("session"))]
@@ -529,7 +567,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("--kind", required=True, choices=KINDS)
     p.add_argument("--project", required=True, help="project owner/name, e.g. acme/web-app")
     p.add_argument("--session", help="session name (default: the branch of the work tree)")
-    p.add_argument("--backend", help="bind the lease to a backend id; the backend lives while bound")
+    add_backend_link(p)
     p.add_argument("--wait", type=float, default=DEFAULT_WAIT, help="seconds to wait for the lease (default 1800)")
     p.add_argument("--no-wait", action="store_true", help="return at once with the queue position")
     p.add_argument("--state-dir", help="harness state dir cleaned on release")
@@ -543,7 +581,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
     p = sub.add_parser("resume", help="take a new lease for the project and session of a released sid")
     p.add_argument("sid")
-    p.add_argument("--backend")
+    add_backend_link(p)
     p.add_argument("--wait", type=float, default=DEFAULT_WAIT)
     p.add_argument("--no-wait", action="store_true")
     p.add_argument("--state-dir")

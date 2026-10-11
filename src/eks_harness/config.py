@@ -83,7 +83,9 @@ _SETTINGS: list[Setting] = [
     Setting("lease.idleSeconds", 600, "int", "release a lease after this long without a heartbeat", minimum=1),
     Setting("lease.agentStopGraceSeconds", 120, "int", "idle limit after a harness agent's turn ends (SubagentStop)", minimum=0),
     Setting("lease.queueTimeoutSeconds", 45, "int", "drop a queued request after this long without a poll", minimum=5),
-    Setting("backend.idleGraceSeconds", 120, "int", "stop a backend this long after its last frontend is released", minimum=0),
+    Setting("backend.idleTimeout", "15m", "str", "stop a backend and run its cleanup this long after its last lease ends: seconds, 15m, 1h, 0 (at once) or never; a project's [backends] idle_timeout or the definition overrides it"),
+    Setting("backend.leaseTtlSeconds", 600, "int", "a backend lease expires this long after its last renewal unless the holder asked for another ttl", minimum=5),
+    Setting("backend.readyTimeoutSeconds", 3600, "int", "how long a driver lease linked to a backend waits for it to be ready", minimum=10),
     Setting("backend.portRangeStart", 5400, "int", "first port the daemon hands to backends", minimum=1024, maximum=65535),
     Setting("backend.portRangeEnd", 5999, "int", "last port the daemon hands to backends", minimum=1024, maximum=65535),
     Setting("backend.definitionDirs", [".harness/backends"], "list[str]", "tree-relative folders searched for backend definitions (JSON list); <config>/backends is always searched too"),
@@ -165,7 +167,9 @@ LABELS: dict[str, str] = {
     "lease.idleSeconds": "Release a lease without heartbeat after",
     "lease.agentStopGraceSeconds": "Idle limit after an agent's turn ends",
     "lease.queueTimeoutSeconds": "Drop a queued request without a poll after",
-    "backend.idleGraceSeconds": "Stop an unbound backend after",
+    "backend.idleTimeout": "Stop and clean up an unleased backend after",
+    "backend.leaseTtlSeconds": "Backend lease time to live",
+    "backend.readyTimeoutSeconds": "Wait for a linked backend for",
     "backend.portRangeStart": "First backend port",
     "backend.portRangeEnd": "Last backend port",
     "backend.definitionDirs": "Backend definition folders",
@@ -326,6 +330,13 @@ def _validate_special(key: str, value: Any) -> None:
             if not HOST_NAME.fullmatch(str(item)):
                 raise ConfigError(f"server.allowedHosts: {item} is not a bare host name or IP address "
                                   f"(no scheme, port or path)")
+    elif key == "backend.idleTimeout":
+        from eks_harness.durations import parse_duration
+
+        try:
+            parse_duration(value)
+        except ValueError as error:
+            raise ConfigError(f"backend.idleTimeout: {error}") from error
     elif key == "server.trustedProxies":
         for item in value:
             try:

@@ -9,7 +9,7 @@ import { DataTable, type Column } from "../components/Table";
 import { useAuth } from "../lib/auth";
 import { plural, stripScheme } from "../lib/format";
 import { useTitle } from "../lib/hooks";
-import { BackendState, backendHref, leaseBindings, Ports } from "./Backends";
+import { BackendState, backendHref, backendLeases, Ports } from "./Backends";
 import { deviceName, profileName, SessionLink, StateText } from "./Pools";
 
 export function MachinesPage() {
@@ -50,7 +50,7 @@ export function MachinesPage() {
     { key: "state", header: "State", render: (b) => <BackendState backend={b} /> },
     { key: "since", header: "Since", render: (b) => <AbsTime value={b.status === "stopped" ? b.stoppedAt : b.startedAt} /> },
     { key: "ports", header: "Ports", render: (b) => <Ports ports={b.ports} /> },
-    { key: "bindings", header: "Leases", align: "right", width: "72px", render: (b) => leaseBindings(b).length },
+    { key: "bindings", header: "Leases", align: "right", width: "72px", render: (b) => backendLeases(b).length },
   ];
 
   return (
@@ -148,11 +148,11 @@ export function MachinesPage() {
                   <div className="row-title mono">{b.id}</div>
                   <div className="row-meta">
                     <BackendState backend={b} />
-                    <span>{plural(leaseBindings(b).length, "lease")}</span>
+                    <span>{plural(backendLeases(b).length, "lease")}</span>
                   </div>
                 </>
               )}
-              empty={<EmptyState>No backends running. Agents start them with <span className="mono">eks-harness backend ensure</span>.</EmptyState>}
+              empty={<EmptyState>No backends running. Agents start them with <span className="mono">eks-harness backend acquire</span>.</EmptyState>}
             />
           )}
         </Section>

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import tempfile
 import time
 from collections.abc import Iterator
@@ -9,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from eks_harness.drivers.client import WorkerClient
-from eks_harness.drivers.profile import AppProfile
+from eks_harness.drivers.profile import AppProfile, load_profile
 from eks_harness.flows.client import (
     Artifact,
     Step,
@@ -22,6 +24,32 @@ from eks_harness.flows.client import (
 )
 
 Target = str | dict
+BACKEND_POLL = 25.0
+
+
+class BackendLinkError(RuntimeError):
+    pass
+
+
+def backend_env(link: dict | None) -> dict[str, str]:
+    if not link:
+        return {}
+    info = link.get("info") or {}
+    env = {"EKS_BACKEND_ID": str((link.get("backend") or {}).get("id") or ""),
+           "EKS_BACKEND_LEASE": str((link.get("lease") or {}).get("id") or ""),
+           "EKS_BACKEND_URL": str(info.get("url") or "")}
+    for name, url in (info.get("urls") or {}).items():
+        env[f"EKS_BACKEND_URL_{re.sub(r'[^A-Za-z0-9]+', '_', str(name)).upper()}"] = str(url)
+    env.update({str(k): str(v) for k, v in (info.get("env") or {}).items()})
+    return env
+
+
+def worker_backend(link: dict | None) -> dict[str, Any] | None:
+    if not link:
+        return None
+    backend = link.get("backend") or {}
+    return {**(link.get("info") or {}), "id": backend.get("id"), "lease": (link.get("lease") or {}).get("id"),
+            "generation": backend.get("generation") or 0, "status": backend.get("status"), "sid": link.get("sid")}
 
 
 def js_args(*args: Any) -> str:
@@ -60,9 +88,50 @@ class App:
         self.recording: str | None = None
         self.out = out or Path(tempfile.mkdtemp(prefix=f"ehx-flow-{self.kind}-"))
         self.params: dict[str, str] = dict(params or {})
+        self.harness_dir: Path | None = None
+        self.backend: Any = None
+        self.backend_link: dict[str, Any] | None = None
 
     def prepare(self) -> None:
         return None
+
+    def link_backend(self, backend: str, *, tree: str | Path | None = None, key: str | None = None,
+                     params: dict[str, Any] | None = None, wait: float = 3600.0) -> Any:
+        if self.harness is None or not self.sid:
+            raise BackendLinkError("link_backend needs a leased app; run the flow with eks-harness flow run")
+        body = {"backend": backend, "tree": str(tree) if tree else None, "key": key, "params": params}
+        self.harness.post(f"/api/leases/{self.sid}/backend", json=body, timeout=600)
+        return self.refresh_backend(wait)
+
+    def refresh_backend(self, wait: float = 0.0) -> Any:
+        if self.harness is None or not self.sid:
+            return None
+        deadline = time.time() + max(0.0, wait)
+        while True:
+            remaining = max(0.0, deadline - time.time())
+            data = self.harness.get(f"/api/leases/{self.sid}/backend",
+                                    params={"secrets": "true", "waitSeconds": round(min(BACKEND_POLL, remaining), 1)},
+                                    timeout=BACKEND_POLL + 60)
+            backend = data.get("backend") or {}
+            status = backend.get("status")
+            if status == "running":
+                break
+            if status == "failed":
+                raise BackendLinkError(f"backend {backend.get('id')} failed: "
+                                       f"{str(backend.get('error') or '').splitlines()[:1]}")
+            if time.time() >= deadline:
+                raise BackendLinkError(f"backend {backend.get('id')} is {status}, not running, after {wait:.0f}s")
+        self.use_backend(data)
+        return self.backend
+
+    def use_backend(self, data: dict[str, Any]) -> None:
+        from eks_harness.plugins.sdk import BackendInfo
+
+        self.backend_link = data
+        self.backend = BackendInfo.from_dict(data.get("info") or {})
+        if self.harness_dir is not None:
+            fresh = load_profile(self.harness_dir, env={**os.environ, **backend_env(data)})
+            self.profile.web, self.profile.mobile, self.profile.checks = fresh.web, fresh.mobile, fresh.checks
 
     def boot(self) -> None:
         return None

@@ -109,6 +109,35 @@ trust = ["acme.api"]
 - The plugin's code always runs from its own folder: `context.root` is inside the other repository, so the
   plugin finds that repository's sources from there, while `context.tree` is the consumer's tree.
 
+## Shared backends
+
+A backend instance belongs to its definition and the tree it runs from, not to a session: every Claude
+session, worktree and repository that acquires `api` from `/src/acme-api` shares `api@tree:/src/acme-api`.
+A frontend worktree points at a backend worktree by naming that tree:
+
+```bash
+eks-harness backend acquire --definition api --backend-tree "$BACKEND_TREE"   # prints the lease id and URL
+eks-harness flow run web/.harness/flows/x-check.py --backend api --backend-tree "$BACKEND_TREE"
+```
+
+or in `<app>/.harness/app.toml`:
+
+```toml
+[backend]
+definition = "api"
+tree = "${BACKEND_TREE}"        # relative paths are relative to the app; ${...} come from the environment
+[web]
+api_url = "${EKS_BACKEND_URL}"  # filled from the linked backend's info
+```
+
+- Agents take one backend lease (or rely on driver links, which hold one each) and keep driver leases
+  short; the instance stays up across them and stops after its idle timeout once nobody holds it.
+- Set the idle timeout per repository in the backend's tree: `[backends] idle_timeout = "30m"`, or per
+  definition `[backends.api] idle_timeout = "never"`. `--key` and `--param` make separate instances of
+  the same tree (for example one per tenant).
+- `eks-harness backend leases` and the Backends page show who holds what; `backend info` shows the URLs,
+  commit and branch (credentials only to a holder with `--secrets`).
+
 ## Python module isolation
 
 The daemon is one process shared by every repository, so plugin modules are loaded per plugin folder and
@@ -163,7 +192,9 @@ daemon_check = true
 | --- | --- | --- |
 | `devices.*` (pool sizes, device type, name prefix, AVDs) | hub | The device pool is one physical resource shared by every repository; per-project app cleanup is a project setting in the hub (`apps.iosBundleIds`, `apps.androidPackages`, `devices.strayProcessPatterns`). |
 | `browser.*` (browser command, processes, profiles) | hub | One browser pool; profiles are leased per instance, so repositories never share a live profile. |
-| `backend.portRangeStart/End`, `backend.idleGraceSeconds` | hub | Ports are handed out by the one daemon. |
+| `backend.portRangeStart/End` | hub | Ports are handed out by the one daemon. |
+| `backend.idleTimeout` | hub default, project and definition override | `[backends] idle_timeout` / `[backends.<definition>] idle_timeout` in the backend tree's `.harness/project.toml`, then `idle_timeout` on the manifest or `describe()`, win over the hub default (`15m`). |
+| `backend.leaseTtlSeconds`, `backend.readyTimeoutSeconds` | hub | Default lease ttl when the holder names none; how long a linked driver lease waits for its backend. |
 | `backend.definitionDirs` | hub default, project override | `[backends] definition_dirs = ["ops/backends"]` in `.harness/project.toml` replaces the hub default for that tree. |
 | `plugins.paths`, `plugins.git`, `plugins.enabled`, `plugins.disabled`, `plugins.settings` | hub | Repository plugins, enablement and settings belong in `.harness/project.toml` (`[plugins]`, `[plugins.settings.<id>]`), which override these. |
 | `capture.*`, `server.*`, `auth.*`, `render.*`, `update.*` | hub | Not repository concerns. |

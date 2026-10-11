@@ -656,6 +656,16 @@ export interface LeaseOut extends LeaseBrief {
   device: DeviceBrief | null;
   urls: LeaseUrls | null;
   meta: Record<string, unknown>;
+  backend: BackendLinkBrief | null;
+}
+
+export interface BackendLinkBrief {
+  id: string;
+  lease: string;
+  status: string;
+  generation: number;
+  url: string;
+  error: string | null;
 }
 
 export interface LeaseList {
@@ -773,6 +783,39 @@ export interface PoolActionResponse {
   message: string;
 }
 
+export interface BackendLeaseOut {
+  id: string;
+  backendId: string;
+  definition: string | null;
+  kind: "agent" | "driver" | "hold" | string;
+  holder: string;
+  owner: string | null;
+  project: string | null;
+  session: string | null;
+  tree: string | null;
+  driverSid: string | null;
+  created: number;
+  renewed: number | null;
+  ttl: number | null;
+  expires: number | null;
+  expiresIn: number | null;
+}
+
+export interface BackendInfoOut {
+  url: string;
+  urls: Record<string, string>;
+  ports: Record<string, number>;
+  credentials: Record<string, unknown>;
+  env: Record<string, string>;
+  secretEnv: string[];
+  commit: string;
+  branch: string;
+  version: string;
+  worktree: string;
+  extra: Record<string, unknown>;
+  redacted: boolean;
+}
+
 export interface BackendOut {
   id: string;
   definition: string;
@@ -789,11 +832,24 @@ export interface BackendOut {
   bindings: string[];
   error: string | null;
   fingerprint: string | null;
-  idleGraceSeconds: number | null;
   startedAt: IsoDate | null;
   stoppedAt: IsoDate | null;
   logFile: string | null;
+  redacted: boolean;
+  key: string | null;
+  params: Record<string, unknown>;
+  generation: number;
+  leases: BackendLeaseOut[];
+  info: BackendInfoOut | null;
+  idleTimeout: number | "never" | null;
+  idleTimeoutSource: string | null;
+  idleSince: number | null;
+  stopsAt: number | null;
   [extra: string]: unknown;
+}
+
+export interface BackendLeaseList {
+  items: BackendLeaseOut[];
 }
 
 export interface BackendList {
@@ -803,8 +859,11 @@ export interface BackendList {
 export interface BackendDefinitionOut {
   name: string;
   path: string;
-  source: "tree" | "config";
+  source: "tree" | "config" | "plugin";
   tree: string | null;
+  plugin?: string | null;
+  description?: string | null;
+  idleTimeout?: number | string | null;
 }
 
 export interface BackendDefinitionList {

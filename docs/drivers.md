@@ -20,13 +20,20 @@ The manager writes `config.json` (mode 600) into `<state>/workers/<kind>-<sid>/`
 `worker.json` (`{ready, port, pid, ...}`) and heartbeats its lease sids every 20 s.
 
 Web keys: `baseUrl`, `sid`, `home`, `locale`, `timezone`, `nav` (`location`, `next`, `hook` for
-`window.__ehxNavigate`), `apiBaseUrl`, `viewports.{desktop,mobile}`, `hideSelectors` (the project's
+`window.__ehxNavigate`), `apiBaseUrl` (`apiFromBackend` when it came from the linked backend),
+`backend` (the linked backend's info with secrets: `id`, `lease`, `generation`, `url`, `urls`,
+`credentials`, `env`, ...; it does not count toward the worker's config hash), `viewports.{desktop,mobile}`, `hideSelectors` (the project's
 `capture.hideSelectors` setting plus app.toml `[web] hide`),
 `networkIgnore`, `wsIgnore` (regex strings), `appOrigins`, `theme`, `pace`, `encoder`,
 `playwrightFrom`, `extensions`, `options` (`settleReact`, `heartbeatMs`, `bypassCsp`, `insecureTls`, ...).
 
 Mobile keys: `sids` (`{ios, android}`), `metroPort`, `fixtureDirs`, `fakeSlots`, `pace`,
-`extensions`, `options`.
+`extensions`, `backend`, `options`.
+
+Heartbeat answers (`POST /api/leases/<sid>/heartbeat`) carry the lease's backend link (`id`, `lease`,
+`status`, `generation`, `url`). When the generation or backend changes the worker reads the full info
+(`GET /api/leases/<sid>/backend?secrets=true`), calls `onBackendChange`, emits `backend.changed` on
+`GET /events` and, on web, reloads the open pages (`options.reloadOnBackendChange`, default on).
 
 ## HTTP protocol
 
@@ -55,7 +62,8 @@ platform = "web"          # or platforms = ["ios", "android"]
 ```
 
 The module exports `export default function extend(kit) { return { ... } }`. `kit` carries
-`config`, `settings` (the plugin's resolved settings), `id`, `log`, `daemon`, `emit`, and per
+`config`, `settings` (the plugin's resolved settings), `id`, `log`, `daemon`, `emit`, `backend()` (the
+linked backend's current info, credentials included, or null; mobile takes an optional sid), and per
 worker: web `activePage ensureBrowser ensureMobile settle gotoPath locate present resolveTarget
 readPageStorage writePageStorage syncContexts persist restore upload helpers handlers`; mobile
 `bridgeCall pacedBridge fillInput laneFor armFake clearFakes captureDevice stateDir`.
@@ -63,7 +71,8 @@ readPageStorage writePageStorage syncContexts persist restore upload helpers han
 Returned hooks: `helpers` (object, or `(lane) => object` on mobile; merged into script helpers),
 `routes` (`{'/path': async (body) => result}`), `onContext(context)`, `onRestore(state, page)`,
 `onRecordingStart(page)`, `status()`, `apiHeaders()` (used by the web `api()` helper),
-`onEvent(event)` (mobile).
+`onEvent(event)` (mobile), `onBackendChange(next, previous)` (the linked backend was replaced or
+re-linked; log in again with `next.credentials`).
 
 `flow_helpers` contributions name a Python class mixed into the flow `App` for a platform.
 
@@ -98,6 +107,28 @@ alerts = "[role=alert]"
 it may change `self.profile`), `worker_options()` merged into the worker config, and a `boot()`
 that runs once the worker is attached (`self.worker.base_url` is known: Metro, install, launch,
 login).
+
+## Backends in flows
+
+A flow's lease can hold a backend for its lifetime. The runner links one from `flow run --backend <bl_... |
+backend id | definition> [--backend-tree] [--backend-key] [--backend-param K=V]` or from `app.toml`:
+
+```toml
+[backend]
+definition = "api"          # or link = "<backend id>"; "none" links nothing
+tree = "${API_TREE}"        # the tree it runs from (default: the app's tree)
+key = "demo"                # optional identity instead of the tree
+params = { tenant = "acme" }
+```
+
+The driver lease waits until the backend is ready. Before `prepare()` the app has `self.backend`
+(`BackendInfo`: `url`, `urls`, `ports`, `credentials`, `env`, `commit`, `branch`, `version`, `worktree`,
+`extra`) and `self.backend_link` (the lease, the backend record and the info), and `app.toml` is expanded
+again with `EKS_BACKEND_URL`, `EKS_BACKEND_URL_<NAME>`, `EKS_BACKEND_ID`, `EKS_BACKEND_LEASE` and the
+backend's env (`api_url = "${EKS_BACKEND_URL}"`). An `app.py` that picks its backend itself (a backend
+policy) calls `self.link_backend("api", tree=..., params=...)` first thing in `prepare()`; it returns the
+`BackendInfo` once the backend runs. Start app dev servers keyed by the app tree and the backend URL, not
+by the harness instance, so later driver leases on the same backend reuse them.
 
 A `.harness/` outside the app (an ad workspace, a demo folder) drives an existing app with
 `[app] extends = "<path to the app, relative to the folder holding .harness>"`: the profile and

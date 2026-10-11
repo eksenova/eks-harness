@@ -653,6 +653,15 @@ class SharedArtifactOut(ApiModel):
     expires_at: datetime | None = None
 
 
+class BackendLinkBrief(ApiModel):
+    id: str
+    lease: str
+    status: str
+    generation: int = 0
+    url: str = ""
+    error: str | None = None
+
+
 class LeaseUrls(ApiModel):
     session: str
     ui: str
@@ -693,6 +702,7 @@ class LeaseOut(LeaseBrief):
     device: DeviceBrief | None = None
     urls: LeaseUrls | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
+    backend: BackendLinkBrief | None = None
 
 
 class LeaseBrowserResponse(ApiModel):
@@ -723,6 +733,9 @@ class LeaseAcquireRequest(ApiModel):
     session: str
     instance: str
     backend: str | None = None
+    backend_tree: str | None = None
+    backend_key: str | None = None
+    backend_params: dict[str, Any] | None = None
     wait: bool = True
     owner_pid: int | None = None
     owner_started: str | None = None
@@ -750,6 +763,7 @@ class LeaseAcquireResponse(ApiModel):
     waiting: int | None = None
     holders: list[QueueHolder] = Field(default_factory=list)
     error: str | None = None
+    backend: BackendLinkBrief | None = None
 
 
 class LeaseResumeRequest(ApiModel):
@@ -757,6 +771,9 @@ class LeaseResumeRequest(ApiModel):
     instance: str | None = None
     wait: bool = True
     backend: str | None = None
+    backend_tree: str | None = None
+    backend_key: str | None = None
+    backend_params: dict[str, Any] | None = None
     owner_pid: int | None = None
     owner_started: str | None = None
     tree: str | None = None
@@ -769,6 +786,7 @@ class LeaseHeartbeatResponse(ApiModel):
     state: LeaseState
     phase: LeasePhase | None = None
     heartbeat_at: datetime | None = None
+    backend: BackendLinkBrief | None = None
 
 
 class LeaseIdleRequest(ApiModel):
@@ -930,12 +948,48 @@ class BackendEnsureRequest(ApiModel):
 
 class BackendStopRequest(ApiModel):
     final: bool = False
+    cleanup: bool = False
     reason: str | None = None
 
 
 class BackendHoldRequest(ApiModel):
     seconds: float = 300
     hold_id: str | None = None
+
+
+class BackendLeaseOut(ApiModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="allow")
+    id: str
+    backend_id: str
+    definition: str | None = None
+    kind: str = "agent"
+    holder: str = ""
+    owner: str | None = None
+    project: str | None = None
+    session: str | None = None
+    tree: str | None = None
+    driver_sid: str | None = None
+    created: float
+    renewed: float | None = None
+    ttl: float | None = None
+    expires: float | None = None
+    expires_in: float | None = None
+
+
+class BackendInfoOut(ApiModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="allow")
+    url: str = ""
+    urls: dict[str, str] = Field(default_factory=dict)
+    ports: dict[str, int] = Field(default_factory=dict)
+    credentials: dict[str, Any] = Field(default_factory=dict)
+    env: dict[str, str] = Field(default_factory=dict)
+    secret_env: list[str] = Field(default_factory=list)
+    commit: str = ""
+    branch: str = ""
+    version: str = ""
+    worktree: str = ""
+    extra: dict[str, Any] = Field(default_factory=dict)
+    redacted: bool = True
 
 
 class BackendOut(ApiModel):
@@ -955,15 +1009,73 @@ class BackendOut(ApiModel):
     bindings: list[str] = Field(default_factory=list)
     error: str | None = None
     fingerprint: str | None = None
-    idle_grace_seconds: float | None = None
     started_at: datetime | None = None
     stopped_at: datetime | None = None
     log_file: str | None = None
     redacted: bool = False
+    key: str | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
+    generation: int = 0
+    leases: list[BackendLeaseOut] = Field(default_factory=list)
+    info: BackendInfoOut | None = None
+    idle_timeout: float | str | None = None
+    idle_timeout_source: str | None = None
+    idle_since: float | None = None
+    stops_at: float | None = None
 
 
 class BackendList(ApiModel):
     items: list[BackendOut]
+
+
+class BackendLeaseAcquireRequest(ApiModel):
+    definition: str
+    tree: str | None = None
+    key: str | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
+    holder: str | None = None
+    instance: str | None = None
+    project: str | None = None
+    session: str | None = None
+    ttl: float | str | None = None
+    idle_timeout: float | str | None = None
+    restart: bool = False
+    wait: bool = True
+
+
+class BackendLeaseRenewRequest(ApiModel):
+    ttl: float | str | None = None
+
+
+class BackendLeaseReleaseRequest(ApiModel):
+    reason: str | None = None
+
+
+class BackendLinkRequest(ApiModel):
+    backend: str
+    tree: str | None = None
+    key: str | None = None
+    params: dict[str, Any] | None = None
+
+
+class BackendLeaseResponse(ApiModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="allow")
+    status: Literal["granted", "starting", "failed", "released"]
+    lease: BackendLeaseOut | None = None
+    backend: BackendOut | None = None
+    info: BackendInfoOut | None = None
+    error: str | None = None
+
+
+class BackendLeaseList(ApiModel):
+    items: list[BackendLeaseOut]
+
+
+class BackendLinkOut(ApiModel):
+    sid: str
+    lease: BackendLeaseOut
+    backend: BackendOut
+    info: BackendInfoOut
 
 
 class BackendDefinitionOut(ApiModel):
@@ -973,6 +1085,7 @@ class BackendDefinitionOut(ApiModel):
     tree: str | None = None
     plugin: str | None = None
     description: str | None = None
+    idle_timeout: float | str | None = None
 
 
 class BackendDefinitionList(ApiModel):

@@ -16,6 +16,10 @@ You operate web apps in a leased browser profile through eks-harness for the mai
   `driver_capture`; act with `driver_act`.
 - Never point the app at a production backend. Use `eks-harness backend choose` and the personas from
   `eks-harness backend personas`.
+- Backends are shared: hold one with `eks-harness backend acquire` (or link it with `--backend` on the flow
+  run or lease), keep driver leases short (`--release` on runs), renew a held backend lease while you work
+  and release it when done. Read credentials with `--secrets` only where a login needs them; never report
+  them.
 - Read every screenshot and every contact sheet you produce before you describe it. Describe what is on
   screen, not what you expected. For timing questions on a recording (a toast by 2 s, a screen within
   one second of a tap) run `eks-harness video check` on it instead of reading frames (skill

@@ -1,6 +1,6 @@
 import { pathToFileURL } from 'node:url'
 
-const HOOKS = ['helpers', 'routes', 'onContext', 'onPage', 'onRestore', 'onRecordingStart', 'status', 'apiHeaders', 'onBridge', 'onEvent']
+const HOOKS = ['helpers', 'routes', 'onContext', 'onPage', 'onRestore', 'onRecordingStart', 'status', 'apiHeaders', 'onBridge', 'onEvent', 'onBackendChange']
 
 export async function loadExtensions(entries, kit, log = () => {}) {
   const loaded = []

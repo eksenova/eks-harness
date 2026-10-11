@@ -23,7 +23,7 @@ from eks_harness.drivers.profile import (
 from eks_harness.drivers.registry import driver_extensions, flow_helpers
 from eks_harness.drivers.workers import WorkerManager
 from eks_harness.flows.client import StepError
-from eks_harness.flows.core import App
+from eks_harness.flows.core import App, worker_backend
 from eks_harness.flows.mobile import MobileApp
 from eks_harness.flows.web import WebApp
 from eks_harness.plugins import PluginHost, find_tree
@@ -49,6 +49,10 @@ class FlowRequest:
     cwd: Path | None = None
     instance: str | None = None
     session: str | None = None
+    backend: str | None = None
+    backend_tree: str | None = None
+    backend_key: str | None = None
+    backend_params: dict[str, str] = field(default_factory=dict)
 
 
 def is_harness_dir(path: Path) -> bool:
@@ -123,11 +127,11 @@ def project_and_session(profile: AppProfile, host: PluginHost, tree: Path | None
 
 
 def acquire(client: Any, *, kind: str, project: str, session: str, instance: str, tree: Path | None,
-            wait: float, tags: tuple[str, ...] = ()) -> dict[str, Any]:
+            wait: float, tags: tuple[str, ...] = (), backend: dict[str, Any] | None = None) -> dict[str, Any]:
     from eks_harness.cli.lease_cmds import wait_for_lease
 
     body = {"kind": kind, "project": project, "session": session, "instance": instance,
-            "tree": str(tree) if tree else None, "label": "flow", "tags": list(tags)}
+            "tree": str(tree) if tree else None, "label": "flow", "tags": list(tags), **(backend or {})}
     from eks_harness.renderq import current_holder
 
     if current_holder():
@@ -138,6 +142,19 @@ def acquire(client: Any, *, kind: str, project: str, session: str, instance: str
 
         attach_lease(lease["sid"])
     return lease
+
+
+def backend_request(request: FlowRequest, profile: AppProfile, harness_dir: Path) -> dict[str, Any] | None:
+    table = profile.raw.get("backend") if isinstance(profile.raw.get("backend"), dict) else {}
+    ref = request.backend or table.get("link") or table.get("definition")
+    if not ref or str(ref).lower() in ("none", "no", "off", "false"):
+        return None
+    tree = request.backend_tree or table.get("tree")
+    if tree and not Path(str(tree)).expanduser().is_absolute():
+        tree = str((harness_dir.parent / str(tree)).resolve())
+    params = {**{str(k): str(v) for k, v in (table.get("params") or {}).items()}, **request.backend_params}
+    return {"backend": str(ref), "backend_tree": str(Path(str(tree)).expanduser()) if tree else None,
+            "backend_key": request.backend_key or table.get("key"), "backend_params": params or None}
 
 
 @dataclass
@@ -172,8 +189,9 @@ def prepare_app(request: FlowRequest, *, client: Any, paths: Any, config: Any, h
 
         instance = instance_key(None, tree)
     tags = profile.tags or (host.project(tree).tags if tree else ())
+    linked = backend_request(request, profile, harness_dir)
     lease = acquire(client, kind=LEASE_KINDS[platform], project=project, session=session, instance=instance,
-                    tree=tree, wait=request.wait, tags=tags)
+                    tree=tree, wait=request.wait, tags=tags, backend=linked)
     sid = lease["sid"]
     host.activate_imports(tree)
     cls = app_class(harness_dir, platform, flow_helpers(host, platform, tree), profile.app_file)
@@ -183,6 +201,9 @@ def prepare_app(request: FlowRequest, *, client: Any, paths: Any, config: Any, h
         kwargs["platform"] = platform
     app = cls(profile, **kwargs)
     app.lease = lease
+    app.harness_dir = harness_dir
+    if lease.get("backend"):
+        app.refresh_backend(wait=request.wait)
     app.prepare()
     extensions = driver_extensions(host, platform, tree)
     pace = pace_from_config(config)
@@ -193,6 +214,11 @@ def prepare_app(request: FlowRequest, *, client: Any, paths: Any, config: Any, h
                                           playwright_dirs=[node_modules_dir(paths)])
     else:
         worker_config = mobile_worker_config(profile, sids={platform: sid}, extensions=extensions, pace=pace)
+    if app.backend_link:
+        worker_config["backend"] = worker_backend(app.backend_link)
+        if platform == "web" and not worker_config.get("apiBaseUrl") and app.backend and app.backend.url:
+            worker_config["apiBaseUrl"] = app.backend.url
+            worker_config["apiFromBackend"] = True
     worker_config.update(app.worker_options())
     handle = manager.ensure(WORKER_KINDS[platform], sid, worker_config)
     app.worker = handle.client()
@@ -237,6 +263,11 @@ def run_flow(request: FlowRequest, *, client: Any, paths: Any, config: Any, host
     report["project"] = project
     report["session"] = session
     report["worker"] = handle.as_dict()
+    if app.backend_link:
+        backend = app.backend_link.get("backend") or {}
+        report["backend"] = {"id": backend.get("id"), "generation": backend.get("generation"),
+                             "lease": (app.backend_link.get("lease") or {}).get("id"),
+                             "url": app.backend.url if app.backend else None}
     if request.release:
         try:
             client.post(f"/api/leases/{sid}/release", json={"reason": "flow finished"})

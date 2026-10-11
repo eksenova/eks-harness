@@ -205,6 +205,10 @@ export function heartbeat({ force = false, stateDir = stateDirFromEnv(), sid = p
   if (sids.size) heartbeatSids([...sids]).catch(() => {})
 }
 
+export async function leaseBackend(sid, { secrets = true } = {}) {
+  return request('GET', `/api/leases/${encodeURIComponent(sid)}/backend`, { query: { secrets }, timeout: 15_000 })
+}
+
 export async function updateLeaseMeta(sid, meta) {
   return request('POST', `/api/leases/${encodeURIComponent(sid)}/meta`, { json: { meta }, timeout: 15_000 })
 }

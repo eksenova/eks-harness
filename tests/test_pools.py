@@ -239,15 +239,14 @@ def real_backends(paths, config: Config):
         ProcessRegistry(repo_cache_root(paths)).stop(entry)
 
 
-def test_backend_definition_protocol_binding_and_auto_stop(paths, real_backends) -> None:
+def test_backend_definition_protocol_leases_and_idle_cleanup(paths, real_backends) -> None:
     host, backends = real_backends
     write_definition(paths.backends_dir)
     assert [d["name"] for d in backends.definitions()] == ["fakeapi"]
-    bindings: list[str] = ["lease browser:1:1"]
-    host.binding_source = lambda backend_id: list(bindings)
-    record = backends.ensure({"definition": "fakeapi", "instance": "tree:/tmp/work", "hold": 0})
-    backend_id = record["id"]
+    response = backends.acquire({"definition": "fakeapi", "key": "tree:/tmp/work", "holder": "agent", "ttl": 60})
+    backend_id = response["backend"]["id"]
     assert backend_id == "fakeapi@tree:/tmp/work"
+    lease_id = response["lease"]["id"]
     wait_for(lambda: host.backends[backend_id]["status"] in ("running", "failed"))
     current = backends.public(host.backends[backend_id])
     assert current["status"] == "running", current.get("error")
@@ -255,23 +254,31 @@ def test_backend_definition_protocol_binding_and_auto_stop(paths, real_backends)
     assert current["captured"]["url"] == f"http://127.0.0.1:{port}"
     assert current["exports"] == {"EKS_LOCAL_API_URL": f"http://127.0.0.1:{port}", "EKS_API_PORT": str(port)}
     assert current["alive"] == {"fakeapi": True}
-    assert current["bindings"] == ["lease browser:1:1"]
+    assert current["bindings"] == ["lease agent"] and current["generation"] == 1
+    assert current["info"]["url"] == f"http://127.0.0.1:{port}" and current["info"]["ports"] == {"api": port}
+    assert current["idleTimeout"] == 1.0 and current["idleTimeoutSource"] == "definition"
     entry = backends.registry.load_role("fakeapi", "tree:/tmp/work")
     assert entry is not None and entry.supervised and alive(entry.pid, entry.started)
-    exports = (backends.state_dir(host.backends[backend_id]) / "exports.env").read_text()
+    state = backends.state_dir(host.backends[backend_id])
+    exports = (state / "exports.env").read_text()
     assert f'EKS_LOCAL_API_URL="http://127.0.0.1:{port}"' in exports
-    assert backends.ensure({"definition": "fakeapi", "instance": "tree:/tmp/work", "hold": 0})["status"] == "running"
+    second = backends.acquire({"definition": "fakeapi", "key": "tree:/tmp/work", "holder": "other"})
+    assert second["status"] == "granted" and second["backend"]["generation"] == 1
+    assert len(host.backends[backend_id]["leases"]) == 2
     backends.tick()
-    assert host.backends[backend_id]["status"] == "running" and "emptySince" not in host.backends[backend_id]
-    bindings.clear()
+    assert host.backends[backend_id]["status"] == "running" and "idleSince" not in host.backends[backend_id]
+    backends.release(lease_id)
     backends.tick()
-    assert "emptySince" in host.backends[backend_id]
+    assert host.backends[backend_id]["status"] == "running" and "idleSince" not in host.backends[backend_id]
+    backends.release(second["lease"]["id"])
+    backends.tick()
+    assert "idleSince" in host.backends[backend_id]
     time.sleep(1.2)
     backends.tick()
-    assert host.backends[backend_id]["status"] == "stopped"
+    assert backend_id not in host.backends
     wait_for(lambda: not alive(entry.pid, entry.started), 20)
-    teardown = (backends.state_dir(host.backends[backend_id]) / "teardown.txt").read_text()
-    assert teardown.startswith("--context ") and "--final" not in teardown
+    teardown = (state / "teardown.txt").read_text()
+    assert teardown.startswith("--context ") and "--final" in teardown
     assert backends.registry.load_role("fakeapi", "tree:/tmp/work") is None
 
 
@@ -290,7 +297,7 @@ def test_backend_failure_is_recorded(paths, real_backends) -> None:
         backends.ensure({"definition": "../etc", "instance": "i"})
 
 
-def test_backend_auto_stop_follows_lease_bindings(paths, config: Config, real_backends) -> None:
+def test_backend_auto_stop_follows_driver_links(paths, config: Config, real_backends) -> None:
     host, _ = real_backends
     write_definition(paths.backends_dir)
     app = make_app(config)
@@ -303,7 +310,8 @@ def test_backend_auto_stop_follows_lease_bindings(paths, config: Config, real_ba
         backend_id = ensured.json()["id"]
         wait_for(lambda: client.get(f"/api/backends/{backend_id}").json()["status"] in ("running", "failed"))
         lease = acquire(client, "inst", "browser", backend=backend_id)
-        assert client.get(f"/api/backends/{backend_id}").json()["bindings"] == ["lease browser:1:1"]
+        assert client.get(f"/api/backends/{backend_id}").json()["bindings"] == [f"driver {lease['sid']}"]
+        assert lease["backend"]["id"] == backend_id and lease["backend"]["status"] == "running"
         real.tick()
         assert ctx.pools.host.backends[backend_id]["status"] == "running"
         logs = client.get("/api/logs", params={"resource": f"backend:{backend_id}:fakeapi"}).json()
@@ -317,9 +325,7 @@ def test_backend_auto_stop_follows_lease_bindings(paths, config: Config, real_ba
         real.tick()
         time.sleep(1.2)
         manager(ctx).tick()
-        assert ctx.pools.host.backends[backend_id]["status"] == "stopped"
-        stopped = client.post(f"/api/backends/{backend_id}/stop", json={"final": True})
-        assert stopped.status_code == 200
+        assert backend_id not in ctx.pools.host.backends
         assert client.get(f"/api/backends/{backend_id}").status_code == 404
 
 

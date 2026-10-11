@@ -65,3 +65,14 @@ def local_path(path: str) -> Path:
     if base is None:
         raise ToolError(f"'{path}' is relative and this MCP connection has no work tree; pass an absolute path.")
     return base / file_path
+
+
+def harness_instance(tree: str | None = None) -> str | None:
+    forced = os.environ.get("EKS_HARNESS_INSTANCE")
+    if forced:
+        return forced
+    session = os.environ.get("CLAUDE_CODE_SESSION_ID")
+    if session and not REMOTE.get():
+        return f"session:{session}"
+    resolved = resolve_tree(tree)
+    return f"tree:{resolved}" if resolved else None

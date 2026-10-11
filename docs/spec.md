@@ -129,8 +129,9 @@ it is a plugin that needs a Blender executable on a node or the hub.
 - **Artifact**: any stored output (screenshot, video, DOM, HAR, logs, render,
   score snapshot, Blender frames, scene captures) with metadata, thumbnails,
   versions and shares.
-- **Lease**: exclusive use of a resource (browser profile, device, backend
-  slot, node GPU) by an instance (a Claude session, a CI job, a user).
+- **Lease**: use of a resource by an instance (a Claude session, a CI job, a user). Driver leases
+  (browser profile, device, node GPU) are exclusive and short; backend leases are shared and
+  reference-counted: many holders share one backend instance (section 10.1).
 - **Driver**: controls a target (browser, simulator, emulator, real device,
   desktop app) through the driver protocol.
 - **Platform**: a kind of target and its device pool (web, ios, android, or
@@ -138,7 +139,8 @@ it is a plugin that needs a Blender executable on a node or the hub.
 - **App profile**: how to build, install, launch and identify an app on a
   platform (bundle id, package, URL, build command, launch arguments, bridge).
 - **Backend**: a service stack an app talks to (local or remote), managed by a
-  backend plugin (prepare, spec, health, seed, teardown).
+  backend plugin (prepare, spec or start, health, info, stop, cleanup, seed) and shared by every
+  lease on the same instance.
 - **Score**: a synchronized timeline (section 9).
 - **Node**: a machine contributing capacity.
 - **Plugin**: a unit of extension (section 6).
@@ -376,12 +378,102 @@ screens).
 
 ## 10. Backends, seeding, credentials
 
-Backends are plugins implementing `describe`, `fingerprint`, `prepare`,
-`spec` (URLs, env), `health`, `seed`, `snapshot/restore` and `teardown`; the
-hub runs and supervises them on the hub or a node. Seeders and credential
-providers are separate contributions so a repo plugin can offer personas and
-logins against any backend (local or staging). Backend choice policies (for
-example "local when the branch changes the API") are plugin hooks.
+Backends are plugins (or definition scripts) that the hub runs and supervises on the hub or a node.
+Seeders and credential providers are separate contributions so a repo plugin can offer personas and
+logins against any backend (local or staging). Backend choice policies (for example "local when the
+branch changes the API") are plugin hooks.
+
+### 10.1 Instances and leases
+
+- A backend **instance** is keyed by its definition and an identity: `<definition>@<identity>`, where the
+  identity is `tree:<the tree it runs from>` by default, an explicit `key`, and a `#<hash>` of its `params`
+  when they are given (`api@tree:/src/acme-api`, `api@shared#1a2b3c4d`). The definition belongs to one
+  project's plugin, so every repository and worktree that asks for the same definition, tree and params
+  shares the instance.
+- Holders take **backend leases** (`bl_<16 hex>`): `POST /api/backend-leases`, `eks-harness backend acquire`,
+  MCP `backend_acquire`. Many leases hold one instance at the same time. The first acquire starts it;
+  concurrent acquirers join the same start (one prepare, one launch); later acquirers get the running
+  instance. A lease records its holder label, owner instance, project and session, creation and last
+  renewal, and expires `ttl` after its last renewal (`backend.leaseTtlSeconds`, default 600; `never`
+  allowed). Holders renew (`backend renew`) and release (`backend release`); a crashed holder's lease
+  simply expires.
+- **Idle shutdown**: when the last lease goes away the instance records `idleSince`; if no lease arrives
+  within its idle timeout the daemon stops it and runs the project's cleanup. An acquire inside that
+  window cancels the timer and reuses the instance as it is. The idle timeout comes from, first match
+  wins: the acquire request (`idleTimeout`), `.harness/project.toml` of the backend's tree
+  (`[backends.<definition>] idle_timeout`, then `[backends] idle_timeout`), the definition (`describe()`
+  `idleTimeout`, or `idle_timeout` on the manifest's `[[contributes.backend]]`), then the hub setting
+  `backend.idleTimeout` (default `15m`). Values are seconds or durations (`90`, `15m`, `1h30m`); `0` stops
+  at once and `never` keeps the instance until it is stopped by hand.
+- **Replacement**: an acquire of a running instance re-checks it (at most every 15 s): a changed
+  `fingerprint` (new commit, new configuration), a dead process or a failing `health` hook replaces it.
+  The leases stay, the instance stops (stop hook, no cleanup), starts again and its `generation` goes up;
+  the daemon emits `backend.replaced` with the linked driver sids. The housekeeping tick also replaces a
+  held instance whose processes died.
+- **Daemon restarts**: instance records and their leases live in the pools state file. On start the
+  daemon extends every lease by a grace (120 s) so holders can renew, re-adopts instances caught
+  mid-step, keeps running instances whose processes (or health hook) are alive, starts dead ones again
+  when leases hold them, cleans up dead ones nobody holds through the project hook, and stops processes
+  whose backend record is gone (running the definition's cleanup when it can be found).
+- `backend stop` (`POST /api/backends/<id>/stop`) stops an instance now and ends every lease on it;
+  `cleanup: true` also runs the cleanup hook. The older `ensure` and `hold` calls remain: `ensure` takes a
+  `hold` lease for the requester, `hold` takes or clears a time-limited `hold` lease.
+
+### 10.2 Project lifecycle hooks
+
+A backend contribution implements these methods (a definition script answers the same commands with
+`--context <file>`); the runner reports which ones exist (`describe()["implements"]`):
+
+| Hook | When | Returns |
+| --- | --- | --- |
+| `describe()` | before every start | `description`, `ports` (names the daemon allocates), `idleTimeout` |
+| `fingerprint(ctx)` | on start and when an acquire re-checks a running instance | a string; a change replaces the instance |
+| `prepare(ctx)` | before start (build, containers, databases) | - |
+| `spec(ctx)` | supervised start: processes the daemon launches, watches and restarts | `BackendSpec` (processes, env, exports, files, `info` template) |
+| `start(ctx)` | self-managed start, used when there is no `spec` (`docker compose up -d`, a remote environment) | `BackendInfo` |
+| `health(ctx)` | readiness after start, liveness on re-checks and restarts | `bool` |
+| `info(ctx)` | after the instance is ready | `BackendInfo`, merged over the spec's `info` template |
+| `stop(ctx)` | after the daemon stopped the supervised processes, on replacement and on every stop | - |
+| `cleanup(ctx)` | after `stop` when the instance goes away (idle timeout, `stop --cleanup`, orphan) | - |
+| `teardown(ctx, final)` | older plugins: stands in for `stop` (`final=False`) and `cleanup` (`final=True`) | - |
+| `seed`, `snapshot`, `restore` | on request | JSON |
+
+`ctx` carries `backendId`, `definition`, `instance`, `key`, `params`, `tree`, `stateDir`, `ports`,
+`captured`, `exports`, `generation` and `daemonUrl`.
+
+### 10.3 Backend info
+
+`BackendInfo` (`eks_harness.plugins.sdk`) is what a backend tells its holders: `url` (the main base URL)
+and named `urls`, `ports`, `credentials`, `env` (values for shells and app dev servers) with
+`secret_env` naming the secret ones, `commit`, `branch`, `version`, `worktree`, and a free-form `extra`.
+Any value wrapped in `Secret("...")` is secret, and `credentials` are secret as a whole. The daemon
+fills `url`, `urls`, `ports`, `env` (from exports), `commit`, `branch` and `worktree` (from the tree's
+git state) when the plugin leaves them out. Secrets are kept in a mode 600 file next to the daemon state
+(the pools state file only holds the redacted copy), never logged and never put in events; lists,
+status, the UI and `GET /api/backends` show them as `<redacted>`. They are returned only to a lease
+holder that asks: `GET /api/backend-leases/<lease>/info?secrets=true`,
+`GET /api/leases/<sid>/backend?secrets=true` for a linked driver lease, `backend info <lease> --secrets`,
+MCP `backend_info` with `secrets=true` (the holder is the principal that took the lease, an editor of
+its project or an admin).
+
+### 10.4 Linking driver leases to backends
+
+A browser or device lease (and the flow or app dev server that runs on it) can be linked to a backend:
+`lease acquire --backend <bl_... | backend id | definition> [--backend-tree] [--backend-key]
+[--backend-param]`, `flow run --backend ...`, `[backend]` in `app.toml`, `App.link_backend()` in
+`app.py`, or `POST /api/leases/<sid>/backend`. The link is a backend lease of kind `driver` held for the
+driver lease's lifetime (no ttl): it starts the backend while the driver lease waits in the queue, the
+driver lease stays `preparing` until the backend is ready (`backend.readyTimeoutSeconds`), fails when
+the backend fails, and releasing or losing the driver lease releases the link. Many short driver leases
+share one long-lived instance without restarting it. The lease response, `lease show`, heartbeats and
+`GET /api/leases/<sid>/backend` carry the link (`id`, `lease`, `status`, `generation`, `url`); the flow
+runner hands the full info to `app.backend` (a `BackendInfo`), re-expands `app.toml` with
+`EKS_BACKEND_URL`, `EKS_BACKEND_URL_<NAME>`, `EKS_BACKEND_ID`, `EKS_BACKEND_LEASE` and the backend's
+env, and gives it to the driver worker (`config.backend`, `kit.backend()`, `apiBaseUrl` when the app
+names none). Workers watch the generation in their heartbeats: on a replacement they read the new info,
+call the extensions' `onBackendChange(next, previous)`, emit a `backend.changed` event and (web) reload
+the page. Because an instance keeps its ports across replacements, app dev servers pointed at its URL
+keep running.
 
 ## 11. Nodes
 
@@ -441,9 +533,10 @@ The repository is a plugin marketplace (`.claude-plugin/marketplace.json`)
 with one plugin, `eks-harness`, built from `claude/`:
 - **MCP server** (`eks-harness mcp`, stdio and HTTP): projects, sessions,
   artifacts (search, upload, tag, notes, share, annotate, versions), leases,
-  devices and browsers (acquire, release, status), driver actions (act,
-  observe, capture) for interactive control, flows (run, list, report),
-  backends (status, prepare, seed, logs), nodes (status, jobs), plugins (list,
+  devices and browsers (`lease_acquire` with a backend link, `lease_release`, `lease_backend`, status),
+  driver actions (act, observe, capture) for interactive control, flows (run, list, report),
+  backends (`backend_acquire`, `backend_lease`, `backend_renew`, `backend_release`, `backend_leases`,
+  `backend_info`, `backend_stop`, `list_backends`, seed, personas), nodes (status, jobs), plugins (list,
   trust, settings), video (validate, inspect, render, markers, effects,
   transitions, add segment/effect, set property: the full video editing
   surface), scores (create, inspect, run take, render, live control), Blender
@@ -470,7 +563,8 @@ with one plugin, `eks-harness`, built from `claude/`:
 
 `eks-harness` (alias `ehx`): `setup`, `daemon`, `service`, `status`,
 `project`, `session`, `artifact`, `share`, `lease`, `device`, `browser`,
-`backend`, `flow run`, `node add|serve|list|remove`, `plugin new|dev|list|trust|validate|install`,
+`backend acquire|renew|release|leases|info|list|status|stop|logs|seed`, `flow run`,
+`node add|serve|list|remove`, `plugin new|dev|list|trust|validate|install`,
 `video render|validate|inspect|markers`, `score new|take|render|live`,
 `blender render`, `studio publish|open`, `mcp`, `migrate`, `doctor`.
 

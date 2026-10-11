@@ -15,7 +15,12 @@ eks-harness flow run -e "app.goto('/settings'); result = app.text('h1')" --platf
 eks-harness flow list
 ```
 
-MCP: `flow_run(flow=..., platform=..., params=...)` returns the same report as JSON.
+MCP: `flow_run(flow=..., platform=..., params=..., backend=...)` returns the same report as JSON.
+
+Backends: `--backend <backend lease id | backend id | definition>` (or `[backend]` in `app.toml`) links the
+flow's lease to a shared backend for the lease's lifetime; the run waits until it is ready, `app.backend`
+holds its info (`url`, `urls`, `credentials`, `env`, `commit`, `branch`) and `app.toml` can use
+`${EKS_BACKEND_URL}`. In `app.py`, `self.link_backend("api", tree=...)` does the same from `prepare()`.
 
 ## App setup
 
@@ -62,4 +67,5 @@ text, or `{"role": "button", "name": "Save", "nth": 1}`.
    questions (did the toast appear by 2 s, does the cut land on the beat) run `eks-harness video check` on the
    recording (skill `video-review`).
 3. Check the checkpoint lines: URL or route, layout spill, console errors, failed requests, alerts.
-4. Release the lease when the work is done: `eks-harness lease release` (or `--release` on the run).
+4. Keep driver leases short: release the lease when the run is done (`--release` on the run, or
+   `eks-harness lease release`). A linked backend keeps running for the next run until its idle timeout.

@@ -9,10 +9,11 @@
     "./script-runner": "./src/script-runner.mjs",
     "./devtools-link": "./src/devtools-link.mjs",
     "./config": "./src/config.mjs",
-    "./extensions": "./src/extensions.mjs"
+    "./extensions": "./src/extensions.mjs",
+    "./backend-link": "./src/backend-link.mjs"
   },
   "scripts": {
-    "typecheck": "node --check src/daemon-client.mjs && node --check src/script-runner.mjs && node --check src/devtools-link.mjs && node --check src/config.mjs && node --check src/extensions.mjs",
+    "typecheck": "node --check src/daemon-client.mjs && node --check src/script-runner.mjs && node --check src/devtools-link.mjs && node --check src/config.mjs && node --check src/extensions.mjs && node --check src/backend-link.mjs",
     "test": "vitest run"
   },
   "devDependencies": {

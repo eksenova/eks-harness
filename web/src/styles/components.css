@@ -665,6 +665,13 @@
   min-width: 0;
 }
 
+.section-subtitle {
+  font-size: var(--fs-13);
+  font-weight: 600;
+  color: var(--ink-2);
+  margin: var(--s-3) 0 var(--s-1);
+}
+
 .section-count {
   color: var(--ink-3);
   font-weight: 400;

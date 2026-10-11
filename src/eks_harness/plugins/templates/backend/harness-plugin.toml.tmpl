@@ -8,6 +8,7 @@ description = "{{description}}"
 [[contributes.backend]]
 id = "{{slug}}"
 entry = "{{module}}.backend:Backend"
+idle_timeout = "15m"
 
 [config]
 image = { type = "str", default = "", description = "container image or build target" }

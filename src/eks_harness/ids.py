@@ -85,3 +85,15 @@ def parse_project_id(project_id: str) -> tuple[str, str]:
 
 def project_id(owner: str, name: str) -> str:
     return "/".join(parse_project_id(f"{owner}/{name}"))
+
+
+BACKEND_LEASE_PREFIX = "bl_"
+BACKEND_LEASE_PATTERN = re.compile(r"^bl_[0-9a-f]{16}$")
+
+
+def new_backend_lease_id() -> str:
+    return BACKEND_LEASE_PREFIX + secrets.token_hex(8)
+
+
+def is_backend_lease_id(value: str) -> bool:
+    return bool(BACKEND_LEASE_PATTERN.match(value or ""))

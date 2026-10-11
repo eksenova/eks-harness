@@ -44,6 +44,7 @@ ROUTER_MODULES = (
     "routes_leases",
     "routes_pools",
     "routes_backends",
+    "routes_backend_leases",
     "routes_logs",
     "routes_captures",
     "routes_live",

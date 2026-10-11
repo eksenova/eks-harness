@@ -3,8 +3,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, errorText } from "../api/client";
-import { backendPath, fetchers, keys, useBackend, useBackendDefinitions, useBackends, useLeases } from "../api/queries";
-import type { BackendDefinitionOut, BackendOut } from "../api/types";
+import { backendPath, fetchers, keys, useBackend, useBackendDefinitions, useBackends } from "../api/queries";
+import type { BackendDefinitionOut, BackendInfoOut, BackendLeaseOut, BackendOut } from "../api/types";
 import { Button } from "../components/Button";
 import { ConfirmDialog } from "../components/Dialog";
 import { Checkbox, SearchInput, Select } from "../components/Form";
@@ -20,27 +20,33 @@ import { saveBlob } from "../lib/download";
 import { TextContent } from "../viewers/TextContent";
 
 const STATUS: Record<string, string> = { stopped: "Stopped", preparing: "Starting", starting: "Starting", running: "Running", stopping: "Stopping", failed: "Failed" };
+const HOLD_SECONDS = 3600;
 
-function holds(backend: BackendOut): { id: string; until: number }[] {
-  const raw = backend.holds;
-  if (!raw || typeof raw !== "object") return [];
-  const now = Date.now() / 1000;
-  return Object.entries(raw as Record<string, unknown>)
-    .map(([id, value]) => ({ id, until: typeof value === "number" ? value : Number(value) }))
-    .filter((hold) => Number.isFinite(hold.until) && hold.until > now);
+export function backendLeases(backend: BackendOut): BackendLeaseOut[] {
+  return Array.isArray(backend.leases) ? backend.leases : [];
 }
 
-export function leaseBindings(backend: BackendOut): string[] {
-  return backend.bindings.filter((binding) => !binding.startsWith("hold "));
+function epochIso(value: number | null | undefined): string | null {
+  return typeof value === "number" && Number.isFinite(value) ? new Date(value * 1000).toISOString() : null;
+}
+
+export function describeSeconds(value: number | "never" | null | undefined): string {
+  if (value === "never") return "never";
+  if (value === null || value === undefined || !Number.isFinite(value)) return "";
+  if (value < 120) return `${Math.round(value)} s`;
+  if (value < 7200) return `${Math.round(value / 60)} min`;
+  return `${Math.round((value / 3600) * 10) / 10} h`;
 }
 
 export function BackendState({ backend }: { backend: BackendOut }) {
   const now = useMinute();
-  const emptySince = typeof backend.emptySince === "number" ? backend.emptySince : null;
-  const grace = backend.idleGraceSeconds ?? null;
-  const stopAt = emptySince !== null && grace !== null ? new Date((emptySince + grace) * 1000) : null;
-  if (backend.status === "running" && stopAt && stopAt.getTime() > now.getTime() && !backend.bindings.length) {
-    return <span className="state-word">Stops {formatFuture(stopAt, now).replace(/^In/, "in")}</span>;
+  const stopsAt = typeof backend.stopsAt === "number" ? new Date(backend.stopsAt * 1000) : null;
+  const leases = backendLeases(backend);
+  if ((backend.status === "running" || backend.status === "failed") && !leases.length) {
+    if (stopsAt && stopsAt.getTime() > now.getTime()) {
+      return <span className="state-word" data-state={backend.status === "failed" ? "failed" : "idle"}>{`${backend.status === "failed" ? "Failed, cleanup" : "Idle, stops"} ${formatFuture(stopsAt, now).replace(/^In/, "in")}`}</span>;
+    }
+    if (backend.idleTimeout === "never") return <span className="state-word" data-state="idle">Idle, kept</span>;
   }
   const word = STATUS[backend.status] ?? backend.status;
   return (
@@ -64,7 +70,7 @@ export function Ports({ ports }: { ports: Record<string, number> }) {
   );
 }
 
-const NATURAL: Natural = { id: "asc", definition: "asc", state: "asc", since: "desc", bindings: "desc" };
+const NATURAL: Natural = { id: "asc", definition: "asc", state: "asc", since: "desc", leases: "desc", generation: "desc" };
 
 export function backendHref(id: string): string {
   return `/backends/${backendPath(id)}`;
@@ -85,7 +91,8 @@ export function BackendsPage({ tab }: { tab: "instances" | "definitions" }) {
       definition: (b) => b.definition,
       state: (b) => b.status,
       since: (b) => (b.startedAt ? Date.parse(b.startedAt) : 0),
-      bindings: (b) => leaseBindings(b).length,
+      leases: (b) => backendLeases(b).length,
+      generation: (b) => b.generation ?? 0,
     };
     return sortRows(backends.data?.items ?? [], accessors[sort] ?? accessors.id, dir);
   }, [backends.data, sort, dir]);
@@ -94,9 +101,10 @@ export function BackendsPage({ tab }: { tab: "instances" | "definitions" }) {
     { key: "id", header: "Backend", sortKey: "id", naturalDir: "asc", render: (b) => <Link to={backendHref(b.id)} className="link-quiet mono">{b.id}</Link>, title: (b) => b.id },
     { key: "definition", header: "Definition", sortKey: "definition", naturalDir: "asc", render: (b) => b.definition },
     { key: "state", header: "State", sortKey: "state", naturalDir: "asc", render: (b) => <BackendState backend={b} /> },
+    { key: "generation", header: "Gen", sortKey: "generation", naturalDir: "desc", align: "right", width: "56px", render: (b) => <Mono>{b.generation ?? 0}</Mono> },
     { key: "since", header: "Since", sortKey: "since", naturalDir: "desc", align: "right", width: "96px", render: (b) => <AbsTime value={b.status === "stopped" ? b.stoppedAt : b.startedAt} /> },
     { key: "ports", header: "Ports", render: (b) => <Ports ports={b.ports} /> },
-    { key: "bindings", header: "Bindings", sortKey: "bindings", naturalDir: "desc", align: "right", width: "88px", render: (b) => String(leaseBindings(b).length) },
+    { key: "leases", header: "Leases", sortKey: "leases", naturalDir: "desc", align: "right", width: "72px", render: (b) => String(backendLeases(b).length) },
     {
       key: "more",
       header: <span className="visually-hidden">Actions</span>,
@@ -116,13 +124,9 @@ export function BackendsPage({ tab }: { tab: "instances" | "definitions" }) {
 
   const defColumns: Column<BackendDefinitionOut>[] = [
     { key: "name", header: "Name", render: (d) => d.name },
-    { key: "description", header: "Description", render: (d) => (d as BackendDefinitionOut & { description?: string }).description ?? "" },
-    { key: "ports", header: "Ports", render: (d) => ((d as BackendDefinitionOut & { ports?: string[] }).ports ?? []).join(", ") },
+    { key: "description", header: "Description", render: (d) => d.description ?? "" },
     { key: "path", header: "Found in", render: (d) => <span className="mono muted">{d.path}</span>, title: (d) => d.path },
-    { key: "grace", header: "Idle grace", align: "right", width: "96px", render: (d) => {
-      const grace = (d as BackendDefinitionOut & { idleGraceSeconds?: number }).idleGraceSeconds;
-      return typeof grace === "number" ? `${grace} s` : "";
-    } },
+    { key: "idle", header: "Idle timeout", align: "right", width: "104px", render: (d) => (d.idleTimeout === null || d.idleTimeout === undefined ? "" : String(d.idleTimeout)) },
   ];
 
   const state = tab === "instances" ? queryState(backends, "backends") : queryState(definitions, "backend definitions");
@@ -159,11 +163,12 @@ export function BackendsPage({ tab }: { tab: "instances" | "definitions" }) {
                 </div>
                 <div className="row-meta">
                   <Ports ports={b.ports} />
-                  <span>{plural(leaseBindings(b).length, "binding")}</span>
+                  <span>{plural(backendLeases(b).length, "lease")}</span>
+                  <span>gen {b.generation ?? 0}</span>
                 </div>
               </>
             )}
-            empty={<EmptyState>No backends running. Agents start them with eks-harness backend ensure.</EmptyState>}
+            empty={<EmptyState>No backends running. Agents start them with eks-harness backend acquire.</EmptyState>}
           />
         ) : (
           <DataTable
@@ -181,22 +186,21 @@ export function BackendsPage({ tab }: { tab: "instances" | "definitions" }) {
 
 function StopBackendConfirm({ backend, onClose }: { backend: BackendOut; onClose: () => void }) {
   const client = useQueryClient();
-  const leases = useLeases();
-  const bound = leaseBindings(backend);
-  const sessions = Array.from(new Set(bound.map((sid) => leases.data?.items.find((l) => l.sid === sid)?.sessionName).filter(Boolean)));
-  const body = bound.length
-    ? `${plural(bound.length, "bound lease")} lose their backend${sessions.length ? `: ${sessions.join(", ")}` : ""} (${bound.join(", ")}).`
-    : "No lease is bound to it.";
+  const [cleanup, setCleanup] = useState(false);
+  const leases = backendLeases(backend);
+  const holders = Array.from(new Set(leases.map((l) => (l.driverSid ? `driver ${l.driverSid}` : l.holder)).filter(Boolean)));
+  const body = leases.length ? `${plural(leases.length, "lease")} end with it: ${holders.join(", ")}.` : "No lease holds it.";
   return (
     <ConfirmDialog
       title={`Stop ${backend.id}?`}
       body={body}
-      confirmLabel="Stop backend"
+      extra={<Checkbox label="Also run the project's cleanup (drops its data)" checked={cleanup} onChange={(event) => setCleanup(event.target.checked)} />}
+      confirmLabel={cleanup ? "Stop and clean up" : "Stop backend"}
       busyLabel={"Stopping…"}
       onClose={onClose}
       errorFor={(err) => errorText(err, "stop", backend.id)}
       onConfirm={async () => {
-        await api.post(`/api/backends/${backendPath(backend.id)}/stop`, { reason: "stopped from the UI" }, { timeoutMs: 60_000 });
+        await api.post(`/api/backends/${backendPath(backend.id)}/stop`, { reason: "stopped from the UI", cleanup }, { timeoutMs: 120_000 });
         void client.invalidateQueries({ queryKey: keys.backends });
         void client.invalidateQueries({ queryKey: ["backend"] });
       }}
@@ -204,37 +208,65 @@ function StopBackendConfirm({ backend, onClose }: { backend: BackendOut; onClose
   );
 }
 
+function LeaseExpiry({ lease }: { lease: BackendLeaseOut }) {
+  const now = useMinute();
+  if (lease.driverSid) return <span className="muted">with the driver</span>;
+  if (typeof lease.expires !== "number") return <span className="muted">never</span>;
+  return <span>{formatFuture(new Date(lease.expires * 1000), now).replace(/^In/, "in")}</span>;
+}
+
+function idleLine(b: BackendOut): string {
+  const timeout = describeSeconds(b.idleTimeout);
+  if (!timeout) return "";
+  if (b.idleTimeout === "never") return " Kept when no lease is left.";
+  return ` Stops and cleans up ${timeout} after its last lease${b.idleTimeoutSource ? ` (${b.idleTimeoutSource} setting)` : ""}.`;
+}
+
 export function BackendDetailPage({ splat }: { splat: string }) {
   const logs = splat.endsWith("/logs");
   const id = decodeURIComponent(logs ? splat.slice(0, -"/logs".length) : splat);
   const backend = useBackend(id);
-  const leases = useLeases();
   const auth = useAuth();
   const client = useQueryClient();
   const [stopping, setStopping] = useState(false);
-  const [holdBusy, setHoldBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   useTitle(`${id} - Backends`);
   const state = queryState(backend, "backend", {
-    notFound: <EmptyState action={<Link to="/backends" className="link">Backends</Link>}>There is no backend {id}. It may have stopped and been removed.</EmptyState>,
+    notFound: <EmptyState action={<Link to="/backends" className="link">Backends</Link>}>There is no backend {id}. It may have stopped and been cleaned up.</EmptyState>,
     forbidden: <Forbidden what={id} />,
   });
   if (state) return <div className="page">{state}</div>;
   const b = backend.data!;
-  const activeHolds = holds(b);
-  const uiHold = activeHolds.find((h) => h.id === `ui:${auth.username}`);
-  const held = activeHolds.length > 0;
+  const leases = backendLeases(b);
+  const holdId = `ui:${auth.username}`;
+  const myHold = leases.find((l) => l.kind === "hold" && l.holder === holdId);
+  const refresh = () => {
+    void client.invalidateQueries({ queryKey: keys.backend(b.id) });
+    void client.invalidateQueries({ queryKey: keys.backends });
+  };
   const toggleHold = async () => {
-    setHoldBusy(true);
+    setBusy("hold");
     setError("");
     try {
-      await api.post(`/api/backends/${backendPath(b.id)}/hold`, held ? { seconds: 0, holdId: uiHold ? uiHold.id : null } : { seconds: 3600, holdId: `ui:${auth.username}` });
-      void client.invalidateQueries({ queryKey: keys.backend(b.id) });
-      void client.invalidateQueries({ queryKey: keys.backends });
+      await api.post(`/api/backends/${backendPath(b.id)}/hold`, myHold ? { seconds: 0, holdId } : { seconds: HOLD_SECONDS, holdId });
+      refresh();
     } catch (err) {
-      setError(errorText(err, held ? "release the hold on" : "hold", b.id));
+      setError(errorText(err, myHold ? "release the hold on" : "hold", b.id));
     } finally {
-      setHoldBusy(false);
+      setBusy(null);
+    }
+  };
+  const release = async (lease: BackendLeaseOut) => {
+    setBusy(lease.id);
+    setError("");
+    try {
+      await api.post(`/api/backend-leases/${encodeURIComponent(lease.id)}/release`, { reason: "released from the UI" });
+      refresh();
+    } catch (err) {
+      setError(errorText(err, "release", `the lease ${lease.id}`));
+    } finally {
+      setBusy(null);
     }
   };
   const base = backendHref(b.id);
@@ -247,20 +279,19 @@ export function BackendDetailPage({ splat }: { splat: string }) {
         actions={
           b.status !== "stopped" ? (
             <>
-              <Button onClick={() => void toggleHold()} busy={holdBusy} busyLabel={held ? "Releasing…" : "Holding…"}>
-                {held ? "Release hold" : "Hold"}
+              <Button onClick={() => void toggleHold()} busy={busy === "hold"} busyLabel={myHold ? "Releasing…" : "Holding…"}>
+                {myHold ? "Release my hold" : "Hold 1 h"}
               </Button>
-              <Button onClick={() => setStopping(true)}>
-                {"Stop…"}
-              </Button>
+              <Button onClick={() => setStopping(true)}>{"Stop…"}</Button>
             </>
           ) : null
         }
         meta={
           <p>
             <BackendState backend={b} />
-            {started ? ` since ${formatClock(started)}` : ""} for instance <Mono>{b.instance}</Mono>.{b.tree ? <> Tree <Mono>{b.tree}</Mono></> : null}
-            {held ? ` Held by ${activeHolds.map((h) => h.id.replace(/^ui:/, "")).join(", ")} until ${formatClock(new Date(Math.max(...activeHolds.map((h) => h.until)) * 1000))}.` : ""}
+            {started ? ` since ${formatClock(started)}` : ""}, generation <Mono>{b.generation ?? 0}</Mono>, {plural(leases.length, "lease")}. Identity <Mono>{b.instance}</Mono>.
+            {b.tree ? <> Tree <Mono>{b.tree}</Mono>.</> : null}
+            {idleLine(b)}
             {b.error ? <span className="danger"> {b.error}</span> : null}
           </p>
         }
@@ -276,50 +307,76 @@ export function BackendDetailPage({ splat }: { splat: string }) {
       {logs ? (
         <LogsView resourceBase={`backend:${b.id}`} processes={Object.keys(b.logs ?? {})} filename={`${b.id.replace(/[^\w.-]+/g, "-")}.log`} />
       ) : (
-        <div className="grid-2">
+        <>
           <section className="section">
-            <h2 className="section-title">Processes</h2>
+            <h2 className="section-title">Leases</h2>
             <DataTable
-              rows={b.processes.map((name) => ({ name, alive: b.alive?.[name], pid: (b.pids as Record<string, number> | undefined)?.[name], port: b.ports[name] }))}
+              rows={leases}
               columns={[
-                { key: "name", header: "Name", render: (p) => p.name },
-                { key: "state", header: "State", render: (p) => (p.alive === undefined ? "" : p.alive ? "Running" : <span className="strong">Stopped</span>) },
-                { key: "pid", header: "PID", render: (p) => (p.pid ? <Mono>{p.pid}</Mono> : null) },
-                { key: "port", header: "Port", render: (p) => (p.port ? <Mono>{p.port}</Mono> : null) },
+                { key: "holder", header: "Holder", render: (l) => <span className="mono" title={l.owner ?? undefined}>{l.holder}</span> },
+                { key: "kind", header: "Kind", width: "72px", render: (l) => l.kind },
+                {
+                  key: "session",
+                  header: "Project / session",
+                  render: (l) =>
+                    l.project && l.session ? (
+                      <Link className="link-quiet" to={sessionUrl(l.project, l.session)}>
+                        {l.project} / {l.session}
+                      </Link>
+                    ) : (
+                      <span className="muted">{l.project ?? ""}</span>
+                    ),
+                },
+                { key: "driver", header: "Driver", width: "96px", render: (l) => (l.driverSid ? <Link className="link-quiet mono" to={`/sid/${l.driverSid}`}>{l.driverSid}</Link> : null) },
+                { key: "since", header: "Since", align: "right", width: "96px", render: (l) => <AbsTime value={epochIso(l.created)} /> },
+                { key: "expires", header: "Expires", align: "right", width: "128px", render: (l) => <LeaseExpiry lease={l} /> },
+                {
+                  key: "release",
+                  header: <span className="visually-hidden">Release</span>,
+                  width: "88px",
+                  render: (l) =>
+                    l.id && !l.driverSid ? (
+                      <button type="button" className="link" disabled={busy === l.id} onClick={() => void release(l)}>
+                        {busy === l.id ? "Releasing…" : "Release"}
+                      </button>
+                    ) : null,
+                },
               ]}
-              getId={(p) => p.name}
-              label="Processes"
-             
-              empty={<p className="muted">No processes.</p>}
+              getId={(l) => l.id || `${l.holder}:${l.created}`}
+              label="Leases"
+              empty={<p className="muted">No lease holds it.{idleLine(b)}</p>}
             />
           </section>
           <section className="section">
-            <h2 className="section-title">Captured values</h2>
-            <KeyValues values={b.captured} empty="Nothing captured." />
+            <h2 className="section-title">Info</h2>
+            <InfoView info={b.info} />
           </section>
-          <section className="section">
-            <h2 className="section-title">Bindings</h2>
-            <DataTable
-              rows={leaseBindings(b).map((sid) => ({ sid, lease: leases.data?.items.find((l) => l.sid === sid) }))}
-              columns={[
-                { key: "sid", header: "Sid", width: "112px", render: (r) => <Mono>{r.sid}</Mono> },
-                { key: "session", header: "Session", render: (r) => (r.lease?.projectId && r.lease.sessionSlug ? <Link className="link-quiet" to={sessionUrl(r.lease.projectId, r.lease.sessionSlug)}>{r.lease.sessionName ?? r.lease.sessionSlug}</Link> : null) },
-              ]}
-              getId={(r) => r.sid}
-              label="Bindings"
-             
-              empty={<p className="muted">No lease is bound to it.</p>}
-            />
-          </section>
-          <section className="section">
-            <h2 className="section-title">Exports</h2>
-            <KeyValues values={b.exports} empty="Nothing exported." />
-          </section>
-          <section className="section">
-            <h2 className="section-title">Ports</h2>
-            <KeyValues values={Object.fromEntries(Object.entries(b.ports).map(([k, v]) => [k, String(v)]))} empty="No ports." />
-          </section>
-        </div>
+          <div className="grid-2">
+            <section className="section">
+              <h2 className="section-title">Processes</h2>
+              <DataTable
+                rows={b.processes.map((name) => ({ name, alive: b.alive?.[name], pid: (b.pids as Record<string, number> | undefined)?.[name], port: b.ports[name] }))}
+                columns={[
+                  { key: "name", header: "Name", render: (p) => p.name },
+                  { key: "state", header: "State", render: (p) => (p.alive === undefined ? "" : p.alive ? "Running" : <span className="strong">Stopped</span>) },
+                  { key: "pid", header: "PID", render: (p) => (p.pid ? <Mono>{p.pid}</Mono> : null) },
+                  { key: "port", header: "Port", render: (p) => (p.port ? <Mono>{p.port}</Mono> : null) },
+                ]}
+                getId={(p) => p.name}
+                label="Processes"
+                empty={<p className="muted">No supervised processes; the project's start hook runs it.</p>}
+              />
+            </section>
+            <section className="section">
+              <h2 className="section-title">Exports</h2>
+              <KeyValues values={b.exports} empty="Nothing exported." />
+            </section>
+            <section className="section">
+              <h2 className="section-title">Captured values</h2>
+              <KeyValues values={b.captured} empty="Nothing captured." />
+            </section>
+          </div>
+        </>
       )}
       <PluginSlot slot="backend.inspector" props={{ backend: b as unknown as Record<string, unknown> }} />
       {stopping ? <StopBackendConfirm backend={b} onClose={() => setStopping(false)} /> : null}
@@ -327,9 +384,54 @@ export function BackendDetailPage({ splat }: { splat: string }) {
   );
 }
 
+function flatten(prefix: string, value: unknown, out: Record<string, string>) {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    for (const [key, inner] of Object.entries(value as Record<string, unknown>)) flatten(prefix ? `${prefix}.${key}` : key, inner, out);
+    return;
+  }
+  out[prefix] = typeof value === "string" ? value : JSON.stringify(value);
+}
+
+function InfoView({ info }: { info: BackendInfoOut | null }) {
+  if (!info) return <p className="muted">No info yet; it is filled in once the backend runs.</p>;
+  const facts: Record<string, string> = {};
+  if (info.url) facts.url = info.url;
+  for (const [name, url] of Object.entries(info.urls ?? {})) facts[`url ${name}`] = url;
+  for (const key of ["commit", "branch", "version", "worktree"] as const) if (info[key]) facts[key] = info[key];
+  for (const [name, port] of Object.entries(info.ports ?? {})) facts[`port ${name}`] = String(port);
+  const credentials: Record<string, string> = {};
+  flatten("", info.credentials ?? {}, credentials);
+  const extra: Record<string, string> = {};
+  flatten("", info.extra ?? {}, extra);
+  return (
+    <>
+      <KeyValues values={facts} empty="No URLs or versions." />
+      {Object.keys(credentials).length ? (
+        <>
+          <h3 className="section-subtitle">Credentials</h3>
+          <KeyValues values={credentials} empty="" />
+          {info.redacted ? <p className="muted">Redacted. A lease holder reads them with eks-harness backend info &lt;lease&gt; --secrets.</p> : null}
+        </>
+      ) : null}
+      {Object.keys(info.env ?? {}).length ? (
+        <>
+          <h3 className="section-subtitle">Environment</h3>
+          <KeyValues values={info.env} empty="" />
+        </>
+      ) : null}
+      {Object.keys(extra).length ? (
+        <>
+          <h3 className="section-subtitle">Extra</h3>
+          <KeyValues values={extra} empty="" />
+        </>
+      ) : null}
+    </>
+  );
+}
+
 function KeyValues({ values, empty }: { values: Record<string, string>; empty: string }) {
   const rows = Object.entries(values ?? {});
-  if (!rows.length) return <p className="muted">{empty}</p>;
+  if (!rows.length) return empty ? <p className="muted">{empty}</p> : null;
   return (
     <table className="kv-table">
       <thead>
@@ -346,9 +448,7 @@ function KeyValues({ values, empty }: { values: Record<string, string>; empty: s
           <tr key={name}>
             <td>{name}</td>
             <td className="mono wrap-anywhere">{value}</td>
-            <td>
-              <CopyLink value={value} />
-            </td>
+            <td>{value === "<redacted>" ? null : <CopyLink value={value} />}</td>
           </tr>
         ))}
       </tbody>

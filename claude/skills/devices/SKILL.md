@@ -17,7 +17,9 @@ eks-harness devices reset ios:2 --confirm "<device name>"
 eks-harness config set devices.ios 3
 ```
 
-- Leases queue when the pool is busy; `--wait` bounds how long a flow waits.
+- Leases queue when the pool is busy; `--wait` bounds how long a flow waits. Keep them short: take one per
+  task step and release it; link it to a shared backend with `--backend` instead of keeping it to hold
+  the backend (skill `eks-harness:backends`).
 - A lease holds its resource while heartbeats arrive (workers heartbeat every 20 s); after
   `lease.idleSeconds` without one it is released and the app or profile is cleaned up.
 - The daemon sweeps strays (each project's `devices.strayProcessPatterns`, on the project's Settings

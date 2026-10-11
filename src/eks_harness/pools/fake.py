@@ -412,39 +412,37 @@ class FakeBackendManager(BackendManager):
                 raise BackendError(f"no free port in {start}-{end} for {name}")
         return ports
 
-    def ensure(self, body: dict) -> dict:
-        definition, instance = body.get("definition"), body.get("instance")
-        if not definition or not instance:
-            raise BackendError("definition and instance are required")
-        backend_id = body.get("id") or self.backend_id(definition, instance)
+    def bring_up(self, backend_id: str, plan: str) -> None:
         with self.host.lock:
             record = self.records.get(backend_id)
             if record is None:
-                record = {"id": backend_id, "definition": definition, "instance": instance, "status": "stopped",
-                          "created": time.time()}
-                self.records[backend_id] = record
-            record["tree"] = body.get("tree") or record.get("tree")
-            record["definitionPath"] = str(self.find_definition(definition, record["tree"]))
-            hold = float(body.get("hold", 300))
-            if hold > 0:
-                record.setdefault("holds", {})[body.get("holdId") or "ensure"] = time.time() + hold
-            record.pop("emptySince", None)
-            restart = bool(body.get("restart"))
-            if record["status"] != "running" or restart:
+                return
+            if plan == "verify":
+                record.pop("checking", None)
+                record["verifiedAt"] = time.time()
+                self.host.save()
+                return
+            if plan == "restart" or not record.get("ports"):
                 record["ports"] = self._allocate_ports(record, ["api", "proxy"])
-                record["processes"] = ["fake-api"]
-                record["captured"] = {"url": f"http://127.0.0.1:{record['ports']['api']}"}
-                record["exports"] = {"EKS_LOCAL_API_URL": f"http://127.0.0.1:{record['ports']['proxy']}"}
-                record["logs"] = {"fake-api": str(self.log_path(record))}
-                record["fingerprint"] = "fake"
-                record["description"] = f"fake {definition} backend"
-                record["status"] = "running"
-                record["startedAt"] = time.time()
-                record.pop("error", None)
-                self._log(record, f"fake backend {backend_id} running")
-            self.host.save()
-        self.host.emit("backend.status", resource=f"backend:{backend_id}", detail={"status": record["status"]})
-        return self.public(record)
+            definition = record["definition"]
+            record["processes"] = ["fake-api"]
+            record["captured"] = {"url": f"http://127.0.0.1:{record['ports']['api']}"}
+            record["exports"] = {"EKS_LOCAL_API_URL": f"http://127.0.0.1:{record['ports']['proxy']}"}
+            record["logs"] = {"fake-api": str(self.log_path(record))}
+            record["fingerprint"] = "fake"
+            record["description"] = f"fake {definition} backend"
+            record["startedAt"] = time.time()
+            record.pop("error", None)
+            record.pop("checking", None)
+            info = {"url": record["exports"]["EKS_LOCAL_API_URL"],
+                    "urls": {"api": record["captured"]["url"], "proxy": record["exports"]["EKS_LOCAL_API_URL"]},
+                    "ports": dict(record["ports"]), "env": dict(record["exports"]),
+                    "credentials": {"admin": {"username": "admin", "password": f"fake-{definition}-secret"}},
+                    "branch": "main", "commit": "0" * 40, "version": "fake", "worktree": record.get("tree") or ""}
+        self.mark_running(record, info)
+        self._log(record, f"fake backend {backend_id} running (generation {record.get('generation')})")
+        self.host.emit("backend.status", resource=f"backend:{backend_id}",
+                       detail={"status": "running", "generation": record.get("generation")})
 
     def adopt(self, backend_id: str) -> None:
         record = self.records.get(backend_id)
@@ -466,13 +464,19 @@ class FakeBackendManager(BackendManager):
             record = self.records.get(backend_id)
             if record is None:
                 return
+            keep = bool(record.get("resume")) and bool(record.get("leases"))
             record["status"] = "stopped"
             record["stoppedAt"] = time.time()
-            record["holds"] = {}
-            record.pop("emptySince", None)
             if final:
-                self.records.pop(backend_id, None)
+                record.pop("info", None)
+                if not keep:
+                    self.records.pop(backend_id, None)
+            elif not record.get("leases"):
+                record.setdefault("idleSince", time.time())
             self.host.save()
-        self._log(record, f"fake backend {backend_id} stopped ({reason}){' final' if final else ''}")
+        if final:
+            self.drop_info(record)
+        self._log(record, f"fake backend {backend_id} stopped ({reason}){' with cleanup' if final else ''}")
         self.host.emit("backend.status", resource=f"backend:{backend_id}",
                        detail={"status": "stopped", "reason": reason, "final": final})
+        self.after_stop(backend_id)

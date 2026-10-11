@@ -21,7 +21,7 @@ from eks_harness.db.repos import users as users_repo
 from eks_harness.db.repos.leases import Lease
 from eks_harness.ids import is_sid, parse_project_id
 from eks_harness.pools.backends import InstanceRegistry, alive, repo_cache_root
-from eks_harness.pools.base import AppTargets, PoolError, parse_browser_resource
+from eks_harness.pools.base import AppTargets, BackendError, PoolError, parse_browser_resource
 
 if TYPE_CHECKING:
     from eks_harness.daemon.context import AppContext
@@ -75,7 +75,7 @@ class LeaseManager:
         self._usernames: dict[int, str] = {}
         self.busy: dict[str, str] = {}
         self.preparing: dict[str, int] = {}
-        self.host.binding_source = self.bindings_for_backend
+        self.host.link_alive = self.driver_lease_live
         self.pools.browsers.contexts_for = self.browser_contexts_for
         self.pools.devices.stray_patterns = self.stray_patterns
 
@@ -183,7 +183,6 @@ class LeaseManager:
                     moved = existing.session_id != session.id or existing.project_id != project.id
                     leases_repo.update(conn, existing.id, idle_limit=None, heartbeat_at=now(), last_poll_at=now(),
                                        state="active", session_id=session.id, project_id=project.id,
-                                       backend_id=body.get("backend") or existing.backend_id,
                                        owner_pid=body.get("owner_pid") or existing.owner_pid,
                                        owner_started=body.get("owner_started") or existing.owner_started,
                                        tree=body.get("tree") or existing.tree,
@@ -197,12 +196,12 @@ class LeaseManager:
                                          movedFrom=existing.session_id)
                 elif existing is not None:
                     leases_repo.update(conn, existing.id, last_poll_at=now(), session_id=session.id,
-                                       project_id=project.id, backend_id=body.get("backend") or existing.backend_id)
+                                       project_id=project.id)
                     lease = leases_repo.get(conn, existing.id)
                 else:
                     lease = leases_repo.insert(
                         conn, kind=kind, owner_instance=instance, state="queued", session_id=session.id,
-                        project_id=project.id, backend_id=body.get("backend"), owner_pid=body.get("owner_pid"),
+                        project_id=project.id, owner_pid=body.get("owner_pid"),
                         owner_started=body.get("owner_started"), tree=body.get("tree"),
                         state_dir=body.get("state_dir"), label=body.get("label"),
                         previous_sid=body.get("previous_sid"),
@@ -210,9 +209,93 @@ class LeaseManager:
                               **({"renderSlot": body["render_slot"]} if body.get("render_slot") else {})})
                     self.lease_event(pending, ev.LEASE_QUEUED, lease, actor)
             self.publish(pending)
+        if body.get("backend"):
+            created = existing is None
+            try:
+                self.link_backend(lease, body)
+            except ApiError:
+                if created:
+                    self.end_leases([lease], "released", "its backend link failed", actor)
+                raise
+        with self.lock:
             self.process_queue()
             lease_id = lease.id
         return self.wait_for(lease_id, wait, wait_seconds)
+
+    def link_backend(self, lease: Lease, body: dict) -> dict:
+        ref = str(body.get("backend") or "")
+        params = body.get("backend_params") or None
+        if params is not None and not isinstance(params, dict):
+            raise bad_request("backend_params must be an object", error="backend_error")
+        try:
+            response = self.pools.backends.link(
+                lease.sid, ref, tree=body.get("backend_tree") or lease.tree, key=body.get("backend_key"),
+                params=params, owner=lease.owner_instance, project=lease.project_id,
+                session=lease.session_name or lease.session_slug, label=f"{lease.kind} {lease.sid}")
+        except BackendError as error:
+            raise bad_request(str(error), error="backend_error") from error
+        backend_id = (response.get("backend") or {}).get("id")
+        if backend_id and backend_id != lease.backend_id:
+            with self.lock:
+                with self.db.transaction() as conn:
+                    leases_repo.update(conn, lease.id, backend_id=backend_id)
+        return response
+
+    def unlink_backend(self, sid: str) -> list[str]:
+        lease = self.get_lease(sid)
+        dropped = self.pools.backends.unlink(lease.sid, "unlinked by its driver lease")
+        with self.lock:
+            with self.db.transaction() as conn:
+                leases_repo.update(conn, lease.id, backend_id=None)
+        return dropped
+
+    def backend_of(self, sid: str, secrets: bool = False) -> dict:
+        lease = self.get_lease(sid)
+        found = self.pools.backends.link_of(lease.sid)
+        if found is None:
+            raise not_found(f"The lease {sid} is not linked to a backend.", error="no_backend_link")
+        record, link = found
+        info = self.pools.backends.info(record["id"], secrets=secrets)
+        return {"sid": lease.sid, "lease": self.pools.backends.lease_out(record, link),
+                "backend": self.pools.backends.public(record), "info": info}
+
+    def wait_backend(self, lease_id: str, sid: str) -> None:
+        found = self.pools.backends.link_of(sid)
+        if found is None:
+            return
+        backend_id = found[0]["id"]
+        timeout = float(self.config["backend.readyTimeoutSeconds"])
+
+        def gone() -> bool:
+            current = leases_repo.get(self.conn(), lease_id)
+            return current is None or not current.holding
+
+        status = self.pools.backends.wait_ready(backend_id, timeout, abort=gone)
+        if status == "running" or gone():
+            return
+        record = self.pools.backends.get(backend_id) or {}
+        if status == "failed":
+            detail = str(record.get("error") or "").splitlines()
+            raise PoolError(f"backend {backend_id} failed: {detail[0] if detail else 'no detail'}")
+        raise PoolError(f"backend {backend_id} was not ready within {timeout:.0f}s (status {status})")
+
+    def relink_backends(self) -> list[str]:
+        relinked: list[str] = []
+        for lease in leases_repo.list_leases(self.conn(), states=leases_repo.LIVE_STATES):
+            if not lease.backend_id or self.pools.backends.link_of(lease.sid) is not None:
+                continue
+            if lease.backend_id not in self.pools.backends.records:
+                continue
+            try:
+                self.link_backend(lease, {"backend": lease.backend_id})
+                relinked.append(lease.sid)
+            except ApiError as error:
+                self.host.log(f"lease {lease.sid}: could not link it to {lease.backend_id} again: {error}")
+        return relinked
+
+    def driver_lease_live(self, sid: str) -> bool:
+        lease = leases_repo.get_by_sid(self.conn(), sid) if is_sid(sid) else None
+        return lease is not None and lease.state in leases_repo.LIVE_STATES
 
     def wait_for(self, lease_id: str, wait: bool, wait_seconds: float) -> dict:
         deadline = time.time() + max(0.0, wait_seconds)
@@ -256,6 +339,7 @@ class LeaseManager:
                                        "sharedUrl": self.ctx.links.shared_session(session.slug)}
         if status == "failed":
             response["error"] = lease.error or lease.reason
+        response["backend"] = self.pools.backends.link_summary(lease.sid)
         if lease.state == "queued":
             queue = leases_repo.queue(self.conn(), lease.kind)
             ids = [w.id for w in queue]
@@ -360,6 +444,7 @@ class LeaseManager:
                 self.pools.devices.boot(resource)
                 if lease.owner_kind != "manual":
                     self.pools.devices.clean_app(resource, self.app_targets(lease))
+            self.wait_backend(lease_id, lease.sid)
             with self.lock:
                 with self.db.transaction() as conn:
                     current = leases_repo.get(conn, lease_id)
@@ -532,6 +617,10 @@ class LeaseManager:
                                      actor, heldResource=was_holding)
             self.publish(pending)
         for lease in ended:
+            try:
+                self.pools.backends.unlink(lease.sid, f"the driver lease was {lease.state}: {reason}")
+            except Exception:
+                log.exception("could not release the backend link of %s", lease.sid)
             if lease.resource and lease.acquired_at is not None:
                 self.cleanup(lease, reason)
         self.process_queue()
@@ -737,15 +826,6 @@ class LeaseManager:
             return False
         return not any(b.get("status") in ("running", "preparing", "starting") for b in self.host.backends.values())
 
-    def bindings_for_backend(self, backend_id: str) -> list[str]:
-        found = []
-        for lease in leases_repo.list_leases(self.conn(), states=leases_repo.LIVE_STATES, backend_id=backend_id):
-            if lease.state == "queued":
-                found.append(f"waiting {lease.kind}")
-            else:
-                found.append(f"lease {lease.resource}")
-        return found
-
     def browser_contexts_for(self, resource: str) -> list[str]:
         lease = leases_repo.holder_of(self.conn(), resource)
         if lease is None:
@@ -824,6 +904,7 @@ class LeaseManager:
             "previousSid": lease.previous_sid, "stale": self.stale_reason(lease, stamp) if lease.holding else None,
             "queuePosition": queue_position, "cdp": None, "browser": None, "profile": None, "device": None,
             "urls": None, "meta": lease.meta or {},
+            "backend": self.pools.backends.link_summary(lease.sid) if lease.state in leases_repo.LIVE_STATES else None,
         }
         if lease.kind == "browser" and lease.resource:
             try:
@@ -898,6 +979,7 @@ def manager(ctx: "AppContext") -> LeaseManager:
 def _start(ctx: "AppContext") -> None:
     leases = manager(ctx)
     ctx.pools.backends.reconcile()
+    ctx.pools.host.spawn(leases.relink_backends)
     leases.resume_preparing()
     leases.process_queue()
 

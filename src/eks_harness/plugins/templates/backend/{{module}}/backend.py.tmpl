@@ -4,7 +4,7 @@ import sys
 from collections.abc import Mapping
 from typing import Any
 
-from eks_harness.plugins.sdk import BackendSpec, Health, PluginContext, ProcessSpec
+from eks_harness.plugins.sdk import BackendInfo, BackendSpec, Health, PluginContext, ProcessSpec, Secret
 
 
 class Backend:
@@ -12,7 +12,7 @@ class Backend:
         self.context = context
 
     def describe(self) -> dict[str, Any]:
-        return {"description": "{{name}}", "ports": ["http"], "idleGraceSeconds": 120}
+        return {"description": "{{name}}", "ports": ["http"], "idleTimeout": "15m"}
 
     def fingerprint(self, context: Mapping[str, Any]) -> str:
         return str(self.context.settings.get("image") or "")
@@ -27,9 +27,17 @@ class Backend:
                                    command=[sys.executable, "-m", "http.server", str(port), "--bind", "127.0.0.1"],
                                    health=Health(url=f"http://127.0.0.1:{port}/"))],
             exports={"API_BASE_URL": "http://127.0.0.1:{ports.http}"},
+            info=BackendInfo(url="http://127.0.0.1:{ports.http}"),
         )
 
-    def teardown(self, context: Mapping[str, Any], final: bool = False) -> None:
+    def info(self, context: Mapping[str, Any]) -> BackendInfo:
+        return BackendInfo(version="0.1.0", credentials={"admin": {"username": "admin",
+                                                                   "password": Secret("change-me")}})
+
+    def stop(self, context: Mapping[str, Any]) -> None:
+        pass
+
+    def cleanup(self, context: Mapping[str, Any]) -> None:
         pass
 
     def seed(self, context: Mapping[str, Any], scenario: str | None = None) -> dict[str, Any]:

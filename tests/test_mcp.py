@@ -435,3 +435,25 @@ async def test_sessions_span_projects(mcp_env: McpEnv) -> None:
     assert len(both["items"]) == 2
     timeline = payload(await call(mcp_env, "session_timeline", {"session": SESSION}))
     assert sum(1 for e in timeline["items"] if e["type"] == "artifact") == 2
+
+
+async def test_backend_lease_tools(mcp_env: McpEnv, monkeypatch) -> None:
+    monkeypatch.setenv("EKS_HARNESS_INSTANCE", "session:mcp")
+    taken = payload(await call(mcp_env, "backend_acquire", {"definition": "api", "key": "mcp", "ttl": "5m"}))
+    lease = taken["lease"]["id"]
+    assert taken["status"] == "granted" and taken["lease"]["owner"] == "session:mcp"
+    assert taken["info"]["credentials"]["admin"]["password"] == "<redacted>"
+    secret = payload(await call(mcp_env, "backend_info", {"lease": lease, "secrets": True}))
+    assert secret["credentials"]["admin"]["password"] == "fake-api-secret"
+    assert payload(await call(mcp_env, "backend_renew", {"lease": lease, "ttl": "10m"}))["lease"]["ttl"] == 600
+    assert len(payload(await call(mcp_env, "backend_leases", {}))["items"]) == 1
+    driver = payload(await call(mcp_env, "lease_acquire", {"kind": "browser", "project": PROJECT, "session": SESSION,
+                                                           "backend": lease, "wait": 10}))
+    assert driver["status"] == "granted" and driver["backend"]["id"] == "api@mcp"
+    linked = payload(await call(mcp_env, "lease_backend", {"sid": driver["sid"]}))
+    assert linked["lease"]["driverSid"] == driver["sid"]
+    payload(await call(mcp_env, "lease_release", {"sid": driver["sid"]}))
+    released = payload(await call(mcp_env, "backend_release", {"lease": lease}))
+    assert released["status"] == "released" and released["backend"]["leases"] == []
+    stopped = payload(await call(mcp_env, "backend_stop", {"backend_id": "api@mcp", "cleanup": True}))
+    assert stopped["leases"] == []

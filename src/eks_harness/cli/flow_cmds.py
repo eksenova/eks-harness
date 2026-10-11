@@ -24,7 +24,13 @@ def parse_sets(values: list[str]) -> dict[str, str]:
 def cmd_run(args: argparse.Namespace) -> int:
     from eks_harness.drivers.client import WorkerError
     from eks_harness.drivers.profile import ProfileError
-    from eks_harness.flows import FlowError, FlowRequest, format_report, run_flow
+    from eks_harness.flows import (
+        BackendLinkError,
+        FlowError,
+        FlowRequest,
+        format_report,
+        run_flow,
+    )
 
     if not args.flow and not args.code:
         fail("pass a flow file or -e '<python>'", EXIT_USAGE)
@@ -36,11 +42,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     request = FlowRequest(flow=flow, code=args.code, platform=args.platform, params=parse_sets(args.set),
                           fetch=not args.no_fetch, out=Path(args.out).resolve() if args.out else None,
                           verbose=args.verbose and not args.json, wait=args.wait, release=args.release,
-                          instance=args.instance, session=args.session)
+                          instance=args.instance, session=args.session, backend=args.backend,
+                          backend_tree=str(Path(args.backend_tree).expanduser().resolve()) if args.backend_tree else None,
+                          backend_key=args.backend_key, backend_params=parse_sets(args.backend_param))
     with client_from_args(args) as client:
         try:
             report = run_flow(request, client=client, paths=paths, config=config)
-        except (FlowError, ProfileError, WorkerError) as error:
+        except (FlowError, ProfileError, WorkerError, BackendLinkError) as error:
             fail(str(error), EXIT_ERROR)
     if args.json:
         print_json(report)
@@ -81,6 +89,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     run.add_argument("--session", help="session name (default: the git branch)")
     run.add_argument("--instance", help="harness instance key (default: the Claude session or the work tree)")
     run.add_argument("--wait", type=float, default=600, help="seconds to wait for a free browser or device")
+    run.add_argument("--backend", help="link a backend to the lease: a backend lease id (bl_...), a backend id or a "
+                                       "definition (default: [backend] in app.toml; 'none' links nothing)")
+    run.add_argument("--backend-tree", help="the tree the linked backend runs from")
+    run.add_argument("--backend-key", help="identity of the linked backend instead of its tree")
+    run.add_argument("--backend-param", action="append", default=[], metavar="KEY=VALUE",
+                     help="parameter of the linked backend (repeatable)")
     run.add_argument("--release", action="store_true", help="release the lease and stop the worker afterwards")
     run.add_argument("--no-fetch", action="store_true", help="do not download captures")
     run.add_argument("--out", help="directory for downloaded captures")

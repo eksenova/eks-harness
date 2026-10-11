@@ -8,6 +8,8 @@ from starlette.concurrency import run_in_threadpool
 from eks_harness.api.deps import access_scope, check_level, current_principal, get_ctx
 from eks_harness.api.errors import forbidden, not_found
 from eks_harness.api.schemas import (
+    BackendLinkOut,
+    BackendLinkRequest,
     InstanceEndedRequest,
     LeaseAcquireRequest,
     LeaseAcquireResponse,
@@ -179,7 +181,51 @@ async def heartbeat(sid: str, request: Request, body: dict | None = Body(None),
     meta = (body or {}).get("meta") if isinstance(body, dict) else None
     lease = await run_in_threadpool(leases.heartbeat, sid, meta if isinstance(meta, dict) else None)
     return {"sid": lease.sid, "state": lease.state, "phase": lease.phase,
-            "heartbeatAt": ts_to_datetime(lease.heartbeat_at)}
+            "heartbeatAt": ts_to_datetime(lease.heartbeat_at), "backend": ctx.pools.backends.link_summary(lease.sid)}
+
+
+def link_out(ctx: AppContext, principal: Principal, data: dict) -> dict:
+    from eks_harness.api.routes_backends import backend_out
+
+    return {**data, "backend": backend_out(data["backend"], ctx, principal)}
+
+
+@router.post("/api/leases/{sid}/backend", response_model=BackendLinkOut)
+async def link_backend(sid: str, body: BackendLinkRequest, request: Request,
+                       wait_seconds: float = Query(0.0, alias="waitSeconds", ge=0, le=120),
+                       principal: Principal = Depends(current_principal)) -> dict:
+    ctx = get_ctx(request)
+    leases = leases_of(request)
+    lease = leases.require_holding(sid)
+    authorize_lease(ctx, principal, lease)
+    await run_in_threadpool(leases.link_backend, lease, {"backend": body.backend, "backend_tree": body.tree,
+                                                         "backend_key": body.key, "backend_params": body.params})
+    link = ctx.pools.backends.link_of(lease.sid)
+    if link is not None and wait_seconds > 0:
+        await run_in_threadpool(ctx.pools.backends.wait_ready, link[0]["id"], wait_seconds)
+    return link_out(ctx, principal, leases.backend_of(lease.sid))
+
+
+@router.get("/api/leases/{sid}/backend", response_model=BackendLinkOut)
+async def lease_backend(sid: str, request: Request, secrets: bool = Query(False),
+                        wait_seconds: float = Query(0.0, alias="waitSeconds", ge=0, le=120),
+                        principal: Principal = Depends(current_principal)) -> dict:
+    ctx = get_ctx(request)
+    leases = leases_of(request)
+    lease = leases.get_lease(sid)
+    authorize_lease(ctx, principal, lease)
+    link = ctx.pools.backends.link_of(lease.sid)
+    if link is not None and wait_seconds > 0:
+        await run_in_threadpool(ctx.pools.backends.wait_ready, link[0]["id"], wait_seconds)
+    return link_out(ctx, principal, leases.backend_of(lease.sid, secrets=secrets))
+
+
+@router.delete("/api/leases/{sid}/backend", response_model=LeaseReleaseResponse)
+def unlink_backend(sid: str, request: Request, principal: Principal = Depends(current_principal)) -> dict:
+    ctx = get_ctx(request)
+    leases = leases_of(request)
+    authorize_lease(ctx, principal, leases.get_lease(sid))
+    return {"released": leases.unlink_backend(sid), "sids": [sid]}
 
 
 @router.post("/api/leases/{sid}/meta", response_model=LeaseOut)

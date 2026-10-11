@@ -52,7 +52,14 @@ def test_runner_speaks_the_definition_protocol(tmp_path: Path, capsys) -> None:
     context = tmp_path / "context.json"
     context.write_text(json.dumps({"tree": str(tree), "ports": {"http": 5999}}), encoding="utf-8")
     assert runner_main(["acme.api", "api", "describe", "--context", str(context)]) == 0
-    assert json.loads(capsys.readouterr().out)["ports"] == ["http"]
+    described = json.loads(capsys.readouterr().out)
+    assert described["ports"] == ["http"] and described["idleTimeout"] == "15m"
+    assert {"spec", "info", "stop", "cleanup", "seed"} <= set(described["implements"])
+    assert "start" not in described["implements"]
+    assert runner_main(["acme.api", "api", "info", "--context", str(context)]) == 0
+    assert json.loads(capsys.readouterr().out)["credentials"]["admin"]["password"] == {"$secret": "change-me"}
+    assert runner_main(["acme.api", "api", "health", "--context", str(context)]) == 0
+    assert json.loads(capsys.readouterr().out) == {"healthy": True}
     assert runner_main(["acme.api", "api", "spec", "--context", str(context)]) == 0
     spec = json.loads(capsys.readouterr().out)
     process = spec["processes"][0]

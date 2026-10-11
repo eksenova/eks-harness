@@ -152,3 +152,40 @@ def test_inline_code_and_missing_profiles(tmp_path, daemon, config) -> None:
         run_flow(FlowRequest(code="pass", cwd=lonely, fetch=False, instance="t:4"), client=daemon, paths=config.paths,
                  config=config, host=PluginHost(config.paths, config))
     assert WorkerClient is not None
+
+
+def test_flow_links_a_backend_from_app_toml_and_hands_its_info_over(tmp_path, daemon, config, ctx) -> None:
+    tree = make_tree(tmp_path)
+    write(tree / "web/.harness/app.toml", """
+        [app]
+        platform = "web"
+        [backend]
+        definition = "api"
+        key = "flows"
+        [web]
+        url = "http://localhost:3000"
+        api_url = "${EKS_BACKEND_URL}"
+    """)
+    flow = write(tree / "web/.harness/flows/backend-check.py", """
+        def flow(app):
+            return {"url": app.backend.url, "password": app.backend.credentials["admin"]["password"],
+                    "api": app.profile.web["api_url"], "lease": app.backend_link["lease"]["driverSid"] == app.sid}
+    """)
+    with FakeWorker({}) as fake:
+        manager = FakeManager(fake)
+        report = run_flow(FlowRequest(flow=flow, fetch=False, release=True, instance="test:backend"),
+                          client=daemon, paths=config.paths, config=config,
+                          host=PluginHost(config.paths, config), manager=manager)
+    assert report["ok"], report
+    url = report["backend"]["url"]
+    assert report["backend"]["id"] == "api@flows" and url.startswith("http://127.0.0.1:")
+    assert report["value"] == {"url": url, "password": "fake-api-secret", "api": url, "lease": True}
+    _, _, worker_config = manager.configs[0]
+    assert worker_config["apiBaseUrl"] == url and worker_config["backend"]["id"] == "api@flows"
+    assert worker_config["backend"]["credentials"]["admin"]["password"] == "fake-api-secret"
+    assert ctx.pools.backends.get("api@flows")["leases"] == {}
+    with FakeWorker({}) as fake:
+        report = run_flow(FlowRequest(flow=flow, fetch=False, release=True, instance="test:none", backend="none"),
+                          client=daemon, paths=config.paths, config=config,
+                          host=PluginHost(config.paths, config), manager=FakeManager(fake))
+    assert not report["ok"] and "backend" not in report

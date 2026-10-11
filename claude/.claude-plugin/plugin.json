@@ -1,7 +1,7 @@
 {
   "name": "eks-harness",
   "displayName": "eks-harness",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Drive browsers, simulators and emulators, run backends and flows, capture evidence, edit and render videos, and score synchronized Blender, web and device scenes with eks-harness.",
   "author": {
     "name": "eks-harness maintainers"

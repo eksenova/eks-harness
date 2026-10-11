@@ -6,7 +6,8 @@ import { createRequire } from 'node:module'
 import { spawnSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { createRunner, renderText } from '../../kit/src/script-runner.mjs'
-import { chromeEndpoint, heartbeatSids, leaseReleased, request as daemonRequest, updateLeaseMeta, uploadArtifact } from '../../kit/src/daemon-client.mjs'
+import { chromeEndpoint, heartbeatSids, leaseBackend, leaseReleased, request as daemonRequest, updateLeaseMeta, uploadArtifact } from '../../kit/src/daemon-client.mjs'
+import { createBackendLink } from '../../kit/src/backend-link.mjs'
 import { loadWorkerConfig, resolveTheme } from '../../kit/src/config.mjs'
 import { loadExtensions } from '../../kit/src/extensions.mjs'
 
@@ -19,7 +20,8 @@ const LEASE_SID = CONFIG.sid || process.env.EHX_LEASE_SID || null
 const LOCALE = CONFIG.locale || 'en-US'
 const TIMEZONE = CONFIG.timezone || undefined
 const HOME_PATH = CONFIG.home || '/'
-const API_BASE_URL = CONFIG.apiBaseUrl ? String(CONFIG.apiBaseUrl).replace(/\/+$/, '') : null
+let API_BASE_URL = CONFIG.apiBaseUrl ? String(CONFIG.apiBaseUrl).replace(/\/+$/, '') : null
+const API_FROM_BACKEND = Boolean(CONFIG.apiFromBackend)
 const THEME = resolveTheme(CONFIG.theme, LOCALE)
 const opt = (name, fallback) => (CONFIG.options && CONFIG.options[name] !== undefined ? CONFIG.options[name] : fallback)
 
@@ -2631,9 +2633,30 @@ function scriptHelpers() {
 }
 
 
+async function onBackendChange(next, previous) {
+  if (API_FROM_BACKEND && next?.url) API_BASE_URL = String(next.url).replace(/\/+$/, '')
+  emitEvent('backend.changed', { id: next?.id ?? null, generation: next?.generation ?? null, url: next?.url ?? null, previous: previous ? { id: previous.id, generation: previous.generation } : null })
+  for (const ext of EXTENSIONS) {
+    if (ext.onBackendChange) await ext.onBackendChange(next, previous)?.catch?.((error) => log(`${ext.id} backend change failed: ${error.message}`))
+  }
+  if (!previous || !next || !opt('reloadOnBackendChange', true)) return
+  log(`backend ${next.id} is now generation ${next.generation}; reloading the page`)
+  for (const page of new Set([session.page, session.recording?.page].filter((p) => p && !p.isClosed()))) {
+    await page.reload({ waitUntil: 'domcontentloaded' }).catch((error) => log(`reload after the backend change failed: ${error.message}`))
+  }
+}
+
+const backendLink = createBackendLink({
+  initial: CONFIG.backend ?? null,
+  fetchInfo: () => leaseBackend(session.sid),
+  onChange: onBackendChange,
+  log,
+})
+
 const KIT = {
   config: CONFIG,
   get session() { return session },
+  backend: () => backendLink.get(),
   log,
   settle: (page, options) => settle(page ?? activePage(), options),
   gotoPath,
@@ -2888,8 +2911,9 @@ function streamEvents(req, res) {
 let heartbeatTimer = null
 function startHeartbeat() {
   if (!session.sid) return
-  const beat = () => heartbeatSids([session.sid]).then(() => {
+  const beat = () => heartbeatSids([session.sid]).then((results) => {
     if (leaseReleased(session.sid)) log(`lease ${session.sid} is no longer held`)
+    else if (results[session.sid] && !results[session.sid].error) return backendLink.observe(results[session.sid].backend ?? null)
   }).catch(() => {})
   beat()
   heartbeatTimer = setInterval(beat, Number(opt('heartbeatMs', 20_000)))

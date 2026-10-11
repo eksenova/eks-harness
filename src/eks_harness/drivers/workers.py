@@ -19,7 +19,8 @@ WORKERS_ENV = "EKS_HARNESS_WORKERS_DIR"
 NODE_ENV = "EKS_HARNESS_NODE"
 SCRIPTS = {"web": "web-driver/src/server.mjs", "mobile": "mobile-driver/src/server.mjs"}
 KIT_FILES = ("kit/src/daemon-client.mjs", "kit/src/script-runner.mjs", "kit/src/devtools-link.mjs",
-             "kit/src/config.mjs", "kit/src/extensions.mjs")
+             "kit/src/config.mjs", "kit/src/extensions.mjs", "kit/src/backend-link.mjs")
+UNHASHED_CONFIG = ("port", "stateDir", "backend")
 READY_TIMEOUT = 60.0
 
 
@@ -53,7 +54,7 @@ def code_hash(kind: str, root: Path | None = None) -> str:
 
 
 def config_hash(config: dict[str, Any]) -> str:
-    stable = {k: v for k, v in config.items() if k not in ("port", "stateDir")}
+    stable = {k: v for k, v in config.items() if k not in UNHASHED_CONFIG}
     return hashlib.sha256(json.dumps(stable, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 

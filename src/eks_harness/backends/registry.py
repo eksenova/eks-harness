@@ -16,7 +16,9 @@ def plugin_definitions(host: PluginHost, tree: str | None) -> list[dict[str, Any
     for contribution in host.contributions("backend", path):
         found.append({"name": contribution.id, "path": f"{PLUGIN_SCHEME}{contribution.plugin_id}:{contribution.id}",
                       "source": "plugin", "plugin": contribution.plugin_id, "tree": tree,
-                      "description": str(contribution.get("description", ""))})
+                      "description": str(contribution.get("description", "")),
+                      **({"idleTimeout": contribution.get("idle_timeout")}
+                         if contribution.get("idle_timeout") is not None else {})})
     return found
 
 

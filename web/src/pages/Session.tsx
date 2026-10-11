@@ -338,6 +338,22 @@ export function eventSentence(event: EventOut): ReactNode {
         </>
       );
     }
+    case "backend.lease": {
+      const action = str(detail, "action") || "changed";
+      const holder = str(detail, "holder");
+      return withReason(
+        <>
+          <Mono>{resource}</Mono> lease {action}
+          {holder ? <> for <Mono>{holder}</Mono></> : null}
+        </>,
+      );
+    }
+    case "backend.replaced":
+      return (
+        <>
+          <Mono>{resource}</Mono> replaced by generation <Mono>{String(detail.generation ?? "")}</Mono>
+        </>
+      );
     default: {
       const status = str(detail, "status") || str(detail, "action");
       const words = event.type.split(".").slice(1).join(" ");

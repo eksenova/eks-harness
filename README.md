@@ -54,11 +54,11 @@ cross-repo plugins, module isolation and per-repository hook settings.
 | | |
 | --- | --- |
 | Hub | the daemon: API, web UI, MCP over stdio and HTTP, artifact store, leases, scheduler |
-| Lease | exclusive use of a browser profile, device, backend slot or node slot by an instance |
+| Lease | use of a resource by an instance: exclusive and short for browser profiles, devices and node slots; shared and reference-counted for backends |
 | Driver | controls a target through act, observe, capture and events (web, iOS, Android, plugins) |
 | Flow | a Python file with `flow(app)` that runs a whole scenario and reports checks and captures |
 | Artifact | any stored output with links, tags, retention and share links |
-| Backend | a service stack an app talks to, run and seeded by a plugin |
+| Backend | a service stack an app talks to, started, health-checked, stopped and cleaned up by its project's plugin; one instance serves every lease on it and stops after its idle timeout once none is left |
 | Score | one timeline for video edits, Blender scenes, web scenes, device takes and audio |
 | Review | a video's contact sheet (one image) and machine checks against an expected timeline (`docs/video-review.md`) |
 | Node | a machine that dials the hub and runs jobs in GPU and CPU slots |
@@ -79,10 +79,16 @@ cross-repo plugins, module isolation and per-repository hook settings.
 ```
 
 ```bash
-eks-harness flow run web/.harness/flows/checkout-check.py
+eks-harness backend acquire --definition api            # shared backend lease; prints the lease id and URL
+eks-harness flow run web/.harness/flows/checkout-check.py --backend api --release
+eks-harness backend release bl_0123456789abcdef
 eks-harness score render .harness/scores/launch/score.py
 eks-harness plugin new backend acme.api .harness/plugins/api
 ```
+
+Hold a backend lease (or let driver leases link one with `--backend`), keep driver leases short and
+release both when done; the backend keeps running between driver leases and is stopped and cleaned up
+after its idle timeout once nothing holds it (`docs/spec.md` section 10).
 
 ## CLI
 
