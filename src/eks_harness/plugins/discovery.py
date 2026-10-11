@@ -135,12 +135,14 @@ def package_candidates() -> list[Candidate]:
     return found
 
 
-def path_candidates(paths: list[Path], kind: str = "path", tree: Path | None = None) -> list[Candidate]:
+def path_candidates(paths: list[Path], kind: str = "path", tree: Path | None = None,
+                    report_missing: bool | None = None) -> list[Candidate]:
+    report_missing = kind == "path" if report_missing is None else report_missing
     found: list[Candidate] = []
     for path in paths:
         path = path.expanduser()
         dirs = plugin_dirs(path)
-        if not dirs and kind == "path":
+        if not dirs and report_missing:
             found.append(Candidate(kind=kind, origin=f"{kind}:{path}", root=path,
                                    error=f"{path} holds no {MANIFEST_NAME}", tree=tree))
         found.extend(_candidate(kind, f"{kind}:{p}", p, tree) for p in dirs)
@@ -149,7 +151,7 @@ def path_candidates(paths: list[Path], kind: str = "path", tree: Path | None = N
 
 def repo_candidates(tree: Path, extra_paths: tuple[Path, ...] = ()) -> list[Candidate]:
     found = path_candidates([tree / ".harness" / "plugins"], kind="repo", tree=tree)
-    found.extend(path_candidates(list(extra_paths), kind="repo", tree=tree))
+    found.extend(path_candidates(list(extra_paths), kind="repo", tree=tree, report_missing=True))
     return found
 
 

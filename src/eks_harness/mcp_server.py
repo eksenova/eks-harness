@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
-from pathlib import Path
 from typing import Annotated, Any, Literal
 from urllib.parse import quote
 
@@ -14,6 +13,7 @@ from pydantic import Field
 from eks_harness import __version__
 from eks_harness.cli.client import ApiClientError, HarnessClient, NotFound
 from eks_harness.ids import is_sid, parse_project_id, slugify
+from eks_harness.mcp_context import local_path
 
 SERVER_NAME = "eks-harness"
 SOURCE = "mcp"
@@ -196,9 +196,7 @@ class HarnessTools:
             raise ToolError(f"'{sid}' is not a sid: expected 6 lowercase characters.")
         if project:
             _project_path(project)
-        file_path = Path(path).expanduser()
-        if not file_path.is_absolute():
-            file_path = Path.cwd() / file_path
+        file_path = local_path(path)
         if file_path.is_dir():
             raise ToolError(f"{file_path} is a directory; upload a single file (zip a site first).")
         if not file_path.is_file():
@@ -304,11 +302,50 @@ class HarnessTools:
                          json={"version": version})
 
 
-def create_server(client_factory: Callable[[], HarnessClient],
-                  tools: HarnessTools | None = None) -> tuple[MCPServer, HarnessTools]:
+class TreeScopedServer(MCPServer):
+    def __init__(self, *args: Any, plugin_tools: Callable[[], MCPServer | None], **kwargs: Any) -> None:
+        self._plugin_tools = plugin_tools
+        super().__init__(*args, **kwargs)
+
+    def _plugin_server_with(self, name: str) -> MCPServer | None:
+        if self._tool_manager.get_tool(name) is not None:
+            return None
+        extra = self._plugin_tools()
+        return extra if extra is not None and extra._tool_manager.get_tool(name) is not None else None
+
+    async def list_tools(self) -> list[Any]:
+        listed = await super().list_tools()
+        extra = self._plugin_tools()
+        if extra is None:
+            return listed
+        names = {tool.name for tool in listed}
+        return listed + [tool for tool in await extra.list_tools() if tool.name not in names]
+
+    async def call_tool(self, name: str, arguments: dict[str, Any], context: Any = None) -> Any:
+        extra = self._plugin_server_with(name)
+        if extra is not None:
+            return await extra.call_tool(name, arguments, context)
+        return await super().call_tool(name, arguments, context)
+
+    def _tool_input_schema(self, name: str) -> dict[str, Any] | None:
+        extra = self._plugin_server_with(name)
+        if extra is not None:
+            return extra._tool_input_schema(name)
+        return super()._tool_input_schema(name)
+
+
+def new_server(plugin_tools: Callable[[], MCPServer | None] | None = None) -> MCPServer:
+    options: dict[str, Any] = {"title": "eks-harness", "instructions": INSTRUCTIONS, "version": __version__,
+                               "log_level": "WARNING"}
+    if plugin_tools is None:
+        return MCPServer(SERVER_NAME, **options)
+    return TreeScopedServer(SERVER_NAME, plugin_tools=plugin_tools, **options)
+
+
+def create_server(client_factory: Callable[[], HarnessClient], tools: HarnessTools | None = None,
+                  plugin_tools: Callable[[], MCPServer | None] | None = None) -> tuple[MCPServer, HarnessTools]:
     tools = tools or HarnessTools(client_factory)
-    server = MCPServer(SERVER_NAME, title="eks-harness", instructions=INSTRUCTIONS, version=__version__,
-                       log_level="WARNING")
+    server = new_server(plugin_tools)
 
     @server.tool(description="List the projects you can see, with session, artifact and unseen counts and links.",
                  annotations=READ_ONLY)
@@ -493,7 +530,8 @@ def create_server(client_factory: Callable[[], HarnessClient],
     register_system_tools(server, tools)
     register_driver_tools(server, tools)
     register_video_tools(server)
-    register_plugin_tools(server, tools)
+    if plugin_tools is None:
+        register_plugin_tools(server, tools)
     return server, tools
 
 

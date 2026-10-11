@@ -34,3 +34,17 @@ def test_score_tools_work_on_dsl_files(tmp_path: Path) -> None:
     exported = asyncio.run(server.call_tool("score_export", {"path": str(score_py)}))
     assert (tmp_path / "score.json").is_file() and exported is not None
     tools.close()
+
+
+def test_stdio_server_takes_its_tree_from_the_environment(tmp_path: Path, monkeypatch, tools_tree) -> None:
+    tree = tools_tree(tmp_path / "worktree", "tool_from_env_tree", "env")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setenv("EKS_HARNESS_TREE", str(tree))
+    server, tools = create_server(lambda: HarnessClient("http://127.0.0.1:9"))
+    names = {tool.name for tool in asyncio.run(server.list_tools())}
+    assert "tool_from_env_tree" in names
+    result = asyncio.run(server.call_tool("tool_from_env_tree", {}))
+    assert f"env|{tree}" in str(result)
+    tools.close()

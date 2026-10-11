@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 from urllib.parse import quote
@@ -10,6 +9,9 @@ from urllib.parse import quote
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
+
+from eks_harness.mcp_context import required_tree, working_dir
+from eks_harness.mcp_context import resolve_tree as _tree
 
 if TYPE_CHECKING:
     from mcp.server.mcpserver import MCPServer
@@ -22,15 +24,13 @@ READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempot
 WRITE = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
 DESTRUCTIVE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=False)
 
-TreeArg = Annotated[str | None, Field(description="Work tree path whose .harness/ applies (default: the server's cwd)")]
+TreeArg = Annotated[str | None, Field(description="Work tree path whose .harness/ applies (default: the "
+                                                    "connection's work tree)")]
 
 
-def _tree(tree: str | None) -> str:
-    from eks_harness.plugins import find_tree
-
-    base = Path(tree).expanduser() if tree else Path(os.getcwd())
-    found = find_tree(base)
-    return str(found or base.resolve())
+def _tree_params(tree: str | None, **extra: Any) -> dict[str, Any]:
+    resolved = _tree(tree)
+    return {**({"tree": resolved} if resolved else {}), **extra}
 
 
 def _score_file(path: str) -> Path:
@@ -59,13 +59,13 @@ def register_system_tools(server: MCPServer, tools: HarnessTools) -> None:
                              "state (active, pending approval, changed, disabled, error) and what each contributes.",
                  annotations=READ_ONLY)
     def list_plugins(tree: TreeArg = None) -> dict[str, Any]:
-        return tools.call("GET", "/api/plugins", params={"tree": _tree(tree)})
+        return tools.call("GET", "/api/plugins", params=_tree_params(tree))
 
     @server.tool(description="One plugin: contributions (drivers, backends, effects, UI slots...), settings and "
                              "their current values.", annotations=READ_ONLY)
     def get_plugin(plugin_id: Annotated[str, Field(description="Plugin id, for example acme.backend")],
                    tree: TreeArg = None) -> dict[str, Any]:
-        return tools.call("GET", f"/api/plugins/{quote(plugin_id)}", params={"tree": _tree(tree)})
+        return tools.call("GET", f"/api/plugins/{quote(plugin_id)}", params=_tree_params(tree))
 
     @server.tool(description="Approve a folder or git plugin so it loads (pins its content hash). Ask the user "
                              "before approving code you have not reviewed.", annotations=WRITE)
@@ -121,7 +121,7 @@ def register_system_tools(server: MCPServer, tools: HarnessTools) -> None:
     @server.tool(description="Backend definitions available for a work tree (repo scripts and plugin backends).",
                  annotations=READ_ONLY)
     def list_backend_definitions(tree: TreeArg = None) -> dict[str, Any]:
-        return tools.call("GET", "/api/backends/definitions", params={"tree": _tree(tree)})
+        return tools.call("GET", "/api/backends/definitions", params=_tree_params(tree))
 
     @server.tool(description="Running and stopped backends with ports, exports and status.", annotations=READ_ONLY)
     def list_backends() -> dict[str, Any]:
@@ -190,7 +190,7 @@ def register_system_tools(server: MCPServer, tools: HarnessTools) -> None:
     @server.tool(description="Personas (logins) the credentials plugins offer for a target such as local or "
                              "staging. Secrets are never returned.", annotations=READ_ONLY)
     def list_personas(tree: TreeArg = None, target: str = "local") -> dict[str, Any]:
-        return tools.call("GET", "/api/backends/personas", params={"tree": _tree(tree), "target": target})
+        return tools.call("GET", "/api/backends/personas", params=_tree_params(tree, target=target))
 
     @server.tool(description="Validate a score (score.json or a Python DSL file that defines `score`) and return "
                              "its tracks, rules and clock.", annotations=READ_ONLY)
@@ -316,7 +316,7 @@ def register_driver_tools(server: MCPServer, tools: HarnessTools) -> None:
             argv += ["--set", f"{key}={value}"]
         if release:
             argv.append("--release")
-        out = subprocess.run(argv, cwd=_tree(tree), capture_output=True, text=True, timeout=3600)
+        out = subprocess.run(argv, cwd=required_tree(tree), capture_output=True, text=True, timeout=3600)
         try:
             return json.loads(out.stdout)
         except ValueError:
@@ -331,7 +331,8 @@ def register_plugin_tools(server: MCPServer, tools: HarnessTools) -> list[str]:
 
         paths = resolve_paths()
         host = PluginHost(paths, load_config(paths))
-        tree = find_tree(Path(os.getcwd()))
+        base = working_dir()
+        tree = find_tree(base) if base else None
         loaded = []
         for contribution, target in host.load_all("mcp_tools", tree):
             try:

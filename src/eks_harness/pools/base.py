@@ -365,6 +365,22 @@ class BackendManager(ABC):
     def list(self) -> list[dict]:
         return [self.public(r) for r in list(self.records.values())]
 
+    def definition_dirs(self, tree: str | None) -> list[tuple[str, Path]]:
+        places = [("tree", Path(tree) / relative) for relative in self.tree_definition_dirs(tree)] if tree else []
+        places.append(("config", self.host.paths.backends_dir))
+        return places
+
+    def tree_definition_dirs(self, tree: str) -> list[str]:
+        from eks_harness.plugins.project import ProjectConfigError
+
+        try:
+            configured = self.host.plugin_host().project(Path(tree)).section("backends").get("definition_dirs")
+        except ProjectConfigError:
+            configured = None
+        if isinstance(configured, list) and all(isinstance(item, str) for item in configured):
+            return configured
+        return list(self.host.config["backend.definitionDirs"] or [])
+
     @abstractmethod
     def definitions(self, tree: str | None = None) -> list[dict]:
         raise NotImplementedError

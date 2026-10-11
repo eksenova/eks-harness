@@ -175,6 +175,7 @@ def prepare_app(request: FlowRequest, *, client: Any, paths: Any, config: Any, h
     lease = acquire(client, kind=LEASE_KINDS[platform], project=project, session=session, instance=instance,
                     tree=tree, wait=request.wait, tags=tags)
     sid = lease["sid"]
+    host.activate_imports(tree)
     cls = app_class(harness_dir, platform, flow_helpers(host, platform, tree), profile.app_file)
     kwargs: dict[str, Any] = {"sid": sid, "harness": client, "verbose": request.verbose, "out": request.out,
                               "params": request.params}

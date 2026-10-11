@@ -363,12 +363,7 @@ class FakeDevicePool(DevicePool):
 class FakeBackendManager(BackendManager):
     def definitions(self, tree: str | None = None) -> list[dict]:
         found = []
-        places = []
-        if tree:
-            for relative in self.host.config["backend.definitionDirs"]:
-                places.append(("tree", Path(tree) / relative))
-        places.append(("config", self.host.paths.backends_dir))
-        for source, folder in places:
+        for source, folder in self.definition_dirs(tree):
             if folder.is_dir():
                 for entry in sorted(folder.iterdir()):
                     if entry.is_file() and not entry.name.startswith((".", "_")):

@@ -60,6 +60,10 @@ class TrustStore:
         entry = self.entries().get(_key(plugin_id, root))
         return entry if isinstance(entry, dict) else None
 
+    def approved_elsewhere(self, plugin_id: str, digest: str) -> bool:
+        return any(isinstance(entry, dict) and entry.get("plugin") == plugin_id and entry.get("hash") == digest
+                   for entry in self.entries().values())
+
     def approve(self, plugin_id: str, root: Path, digest: str, *, by: str = "") -> dict[str, Any]:
         with self._lock:
             data = self._read()

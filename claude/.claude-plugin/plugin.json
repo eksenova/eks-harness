@@ -1,7 +1,7 @@
 {
   "name": "eks-harness",
   "displayName": "eks-harness",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Drive browsers, simulators and emulators, run backends and flows, capture evidence, edit and render videos, and score synchronized Blender, web and device scenes with eks-harness.",
   "author": {
     "name": "eks-harness maintainers"
@@ -25,17 +25,9 @@
         "${CLAUDE_PLUGIN_ROOT}/scripts/mcp.sh"
       ],
       "env": {
-        "PYTHONUNBUFFERED": "1"
+        "PYTHONUNBUFFERED": "1",
+        "EKS_HARNESS_TREE": "${CLAUDE_PROJECT_DIR:-}"
       }
-    },
-    "playwright": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@playwright/mcp@latest",
-        "--headless",
-        "--isolated"
-      ]
     }
   }
 }

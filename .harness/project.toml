@@ -1,0 +1,2 @@
+[claude]
+ui_design_paths = ["web/src/", "sdk/ui/"]

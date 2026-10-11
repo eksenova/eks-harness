@@ -187,3 +187,36 @@ class TestClientTransport(httpx.BaseTransport):
 def harness_client(test_client: TestClient, config: Config, api_key: str | None = None) -> HarnessClient:
     return HarnessClient(base_url="http://testserver", api_key=api_key or "", paths=config.paths, config=config,
                          transport=TestClientTransport(test_client))
+
+
+TOOLS_CODE = '''
+from eks_harness.mcp_context import resolve_tree
+
+
+class Tools:
+    def __init__(self, context):
+        self.context = context
+
+    def register(self, server, harness):
+        @server.tool(name="{name}", description="tree-local tool")
+        def tool() -> str:
+            return "{label}|" + str(resolve_tree(None))
+'''
+
+
+def write_tools_tree(tree: Path, tool: str, label: str) -> Path:
+    plugin = tree / ".harness" / "plugins" / "tools"
+    (plugin / "tree_tools").mkdir(parents=True)
+    (plugin / "harness-plugin.toml").write_text(
+        '[plugin]\nid = "acme.tools"\nname = "Tools"\nversion = "1.0.0"\napi = "1"\n\n'
+        '[[contributes.mcp_tools]]\nid = "tools"\nentry = "tree_tools.tools:Tools"\n', encoding="utf-8")
+    (plugin / "tree_tools" / "__init__.py").write_text("", encoding="utf-8")
+    (plugin / "tree_tools" / "tools.py").write_text(TOOLS_CODE.format(name=tool, label=label), encoding="utf-8")
+    (tree / ".harness" / "project.toml").write_text(
+        f'[project]\nid = "acme/{tree.name}"\n\n[plugins]\ntrust = ["acme.tools"]\n', encoding="utf-8")
+    return tree.resolve()
+
+
+@pytest.fixture
+def tools_tree():
+    return write_tools_tree

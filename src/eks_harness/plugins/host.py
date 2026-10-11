@@ -24,6 +24,7 @@ from eks_harness.plugins.discovery import (
     path_candidates,
     repo_candidates,
 )
+from eks_harness.plugins.isolation import REGISTRY, ImportScope
 from eks_harness.plugins.manifest import Contribution, Manifest, ManifestError
 from eks_harness.plugins.project import ProjectConfig, load_project_config
 from eks_harness.plugins.trust import TrustStore, content_hash
@@ -159,9 +160,9 @@ class PluginHost:
 
     def _tree(self, tree: Path) -> tuple[float, ProjectConfig, list[Candidate]]:
         tree = tree.resolve()
-        file = tree / ".harness" / "project.toml"
-        plugins_dir = tree / ".harness" / "plugins"
-        stamp = max(_mtime(file), _mtime(plugins_dir))
+        harness = tree / ".harness"
+        stamp = max(_mtime(harness / "project.toml"), _mtime(harness / "project.local.toml"),
+                    _mtime(harness / "plugins"))
         with self._lock:
             cached = self._trees.get(tree)
             if cached and cached[0] == stamp:
@@ -213,14 +214,8 @@ class PluginHost:
         approved = None
         if not candidate.trusted_by_kind:
             digest = self._digest(candidate.root)
-            pre_trusted = candidate.kind == "repo" and candidate.tree is not None and any(
-                _same_path(candidate.root, (candidate.tree / ".harness" / "plugins" / name))
-                or _same_path(candidate.root, (candidate.tree / ".harness" / name))
-                or manifest.id == name
-                for name in project.trust)
-            if not pre_trusted:
-                entry = self.trust_store.get(manifest.id, candidate.root)
-                approved = entry.get("hash") if entry else None
+            if not _pre_trusted(candidate, project):
+                approved = self._approved_hash(manifest.id, candidate.root, digest)
                 if approved is None:
                     return PluginRecord(candidate, "pending", "waiting for approval", digest)
                 if approved != digest:
@@ -232,6 +227,13 @@ class PluginHost:
         if missing:
             return PluginRecord(candidate, "error", f"missing executables: {', '.join(missing)}", digest, approved)
         return PluginRecord(candidate, "active", "", digest, approved)
+
+    def _approved_hash(self, plugin_id: str, root: Path, digest: str) -> str | None:
+        entry = self.trust_store.get(plugin_id, root)
+        pinned = entry.get("hash") if entry else None
+        if pinned == digest or self.trust_store.approved_elsewhere(plugin_id, digest):
+            return digest
+        return pinned
 
     def get(self, plugin_id: str, tree: Path | None = None) -> PluginRecord | None:
         winner = None
@@ -307,10 +309,10 @@ class PluginHost:
             raise PluginError(f"plugin '{contribution.plugin_id}' is not active")
         if not contribution.entry:
             raise PluginError(f"{contribution.key} has no entry")
-        self._prepare_imports(record)
+        scope = self.import_scope(record)
         module_name, _, attr = contribution.entry.partition(":")
         try:
-            module = importlib.import_module(module_name)
+            module = scope.import_module(module_name) if scope else importlib.import_module(module_name)
         except Exception as error:
             raise PluginError(f"{contribution.key}: cannot import {module_name}: {error}") from error
         target: Any = module
@@ -322,7 +324,8 @@ class PluginHost:
         return target
 
     def load(self, contribution: Contribution, tree: Path | None = None) -> Any:
-        key = (contribution.key, tree.resolve() if tree else None)
+        record = self.get(contribution.plugin_id, tree)
+        key = (contribution.key, tree.resolve() if tree else None, record.digest if record else None)
         with self._lock:
             if key in self._instances:
                 return self._instances[key]
@@ -344,19 +347,30 @@ class PluginHost:
                 _LOG.warning("%s", error)
         return out
 
-    def _prepare_imports(self, record: PluginRecord) -> None:
+    def import_scope(self, record: PluginRecord) -> ImportScope | None:
         manifest = record.manifest
-        if record.kind in ("builtin", "package"):
-            return
-        for relative in manifest.python_paths:
-            path = (manifest.root / relative).resolve()
-            if path.is_dir() and str(path) not in sys.path:
-                sys.path.insert(0, str(path))
+        if manifest is None or record.candidate.trusted_by_kind:
+            return None
         if manifest.python_requires:
             env = self.ensure_requirements(manifest)
-            if str(env) not in self._env_paths:
-                sys.path.append(str(env))
-                self._env_paths.add(str(env))
+            with self._lock:
+                if str(env) not in self._env_paths:
+                    sys.path.append(str(env))
+                    self._env_paths.add(str(env))
+        generation = record.digest or self._digest(record.root)
+        return REGISTRY.scope(manifest.id, manifest.root, generation, manifest.python_paths)
+
+    def activate_imports(self, tree: Path | None = None) -> list[ImportScope]:
+        scopes = []
+        for record in self.active(tree):
+            try:
+                scope = self.import_scope(record)
+            except PluginError as error:
+                _LOG.warning("%s", error)
+                continue
+            if scope is not None:
+                scopes.append(scope)
+        return scopes
 
     def requirements_dir(self, manifest: Manifest) -> Path:
         key = hashlib.sha256("\n".join(sorted(manifest.python_requires)).encode()).hexdigest()[:16]
@@ -413,6 +427,14 @@ def _tree_mtime(root: Path) -> float:
             continue
         newest = max(newest, _mtime(path))
     return newest
+
+
+def _pre_trusted(candidate: Candidate, project: ProjectConfig) -> bool:
+    if candidate.kind not in ("repo", "git") or candidate.tree is None or candidate.manifest is None:
+        return False
+    harness = candidate.tree / ".harness"
+    return any(candidate.manifest.id == name or _same_path(candidate.root, harness / "plugins" / name)
+               or _same_path(candidate.root, harness / name) for name in project.trust)
 
 
 def _same_path(a: Path, b: Path) -> bool:

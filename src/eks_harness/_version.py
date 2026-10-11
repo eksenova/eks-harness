@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 HASH_ROOT_ENTRIES = ("pyproject.toml", "hatch_build.py", "README.md", "src", "web")
 HASH_EXCLUDED_PREFIXES = (

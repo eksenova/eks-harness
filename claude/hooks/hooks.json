@@ -1,28 +1,25 @@
 {
   "hooks": {
+    "SessionStart": [
+      {"matcher": "startup|resume", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/daemon_check.py\"", "timeout": 30}]}
+    ],
     "UserPromptSubmit": [
       {"hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/harness_hint.py\""}]}
     ],
     "PreToolUse": [
-      {"matcher": "Bash|mcp__.*eks-harness.*__driver_.*",
-       "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cheap_inspection_guard.py\""}]},
-      {"matcher": "Bash",
-       "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pr_evidence_guard.py\""}]},
-      {"matcher": "Edit|Write|MultiEdit|NotebookEdit",
-       "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/design_hint.py\""}]}
+      {"matcher": "mcp__.*eks-harness.*__driver_.*", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cheap_inspection_guard.py\""}]},
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cheap_inspection_guard.py\"", "if": "Bash(eks-harness *)"}, {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cheap_inspection_guard.py\" ehx", "if": "Bash(ehx *)"}, {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pr_evidence_guard.py\"", "if": "Bash(gh pr *)"}]},
+      {"matcher": "Edit|Write|MultiEdit|NotebookEdit", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/design_hint.py\""}]}
     ],
     "PostToolUse": [
-      {"matcher": "Bash|EnterWorktree",
-       "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/prewarm.py\""}]}
+      {"matcher": "EnterWorktree", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/prewarm.py\""}]},
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/prewarm.py\"", "if": "Bash(git worktree add *)"}]}
     ],
     "Stop": [
       {"hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/evidence_guard.py\""}]}
     ],
     "SubagentStop": [
-      {"hooks": [
-        {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/evidence_guard.py\""},
-        {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/agent_stop.py\""}
-      ]}
+      {"hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/evidence_guard.py\""}, {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/agent_stop.py\""}]}
     ]
   }
 }

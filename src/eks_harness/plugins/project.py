@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import re
 import subprocess
 import tomllib
 from dataclasses import dataclass, field
@@ -8,6 +10,9 @@ from typing import Any
 
 HARNESS_DIR = ".harness"
 PROJECT_FILE = "project.toml"
+LOCAL_FILE = "project.local.toml"
+MAX_EXPANSION_DEPTH = 8
+_PLACEHOLDER = re.compile(r"\$\{(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?::-(?P<default>(?:[^{}]|\{[^{}]*\})*))?\}")
 
 
 class ProjectConfigError(ValueError):
@@ -25,6 +30,7 @@ class ProjectConfig:
     trust: tuple[str, ...] = ()
     paths: tuple[Path, ...] = ()
     git: tuple[str, ...] = ()
+    variables: dict[str, str] = field(default_factory=dict)
     settings: dict[str, dict[str, Any]] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
@@ -66,6 +72,46 @@ def git_toplevel(path: Path) -> Path | None:
     return Path(out.stdout.strip()) if out.returncode == 0 and out.stdout.strip() else None
 
 
+def main_tree(tree: Path) -> Path:
+    try:
+        out = subprocess.run(["git", "-C", str(tree), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                             capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return tree
+    common = Path(out.stdout.strip()) if out.returncode == 0 and out.stdout.strip() else None
+    if common is None or common.name != ".git":
+        return tree
+    return common.parent
+
+
+def expand_placeholders(text: str, values: dict[str, str], depth: int = 0) -> str:
+    if depth > MAX_EXPANSION_DEPTH:
+        raise ProjectConfigError(f"'{text}': placeholders nest too deeply (a variable refers to itself?)")
+
+    def replace(match: re.Match[str]) -> str:
+        name, default = match["name"], match["default"]
+        value = values.get(name) if name in values else os.environ.get(name)
+        if value:
+            return expand_placeholders(value, values, depth + 1)
+        if default is not None:
+            return expand_placeholders(default, values, depth + 1)
+        return match.group(0)
+
+    return _PLACEHOLDER.sub(replace, text)
+
+
+def resolve_plugin_path(text: str, tree: Path, variables: dict[str, str] | None = None) -> Path:
+    values = {**(variables or {}), "tree": str(tree)}
+    if "${" in text:
+        values["main_tree"] = str(main_tree(tree))
+    path = Path(expand_placeholders(text, values)).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+    from_tree = (tree / path).resolve()
+    legacy = (tree / HARNESS_DIR / path).resolve()
+    return legacy if not from_tree.exists() and legacy.exists() else from_tree
+
+
 def find_tree(start: Path) -> Path | None:
     start = start.resolve()
     for candidate in (start, *start.parents):
@@ -81,10 +127,11 @@ def load_project_config(tree: Path | None) -> ProjectConfig:
     file = tree / HARNESS_DIR / PROJECT_FILE
     if not file.is_file():
         return ProjectConfig(tree=tree)
-    try:
-        data = tomllib.loads(file.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError as error:
-        raise ProjectConfigError(f"{file}: {error}") from error
+    data = _read_toml(file)
+    local = tree / HARNESS_DIR / LOCAL_FILE
+    shared = _variables(data, file)
+    variables = {**shared, **{k: os.environ[k] for k in shared if os.environ.get(k)},
+                 **(_variables(_read_toml(local), local) if local.is_file() else {})}
     project = data.get("project") or {}
     plugins = data.get("plugins") or {}
     if not isinstance(project, dict) or not isinstance(plugins, dict):
@@ -92,7 +139,6 @@ def load_project_config(tree: Path | None) -> ProjectConfig:
     settings = plugins.get("settings") or {}
     if not isinstance(settings, dict) or not all(isinstance(v, dict) for v in settings.values()):
         raise ProjectConfigError(f"{file}: [plugins.settings.<id>] must be tables")
-    base = tree / HARNESS_DIR
     return ProjectConfig(
         tree=tree,
         project_id=project.get("id"),
@@ -101,8 +147,24 @@ def load_project_config(tree: Path | None) -> ProjectConfig:
         enable=_strings(plugins.get("enable"), "plugins.enable"),
         disable=_strings(plugins.get("disable"), "plugins.disable"),
         trust=_strings(plugins.get("trust"), "plugins.trust"),
-        paths=tuple((base / p).resolve() for p in _strings(plugins.get("paths"), "plugins.paths")),
+        paths=tuple(resolve_plugin_path(p, tree, variables)
+                    for p in _strings(plugins.get("paths"), "plugins.paths")),
         git=_strings(plugins.get("git"), "plugins.git"),
+        variables=variables,
         settings={k: dict(v) for k, v in settings.items()},
         raw=data,
     )
+
+
+def _read_toml(file: Path) -> dict[str, Any]:
+    try:
+        return tomllib.loads(file.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as error:
+        raise ProjectConfigError(f"{file}: {error}") from error
+
+
+def _variables(data: dict[str, Any], file: Path) -> dict[str, str]:
+    table = data.get("vars") or {}
+    if not isinstance(table, dict) or not all(isinstance(v, str) for v in table.values()):
+        raise ProjectConfigError(f"{file}: [vars] must map names to strings")
+    return dict(table)

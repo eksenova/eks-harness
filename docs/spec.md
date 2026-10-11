@@ -36,14 +36,14 @@ scenes and synchronized "scores" that tie all of them to one clock.
 | Authoring | Python DSL that serializes to a JSON IR; the studio edits the same IR. |
 | Web scenes | JS/TS allowed, on a virtual clock (Date, performance.now, rAF, timers, CSS and Web Animations) so renders are frame-exact. |
 | Plugins | A folder or package with `harness-plugin.toml` declaring contributions; discovered from entry points, configured paths, repo `.harness/plugins/` and git URLs; enabled per project. |
-| Plugin trust | Trust on first use: built-ins and installed packages load directly; folder and git plugins wait for approval (CLI or UI), pinned by content hash; project config can pre-trust its repo plugins. |
+| Plugin trust | Trust on first use: built-ins and installed packages load directly; folder and git plugins wait for approval (CLI or UI), pinned by content hash, and an approval covers every checkout with the same id and hash; project config can pre-trust the plugins it loads (repo, `paths` and `git`). |
 | UI extensions | Prebuilt ES modules loaded at runtime into named slots through a typed UI SDK, sharing React and the design tokens. |
 | UI | New design system and one unified app (harness plus studio, score timeline, live device control, scene previews); React 19, TanStack Router and Query, Vite, TypeScript, plain CSS with tokens, no component kit. |
 | Topology | One hub (this Mac) plus nodes that dial out to it over WebSocket (`eks-harness node serve`), installed and updated over SSH by `eks-harness node add`. The render farm becomes node configuration. |
 | Migration | Everything carries over; old share URLs keep resolving. |
 | Rollout | Build the whole system next to an existing installation; switch in one step. |
 | Agents and hooks | Generic agents and hooks in the Claude plugin, configurable per project; app knowledge in repo plugins and repo skills. |
-| UI review | Playwright MCP configured in the repo's `.mcp.json` and in the Claude plugin; scripted Playwright until a session loads it. |
+| UI review | Playwright MCP configured in this repository's `.mcp.json` only; the Claude plugin ships no Playwright MCP, so consumer repositories use eks-harness as their browser driver unless they add one themselves. |
 | CLI | `eks-harness`, plus the short alias `ehx`. |
 | Extras | Plugin SDK with scaffolding templates (`eks-harness plugin new <kind>`). |
 
@@ -199,20 +199,31 @@ Discovery order (later can override earlier by id only when allowed):
 1. built-in plugins (`plugins/` shipped in the distribution),
 2. installed Python packages exposing the `eks_harness.plugins` entry point,
 3. folders listed in user config (`plugins.paths`),
-4. repo plugins: `.harness/plugins/*/harness-plugin.toml` in a project's repo,
-5. git plugins: `plugins.git = ["github:org/repo#path@ref"]`, fetched into the
-   cache.
+4. repo plugins: `.harness/plugins/*/harness-plugin.toml` in a project's repo, plus the folders its
+   `.harness/project.toml` lists in `[plugins] paths` (relative to the tree root, with `${tree}`,
+   `${main_tree}`, `${NAME}` and `${NAME:-fallback}` placeholders filled from `.harness/project.local.toml`
+   `[vars]`, the environment and `[vars]` in `project.toml`; see `docs/multi-repo.md`),
+5. git plugins: `plugins.git = ["github:org/repo#path@ref"]` (user config) or `[plugins] git` (project
+   config), fetched into the cache.
 
 Each project lists enabled plugins and their settings in its project config
 (stored in the hub, optionally mirrored in the repo's `.harness/project.toml`).
 Trust: built-ins and installed packages are trusted; folder and git plugins
 are pending until approved (`eks-harness plugin trust <id>` or the UI), and
-approval pins the content hash (a change requires re-approval).
-`.harness/project.toml` may pre-trust its own repo plugins by path.
+approval pins the content hash (a change requires re-approval). An approval also
+covers any other folder holding the same plugin id with the same content hash, so
+worktrees of an approved commit load directly. `.harness/project.toml`
+pre-trusts plugins by id or by path under `.harness/plugins/`; pre-trust covers its
+repo plugins, its `[plugins] paths` and its `[plugins] git` plugins in every worktree.
 
-Python plugins with extra requirements get an isolated uv environment keyed by
-their lockfile; plugin code that must run inside the daemon process imports
-only `eks_harness.plugins.sdk`.
+Plugin Python code is imported per plugin folder and content hash into a private
+module namespace (`eks_harness.plugins.isolation`): absolute and relative imports
+inside the plugin resolve within its own folder, two trees that ship the same
+module name never share modules, an edited plugin loads as a new generation on its
+next use, and a plain-name import of a plugin file from outside (a flow `app.py`)
+gets the plugin's module object. Python plugins with extra requirements get a uv
+environment keyed by their requirement set; plugin code that must run inside the
+daemon process imports only `eks_harness.plugins.sdk`.
 
 ### 6.4 Plugin SDK and scaffolding
 
@@ -445,9 +456,14 @@ with one plugin, `eks-harness`, built from `claude/`:
   farm, plugin development, UI design, troubleshooting.
 - **Agents**: web, ios, android and studio/render agents, generic and driven
   by project config.
-- **Hooks**: evidence inspection before finishing, cheap inspection before
-  screenshots, PR UI evidence, worktree prewarm, lease release on stop, plugin
-  design hint; each switchable per project.
+- **Hooks**: daemon availability at session start (reports how to start it; starts it only
+  through an installed login service), evidence inspection before finishing, cheap inspection
+  before screenshots, PR UI evidence, worktree prewarm, lease release on stop, design hint (only
+  where the project lists `ui_design_paths` or enables it); each switchable per project, and the
+  Bash guards only run for matching commands.
+- **Trees**: the stdio MCP server works on the session's tree (`EKS_HARNESS_TREE`, passed from
+  `CLAUDE_PROJECT_DIR`); MCP over HTTP takes the tree per request (`X-Eks-Harness-Tree` header or
+  `?tree=`) and lists the plugin MCP tools of that tree.
 - **Commands**: quick entry points (`/harness`, `/flow`, `/render`, `/score`).
 
 ## 15. CLI
@@ -460,8 +476,12 @@ with one plugin, `eks-harness`, built from `claude/`:
 
 ## 16. Consumer repositories
 
-- A repository adds `.harness/project.toml` (project id, enabled and trusted plugins, backend default,
-  score paths, Claude hook settings) and per-app `.harness/app.toml`, `app.py` and `flows/`.
+- A repository adds `.harness/project.toml` (project id, enabled and trusted plugins, plugin paths and
+  variables, backend default and definition folders, score paths, Claude hook settings), an untracked
+  `.harness/project.local.toml` for per-machine `[vars]`, and per-app `.harness/app.toml`, `app.py` and
+  `flows/`.
+- Several repositories and worktrees share one hub; `docs/multi-repo.md` describes project ids, trust,
+  cross-repo plugins, module isolation and which settings stay hub-wide.
 - Repo plugins in `.harness/plugins/<name>/` carry what is specific to the repository: backends and their
   seeds, backend choice policies (local versus a shared environment by branch changes), credentials and
   logins (driver extensions for web and mobile), app helpers, fakes, renderers and UI modules.

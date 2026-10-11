@@ -21,11 +21,33 @@ Optional extras: `eks-harness[video]` (the video engine), `[html]` (web scenes),
 speech to text), `[matting]`, `[sam3]`, `[stems]`, `[denoise]`, `[all]`. Blender is optional and found
 on the hub or on nodes.
 
-Claude Code plugin (skills, agents, hooks, commands and the MCP server):
+Claude Code plugin (skills, agents, hooks, commands and the MCP server), from the GitHub marketplace
+`eksenova/eks-harness`:
 
 ```text
-/plugin install eks-harness --marketplace eksenova/eks-harness
+/plugin marketplace add eksenova/eks-harness
+/plugin install eks-harness@eks-harness
 ```
+
+To share it with a team, commit this to the consuming repository's `.claude/settings.json`; Claude Code
+offers the marketplace and plugin when a collaborator trusts the folder (or each one runs
+`claude plugin install eks-harness@eks-harness --scope project`):
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "eks-harness": { "source": { "source": "github", "repo": "eksenova/eks-harness" }, "autoUpdate": true }
+  },
+  "enabledPlugins": { "eks-harness@eks-harness": true }
+}
+```
+
+The plugin's version (`claude/.claude-plugin/plugin.json`, mirrored in `.claude-plugin/marketplace.json`)
+is what tells installed copies to update, so bump both when the plugin changes. The plugin bundles only the
+eks-harness MCP server; add Playwright MCP to a repository's own `.mcp.json` if it wants one.
+
+Several repositories and worktrees share one hub: see `docs/multi-repo.md` for project ids, trust,
+cross-repo plugins, module isolation and per-repository hook settings.
 
 ## Concepts
 
@@ -46,7 +68,8 @@ Claude Code plugin (skills, agents, hooks, commands and the MCP server):
 
 ```text
 .harness/
-  project.toml          project id, enabled and trusted plugins, scores, Claude hook settings
+  project.toml          project id, enabled and trusted plugins, plugin paths, scores, Claude hook settings
+  project.local.toml    untracked per-machine or per-worktree [vars] (for example a sibling repo's path)
   plugins/<name>/       repo plugins: backends, seeders, logins, app helpers, UI modules
   scores/               score.py files
 <app>/.harness/

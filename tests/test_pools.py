@@ -478,3 +478,16 @@ def test_restart_finishes_a_stop_that_was_in_flight(paths, config: Config, real_
     wait_for(lambda: new_host.backends[backend_id]["status"] == "stopped", 30)
     wait_for(lambda: not alive(entry.pid, entry.started), 20)
     assert (new_backends.state_dir(new_host.backends[backend_id]) / "teardown.txt").exists()
+
+
+def test_backend_definition_dirs_follow_the_project(paths, config: Config, tmp_path: Path) -> None:
+    host = PoolHost(config, paths)
+    backends = BackendManager(host)
+    tree = tmp_path / "repo"
+    write_definition(tree / ".harness" / "backends")
+    write_definition(tree / "ops" / "backends").rename(tree / "ops" / "backends" / "opsapi")
+    assert [d["name"] for d in backends.definitions(str(tree))] == ["fakeapi"]
+    (tree / ".harness" / "project.toml").write_text('[backends]\ndefinition_dirs = ["ops/backends"]\n',
+                                                    encoding="utf-8")
+    assert [d["name"] for d in backends.definitions(str(tree))] == ["opsapi"]
+    assert [p for s, p in backends.definition_dirs(str(tree)) if s == "tree"] == [tree / "ops" / "backends"]

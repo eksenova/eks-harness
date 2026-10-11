@@ -20,6 +20,7 @@ DEFAULTS: dict[str, Any] = {
     "prewarm": False,
     "design_hint": True,
     "harness_hint": True,
+    "daemon_check": True,
 }
 
 
@@ -66,6 +67,11 @@ def enabled(name: str, config: dict[str, Any]) -> bool:
         return False
     hooks = config.get("hooks") if isinstance(config.get("hooks"), dict) else {}
     return bool(hooks.get(name, DEFAULTS.get(name, True)))
+
+
+def explicitly_enabled(name: str, config: dict[str, Any]) -> bool:
+    hooks = config.get("hooks") if isinstance(config.get("hooks"), dict) else {}
+    return hooks.get(name) is True
 
 
 def deny(reason: str) -> None:

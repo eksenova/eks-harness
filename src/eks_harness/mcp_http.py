@@ -2,17 +2,30 @@ from __future__ import annotations
 
 import contextvars
 import json
+import logging
 import threading
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from starlette.requests import HTTPConnection
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from eks_harness.cli.client import HarnessClient
-from eks_harness.mcp_server import HarnessTools, create_server
+from eks_harness.mcp_context import (
+    REQUEST_TREE,
+    TREE_HEADER,
+    TREE_QUERY,
+    remote_request,
+)
+from eks_harness.mcp_server import SERVER_NAME, HarnessTools, create_server
 
 if TYPE_CHECKING:
+    from mcp.server.mcpserver import MCPServer
+
     from eks_harness.daemon.context import AppContext
+    from eks_harness.plugins import PluginHost
+
+log = logging.getLogger("eks_harness.mcp")
 
 TOKEN: contextvars.ContextVar[str | None] = contextvars.ContextVar("eks_harness_mcp_token", default=None)
 MOUNT = "/mcp"
@@ -42,6 +55,54 @@ class RequestTools(HarnessTools):
             self._clients.clear()
 
 
+class PluginToolRegistry:
+    def __init__(self, host: PluginHost, tools: HarnessTools) -> None:
+        self.host = host
+        self.tools = tools
+        self._lock = threading.Lock()
+        self._servers: dict[Path | None, tuple[tuple[tuple[str, str | None], ...], MCPServer | None]] = {}
+
+    def current(self) -> MCPServer | None:
+        requested = REQUEST_TREE.get()
+        try:
+            return self.for_tree(Path(requested) if requested else None)
+        except Exception as error:
+            log.warning("plugin MCP tools unavailable for %s: %s", requested or "the hub", error)
+            return None
+
+    def for_tree(self, tree: Path | None) -> MCPServer | None:
+        from eks_harness.plugins import find_tree
+
+        if tree is not None:
+            tree = find_tree(tree) or tree.resolve()
+        records = [r for r in self.host.active(tree) if r.manifest.of_type("mcp_tools")]
+        signature = tuple((c.key, r.digest) for r in records for c in r.manifest.of_type("mcp_tools"))
+        with self._lock:
+            cached = self._servers.get(tree)
+            if cached is not None and cached[0] == signature:
+                return cached[1]
+        server = self._build(tree) if signature else None
+        with self._lock:
+            self._servers[tree] = (signature, server)
+        return server
+
+    def _build(self, tree: Path | None) -> MCPServer:
+        from mcp.server.mcpserver import MCPServer
+
+        server = MCPServer(SERVER_NAME, log_level="WARNING")
+        for contribution, target in self.host.load_all("mcp_tools", tree):
+            try:
+                target.register(server, self.tools)
+            except Exception as error:
+                log.warning("mcp tools %s failed for %s: %s", contribution.key, tree or "the hub", error)
+        return server
+
+
+def requested_tree(connection: HTTPConnection) -> str | None:
+    value = connection.headers.get(TREE_HEADER) or connection.query_params.get(TREE_QUERY) or ""
+    return value.strip() or None
+
+
 class _AuthGate:
     def __init__(self, app: ASGIApp, ctx: AppContext) -> None:
         self.app = app
@@ -67,16 +128,26 @@ class _AuthGate:
                         "headers": [(b"content-type", b"application/json"), (b"www-authenticate", b"Bearer")]})
             await send({"type": "http.response.body", "body": body})
             return
+        tree = requested_tree(connection)
+        if tree is not None and not Path(tree).expanduser().is_dir():
+            body = json.dumps({"error": "no_tree", "message": f"No directory {tree} on the hub machine."}).encode()
+            await send({"type": "http.response.start", "status": 400,
+                        "headers": [(b"content-type", b"application/json")]})
+            await send({"type": "http.response.body", "body": body})
+            return
         reset = TOKEN.set(token or None)
         try:
-            await self.app(scope, receive, send)
+            with remote_request(tree):
+                await self.app(scope, receive, send)
         finally:
             TOKEN.reset(reset)
 
 
 def build(ctx: AppContext) -> tuple[Any, Any]:
     tools = RequestTools(ctx.config.local_url())
-    server, _ = create_server(lambda: HarnessClient(ctx.config.local_url()), tools=tools)
+    registry = PluginToolRegistry(ctx.plugins, tools)
+    server, _ = create_server(lambda: HarnessClient(ctx.config.local_url()), tools=tools,
+                              plugin_tools=registry.current)
     from mcp.server.transport_security import TransportSecuritySettings
 
     starlette_app = server.streamable_http_app(

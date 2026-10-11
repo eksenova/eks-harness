@@ -6,9 +6,24 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _common import claude_config, context, enabled, payload, project_dir, state_file  # noqa: E402
+from _common import (  # noqa: E402
+    claude_config,
+    context,
+    enabled,
+    explicitly_enabled,
+    payload,
+    project_dir,
+    state_file,
+)
 
 DEFAULT_PATHS = ("web/src/", "sdk/ui/", "/ui/src/")
+
+
+def design_paths(config: dict) -> list[str]:
+    configured = config.get("ui_design_paths")
+    if isinstance(configured, list):
+        return [str(p) for p in configured if str(p)]
+    return list(DEFAULT_PATHS) if explicitly_enabled("design_hint", config) else []
 
 
 def main() -> None:
@@ -20,7 +35,7 @@ def main() -> None:
     path = str(given.get("file_path") or given.get("notebook_path") or "")
     if not path:
         return
-    paths = [str(p) for p in config.get("ui_design_paths") or []] or list(DEFAULT_PATHS)
+    paths = design_paths(config)
     if not any(p in path for p in paths):
         return
     marker = state_file(str(data.get("session_id") or ""), "design-hint")

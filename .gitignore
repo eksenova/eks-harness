@@ -14,3 +14,4 @@ workers/*/dist/
 src/eks_harness/assets/scene-runtime.js
 src/eks_harness/_workers/
 docs/local/
+.harness/project.local.toml

@@ -451,14 +451,6 @@ class BackendManager(BackendManagerBase):
                        detail={"status": record.get("status"), "definition": record.get("definition"),
                                "instance": record.get("instance"), **detail})
 
-    def definition_dirs(self, tree: str | None) -> list[tuple[str, Path]]:
-        places: list[tuple[str, Path]] = []
-        if tree:
-            for relative in self.host.config["backend.definitionDirs"]:
-                places.append(("tree", Path(tree) / relative))
-        places.append(("config", self.host.paths.backends_dir))
-        return places
-
     def definitions(self, tree: str | None = None) -> list[dict]:
         found: list[dict] = []
         seen: set[str] = set()
