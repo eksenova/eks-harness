@@ -1,6 +1,6 @@
 ---
 name: blender-scenes
-description: Write Blender scene scripts for the video engine and scores: BlenderScene media, the eks_harness.blender timing API (frames of beats and markers, score inputs, emitting events), textures from other tracks, engines and devices, the frame cache and node rendering. Use when creating or debugging Blender content synced to a timeline.
+description: "Write Blender scene scripts for the video engine and scores: BlenderScene media, the eks_harness.blender timing API (frames of beats and markers, score inputs, emitting events), textures from other tracks, engines and devices, the frame cache and node rendering. Use when creating or debugging Blender content synced to a timeline."
 ---
 
 # Blender scenes

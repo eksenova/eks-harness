@@ -1,6 +1,6 @@
 ---
 name: web
-description: Drive the web driver: leased Chrome profiles over CDP with Playwright, target grammar, synthetic and real input, settle, captures (screenshot, DOM, MHTML, accessibility, HAR, console), screencast recordings with pacing and live annotations, extensions for app logins. Use for interactive browser work and for writing web flows or web driver extensions.
+description: "Drive the web driver: leased Chrome profiles over CDP with Playwright, target grammar, synthetic and real input, settle, captures (screenshot, DOM, MHTML, accessibility, HAR, console), screencast recordings with pacing and live annotations, extensions for app logins. Use for interactive browser work and for writing web flows or web driver extensions."
 ---
 
 # Web driver

@@ -1,6 +1,6 @@
 ---
 name: annotation
-description: Annotate screenshots and images with eks-harness annotate: spec format, callouts, highlights, arrows, blur, crops, re-render and recapture, versions. Use for marking up still captures; videos are annotated live during recording instead.
+description: "Annotate screenshots and images with eks-harness annotate: spec format, callouts, highlights, arrows, blur, crops, re-render and recapture, versions. Use for marking up still captures; videos are annotated live during recording instead."
 ---
 
 # Annotation

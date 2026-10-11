@@ -1,6 +1,6 @@
 ---
 name: ios
-description: Run and drive React Native or native apps on pooled iOS simulators: leases, install and launch, Metro, the in-app bridge, fakes (camera, NFC, documents), device screenshots and recordings. Use for iOS verification, iOS flows and iOS device problems.
+description: "Run and drive React Native or native apps on pooled iOS simulators: leases, install and launch, Metro, the in-app bridge, fakes (camera, NFC, documents), device screenshots and recordings. Use for iOS verification, iOS flows and iOS device problems."
 ---
 
 # iOS

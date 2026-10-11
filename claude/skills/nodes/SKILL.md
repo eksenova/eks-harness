@@ -1,6 +1,6 @@
 ---
 name: nodes
-description: Add and operate nodes: machines that dial out to the hub and run jobs (Blender frame ranges, previews, shell jobs, plugin jobs) in GPU and CPU slots; installing over SSH (including WSL), slots and CUDA or OptiX devices, blobs, the job queue, troubleshooting. Use for render farms and remote capacity.
+description: "Add and operate nodes: machines that dial out to the hub and run jobs (Blender frame ranges, previews, shell jobs, plugin jobs) in GPU and CPU slots; installing over SSH (including WSL), slots and CUDA or OptiX devices, blobs, the job queue, troubleshooting. Use for render farms and remote capacity."
 ---
 
 # Nodes and the render farm

@@ -1,6 +1,6 @@
 ---
 name: scores
-description: Author, plan, render and play scores: one timeline that synchronizes video edits, Blender scenes, HTML/JS scenes, device takes and audio to beats and cues, with events flowing between tracks in both directions (a beat triggers a device action, a device event flips a web scene, a Blender impact drives the edit). Use for any synchronized video or live demo.
+description: "Author, plan, render and play scores: one timeline that synchronizes video edits, Blender scenes, HTML/JS scenes, device takes and audio to beats and cues, with events flowing between tracks in both directions (a beat triggers a device action, a device event flips a web scene, a Blender impact drives the edit). Use for any synchronized video or live demo."
 ---
 
 # Scores

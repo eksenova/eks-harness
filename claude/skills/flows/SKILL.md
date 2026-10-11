@@ -1,6 +1,6 @@
 ---
 name: flows
-description: Write and run Python flows that drive a leased browser, simulator or emulator through a whole scenario in one command: navigation, input, checkpoints (URL or route, layout spill, errors, failed requests), screenshots and annotated recordings with contact sheets. Use for verifying UI changes and for demo videos.
+description: "Write and run Python flows that drive a leased browser, simulator or emulator through a whole scenario in one command: navigation, input, checkpoints (URL or route, layout spill, errors, failed requests), screenshots and annotated recordings with contact sheets. Use for verifying UI changes and for demo videos."
 ---
 
 # Flows

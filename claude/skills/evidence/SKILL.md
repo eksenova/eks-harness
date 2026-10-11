@@ -1,6 +1,6 @@
 ---
 name: evidence
-description: Work with the evidence store: projects, sessions, artifacts (screenshots, videos, DOM, HAR, logs, sites), links, downloads, tags, retention, search, share links and putting evidence into pull requests. Use when presenting captures to people or pull requests.
+description: "Work with the evidence store: projects, sessions, artifacts (screenshots, videos, DOM, HAR, logs, sites), links, downloads, tags, retention, search, share links and putting evidence into pull requests. Use when presenting captures to people or pull requests."
 ---
 
 # Evidence and PR screenshots

@@ -1,6 +1,6 @@
 ---
 name: android
-description: Run and drive apps on pooled Android emulators: leases, AVDs, adb reverse, install and launch, the React Native bridge, fakes, screenshots and screenrecord captures. Use for Android verification, Android flows and emulator problems.
+description: "Run and drive apps on pooled Android emulators: leases, AVDs, adb reverse, install and launch, the React Native bridge, fakes, screenshots and screenrecord captures. Use for Android verification, Android flows and emulator problems."
 ---
 
 # Android

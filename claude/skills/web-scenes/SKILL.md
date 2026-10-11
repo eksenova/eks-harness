@@ -1,6 +1,6 @@
 ---
 name: web-scenes
-description: Write HTML/CSS/JS scenes for videos and scores with @eks-harness/scene: the virtual clock (timers, rAF, CSS and Web Animations are frame-exact), score inputs, beat helpers, textures from other tracks, emitting events, live mode. Use when building motion graphics or UI mockups that must sync to beats or other tracks.
+description: "Write HTML/CSS/JS scenes for videos and scores with @eks-harness/scene: the virtual clock (timers, rAF, CSS and Web Animations are frame-exact), score inputs, beat helpers, textures from other tracks, emitting events, live mode. Use when building motion graphics or UI mockups that must sync to beats or other tracks."
 ---
 
 # Web scenes

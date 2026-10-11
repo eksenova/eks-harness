@@ -1,6 +1,6 @@
 ---
 name: plugin-development
-description: Create, test and ship eks-harness plugins: harness-plugin.toml manifests, all contribution types (drivers, platforms, backends, seeders, credentials, logins, driver extensions, flow helpers, effects, transitions, renderers, scene engines, score tracks, node jobs, MCP tools, CLI, API routes, UI modules, skills), discovery and trust, settings, scaffolding and dev reload. Use for any new integration or repo-specific automation.
+description: "Create, test and ship eks-harness plugins: harness-plugin.toml manifests, all contribution types (drivers, platforms, backends, seeders, credentials, logins, driver extensions, flow helpers, effects, transitions, renderers, scene engines, score tracks, node jobs, MCP tools, CLI, API routes, UI modules, skills), discovery and trust, settings, scaffolding and dev reload. Use for any new integration or repo-specific automation."
 ---
 
 # Plugin development

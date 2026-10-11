@@ -1,6 +1,6 @@
 ---
 name: backends
-description: Run, seed and choose backends: backend definition scripts and plugin backends, ports and exports, health and ready checks, seeders and scenarios, credentials and personas, backend choice policies (local versus a shared environment by branch). Use whenever an app needs its API running or seeded, or a login persona.
+description: "Run, seed and choose backends: backend definition scripts and plugin backends, ports and exports, health and ready checks, seeders and scenarios, credentials and personas, backend choice policies (local versus a shared environment by branch). Use whenever an app needs its API running or seeded, or a login persona."
 ---
 
 # Backends, seeding and personas

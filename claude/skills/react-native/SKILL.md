@@ -1,6 +1,6 @@
 ---
 name: react-native
-description: Integrate and use @eks-harness/react-native: installing the in-app bridge, adapters (navigation, store, logout, alerts), targets, actions, live UI patches and injected components for scores, app events, and fakes registration. Use when wiring a React Native app into the harness or controlling app state and UI live.
+description: "Integrate and use @eks-harness/react-native: installing the in-app bridge, adapters (navigation, store, logout, alerts), targets, actions, live UI patches and injected components for scores, app events, and fakes registration. Use when wiring a React Native app into the harness or controlling app state and UI live."
 ---
 
 # React Native bridge

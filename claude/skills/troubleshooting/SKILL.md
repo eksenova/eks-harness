@@ -1,6 +1,6 @@
 ---
 name: troubleshooting
-description: Diagnose eks-harness problems: hub not reachable, auth, stuck leases, devices not booting, workers not starting, failing flows, backend boot failures, failing renders, offline nodes, plugin errors, logs and doctor. Use when something in the harness misbehaves.
+description: "Diagnose eks-harness problems: hub not reachable, auth, stuck leases, devices not booting, workers not starting, failing flows, backend boot failures, failing renders, offline nodes, plugin errors, logs and doctor. Use when something in the harness misbehaves."
 ---
 
 # Troubleshooting

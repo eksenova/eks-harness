@@ -1,6 +1,6 @@
 ---
 name: devices
-description: Manage pools and leases: browser profiles, iOS simulators, Android emulators, queueing, idle release, resets, stray process sweeps, device naming and pool settings. Use when a lease is stuck, a device misbehaves, or pools need configuring.
+description: "Manage pools and leases: browser profiles, iOS simulators, Android emulators, queueing, idle release, resets, stray process sweeps, device naming and pool settings. Use when a lease is stuck, a device misbehaves, or pools need configuring."
 ---
 
 # Devices, browsers and leases

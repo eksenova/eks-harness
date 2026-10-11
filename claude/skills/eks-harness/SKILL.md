@@ -1,6 +1,6 @@
 ---
 name: eks-harness
-description: Overview of eks-harness and when to use which part: the hub daemon, leases, devices and browsers, flows, evidence store, backends, nodes, video engine, scores, plugins, MCP tools and CLI. Load it first when a task involves running, verifying, capturing, recording or rendering anything with eks-harness, or when unsure which harness skill applies.
+description: "Overview of eks-harness and when to use which part: the hub daemon, leases, devices and browsers, flows, evidence store, backends, nodes, video engine, scores, plugins, MCP tools and CLI. Load it first when a task involves running, verifying, capturing, recording or rendering anything with eks-harness, or when unsure which harness skill applies."
 ---
 
 # eks-harness
