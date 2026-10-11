@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+import socket
+import subprocess
+import sys
 import time
 
 import pytest
@@ -12,6 +16,7 @@ from eks_harness.db.repos import leases as leases_repo
 from eks_harness.db.repos import projects as projects_repo
 from eks_harness.db.repos import sessions as sessions_repo
 from eks_harness.ids import is_sid
+from eks_harness.pools.backends import pid_started
 
 from conftest import AuthEnv, make_app
 
@@ -303,3 +308,69 @@ def test_backend_binding_is_reported_by_leases(client: TestClient, ctx) -> None:
     assert detail["leases"][0]["driverSid"] == lease["sid"] and detail["leases"][0]["kind"] == "driver"
     client.post(f"/api/leases/{lease['sid']}/release", json={})
     assert client.get(f"/api/backends/{backend['id']}").json()["bindings"] == []
+
+
+def ended_pid() -> int:
+    process = subprocess.Popen([sys.executable, "-c", "pass"])
+    process.wait()
+    return process.pid
+
+
+def claim(run: str, pid: int | None = None, host: str | None = None) -> dict:
+    pid = pid or os.getpid()
+    return {"run": run, "pid": pid, "started": pid_started(pid) or None, "host": host or socket.gethostname()}
+
+
+def test_a_lease_claimed_by_a_running_flow_is_not_taken_over(client: TestClient, ctx) -> None:
+    first = granted(client, project="acme/one", session="main", claim=claim("run-a"))
+    second = granted(client, project="acme/two", session="main", claim=claim("run-b"))
+    assert second["sid"] != first["sid"]
+    assert second["resource"] != first["resource"]
+    held = leases_repo.get_by_sid(ctx.db.conn(), first["sid"])
+    assert held.project_id == "acme/one" and held.state == "active"
+    assert held.meta["claim"]["run"] == "run-a"
+    assert granted(client, project="acme/one", session="main", claim=claim("run-a"))["sid"] == first["sid"]
+    assert granted(client, project="acme/two", session="main", claim=claim("run-b"))["sid"] == second["sid"]
+    other = granted(client, project="acme/three", session="main")
+    assert other["sid"] not in (first["sid"], second["sid"])
+
+
+def test_a_finished_flow_lease_is_resumed_by_the_next_run(client: TestClient, ctx) -> None:
+    first = granted(client, project="acme/one", session="main", claim=claim("run-a", pid=ended_pid()))
+    again = granted(client, project="acme/two", session="main", claim=claim("run-b"))
+    assert again["sid"] == first["sid"]
+    assert leases_repo.get_by_sid(ctx.db.conn(), first["sid"]).project_id == "acme/two"
+    cleared = client.post(f"/api/leases/{first['sid']}/meta", json={"claim": None})
+    assert cleared.status_code == 200, cleared.text
+    assert granted(client, project="acme/one", session="main", claim=claim("run-c"))["sid"] == first["sid"]
+
+
+def test_concurrent_runs_prefer_their_own_target_among_free_leases(client: TestClient) -> None:
+    one = granted(client, project="acme/one", session="main", claim=claim("run-a"))
+    two = granted(client, project="acme/two", session="main", claim=claim("run-b"))
+    for sid in (one["sid"], two["sid"]):
+        client.post(f"/api/leases/{sid}/meta", json={"claim": None})
+    assert granted(client, project="acme/two", session="main", claim=claim("run-c"))["sid"] == two["sid"]
+    assert granted(client, project="acme/one", session="main", claim=claim("run-d"))["sid"] == one["sid"]
+
+
+def test_a_claim_from_another_machine_counts_as_in_use(client: TestClient) -> None:
+    first = granted(client, claim=claim("remote-run", pid=ended_pid(), host="elsewhere.invalid"))
+    assert granted(client, claim=claim("local-run"))["sid"] != first["sid"]
+
+
+def test_invalid_claim_is_rejected(client: TestClient) -> None:
+    response = acquire(client, claim={"pid": 1})
+    assert response.status_code == 422
+
+
+def test_releasing_one_of_two_browser_leases_keeps_the_instance_control_server(
+        client: TestClient, ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+    stopped: list[str] = []
+    monkeypatch.setattr(ctx.pools.browsers, "stop_control_server", stopped.append, raising=False)
+    first = granted(client, project="acme/one", session="main", claim=claim("run-a"))
+    second = granted(client, project="acme/two", session="main", claim=claim("run-b"))
+    client.post(f"/api/leases/{first['sid']}/release", json={})
+    assert stopped == []
+    client.post(f"/api/leases/{second['sid']}/release", json={})
+    assert stopped == ["session:one"]

@@ -30,6 +30,11 @@ ttl (10 min by default), so a crashed session cannot keep a backend alive.
    `--backend` takes a backend lease id, a backend id or a definition name (started when needed, with
    `--backend-tree`). The driver lease waits until the backend is ready, holds a lease on it for its own
    lifetime and releases it with itself. Many short driver leases reuse one backend without restarting it.
+   A harness instance reuses its driver lease of a kind from one run to the next, but never one a running
+   flow still uses: flows started at the same time under one Claude session (parallel agents included) each
+   get their own lease, and a later run picks up a free one, preferring the lease of its own project and
+   session. Pass `--instance agent:<name>` (MCP `flow_run` / `lease_acquire`: `instance`) to keep an agent
+   on leases of its own across runs.
 
 3. Renew a long-held backend lease (`eks-harness backend renew <lease>`, every few minutes while you work)
    and release it promptly when done (`eks-harness backend release <lease>`). Release driver leases even

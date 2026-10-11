@@ -727,6 +727,13 @@ class QueueHolder(ApiModel):
     session: str | None = None
 
 
+class LeaseClaim(ApiModel):
+    run: str = Field(min_length=1, max_length=200)
+    pid: int | None = None
+    started: str | None = None
+    host: str | None = None
+
+
 class LeaseAcquireRequest(ApiModel):
     kind: LeaseKind
     project: str
@@ -744,6 +751,7 @@ class LeaseAcquireRequest(ApiModel):
     label: str | None = None
     tags: list[str] = Field(default_factory=list)
     render_slot: str | None = None
+    claim: LeaseClaim | None = None
 
     @field_validator("kind", mode="before")
     @classmethod

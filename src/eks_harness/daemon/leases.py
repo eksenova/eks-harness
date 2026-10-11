@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import socket
 import threading
 import time
 from dataclasses import dataclass, field
@@ -166,6 +167,7 @@ class LeaseManager:
         instance = str(body.get("instance") or "").strip()
         if not instance:
             raise bad_request("instance is required", error="invalid_instance")
+        claim = self.checked_claim(body.get("claim"))
         project, session, project_created, session_created = self.resolve_target(
             str(body.get("project") or ""), str(body.get("session") or ""))
         pending = PendingEvents()
@@ -178,7 +180,7 @@ class LeaseManager:
         with self.lock:
             self.last_activity = time.time()
             with self.db.transaction() as conn:
-                existing = leases_repo.live_for_instance(conn, instance, kind)
+                existing = self.reusable_lease(conn, instance, kind, project.id, session.id, claim)
                 if existing is not None and existing.holding:
                     moved = existing.session_id != session.id or existing.project_id != project.id
                     leases_repo.update(conn, existing.id, idle_limit=None, heartbeat_at=now(), last_poll_at=now(),
@@ -189,14 +191,16 @@ class LeaseManager:
                                        state_dir=body.get("state_dir") or existing.state_dir,
                                        label=body.get("label") or existing.label,
                                        meta={**(existing.meta or {}), "tags": list(body.get("tags") or []),
-                                             "renderSlot": body.get("render_slot")})
+                                             "renderSlot": body.get("render_slot"),
+                                             **({"claim": claim} if claim else {})})
                     lease = leases_repo.get(conn, existing.id)
                     if moved:
                         self.lease_event(pending, ev.LEASE_ACQUIRED, lease, actor,
                                          movedFrom=existing.session_id)
                 elif existing is not None:
                     leases_repo.update(conn, existing.id, last_poll_at=now(), session_id=session.id,
-                                       project_id=project.id)
+                                       project_id=project.id,
+                                       **({"meta": {**(existing.meta or {}), "claim": claim}} if claim else {}))
                     lease = leases_repo.get(conn, existing.id)
                 else:
                     lease = leases_repo.insert(
@@ -206,7 +210,8 @@ class LeaseManager:
                         state_dir=body.get("state_dir"), label=body.get("label"),
                         previous_sid=body.get("previous_sid"),
                         meta={**(body.get("meta") or {}), **({"tags": list(body["tags"])} if body.get("tags") else {}),
-                              **({"renderSlot": body["render_slot"]} if body.get("render_slot") else {})})
+                              **({"renderSlot": body["render_slot"]} if body.get("render_slot") else {}),
+                              **({"claim": claim} if claim else {})})
                     self.lease_event(pending, ev.LEASE_QUEUED, lease, actor)
             self.publish(pending)
         if body.get("backend"):
@@ -221,6 +226,43 @@ class LeaseManager:
             self.process_queue()
             lease_id = lease.id
         return self.wait_for(lease_id, wait, wait_seconds)
+
+    def checked_claim(self, value: Any) -> dict | None:
+        if value is None:
+            return None
+        if not isinstance(value, dict) or not str(value.get("run") or "").strip():
+            raise bad_request("claim must be an object with a run id", error="invalid_claim")
+        pid = value.get("pid")
+        if pid is not None and (isinstance(pid, bool) or not isinstance(pid, int)):
+            raise bad_request("claim.pid must be a process id", error="invalid_claim")
+        return {"run": str(value["run"]).strip(), "pid": pid, "started": value.get("started") or None,
+                "host": value.get("host") or None}
+
+    def claimed_by_other(self, lease: Lease, claim: dict | None) -> bool:
+        held = (lease.meta or {}).get("claim")
+        if not isinstance(held, dict) or not held.get("run"):
+            return False
+        if claim is not None and claim["run"] == held["run"]:
+            return False
+        if held.get("host") and held["host"] != socket.gethostname():
+            return True
+        if not held.get("pid"):
+            return True
+        return alive(held["pid"], held.get("started"))
+
+    def reusable_lease(self, conn, instance: str, kind: str, project_id: str, session_id: int,
+                       claim: dict | None) -> Lease | None:
+        free = [lease for lease in leases_repo.list_leases(conn, states=leases_repo.LIVE_STATES, instance=instance,
+                                                           kind=kind)
+                if not self.claimed_by_other(lease, claim)]
+
+        def rank(lease: Lease) -> tuple[bool, bool, bool]:
+            held = (lease.meta or {}).get("claim") or {}
+            own = claim is not None and held.get("run") == claim["run"]
+            same_target = lease.project_id == project_id and lease.session_id == session_id
+            return not own, not lease.holding, not same_target
+
+        return min(free, key=rank) if free else None
 
     def link_backend(self, lease: Lease, body: dict) -> dict:
         ref = str(body.get("backend") or "")
@@ -632,7 +674,8 @@ class LeaseManager:
         try:
             if lease.kind == "browser":
                 stop_control = getattr(self.pools.browsers, "stop_control_server", None)
-                if stop_control is not None and lease.owner_kind != "manual":
+                if stop_control is not None and lease.owner_kind != "manual" \
+                        and not self.instance_holds_another_browser(lease):
                     stop_control(lease.owner_instance)
                 index = browser_index(lease.resource)
                 with self.lock:
@@ -658,6 +701,11 @@ class LeaseManager:
                         (folder / name).unlink(missing_ok=True)
         except Exception:
             log.exception("cleanup of %s failed", lease.resource)
+
+    def instance_holds_another_browser(self, lease: Lease) -> bool:
+        others = leases_repo.list_leases(self.conn(), states=leases_repo.HOLDING_STATES,
+                                         instance=lease.owner_instance, kind="browser")
+        return any(other.id != lease.id for other in others)
 
     def discard_recording(self, resource: str, lease: Lease) -> None:
         device = self.host.devices.get(resource) or {}

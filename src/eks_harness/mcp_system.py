@@ -233,6 +233,9 @@ def register_system_tools(server: MCPServer, tools: HarnessTools) -> None:
 
 LeaseIdArg = Annotated[str, Field(description="Backend lease id (bl_ followed by 16 hex characters)")]
 TtlArg = Annotated[str | None, Field(description="Seconds or a duration such as 15m; never for no expiry")]
+InstanceArg = Annotated[str | None, Field(description="Harness instance that owns the lease (default: this Claude "
+                                                    "session); give each parallel agent its own, such as "
+                                                    "agent:<name>, so their browser leases stay separate")]
 
 
 def _default_definition(tree: str | None) -> str:
@@ -331,7 +334,8 @@ def register_backend_lease_tools(server: MCPServer, tools: HarnessTools) -> None
     def lease_acquire(kind: Annotated[str, Field(description="browser, ios or android")], project: str,
                       session: Annotated[str | None, Field(description="Session (default: the branch)")] = None,
                       backend: str | None = None, backend_tree: str | None = None, tree: TreeArg = None,
-                      wait: Annotated[float, Field(ge=0, le=120)] = 60) -> dict[str, Any]:
+                      wait: Annotated[float, Field(ge=0, le=120)] = 60,
+                      instance: InstanceArg = None) -> dict[str, Any]:
         resolved = _tree(tree)
         if not session:
             from eks_harness.cli.lease_cmds import branch_of
@@ -339,7 +343,7 @@ def register_backend_lease_tools(server: MCPServer, tools: HarnessTools) -> None
             session = branch_of(Path(resolved)) if resolved else None
             if not session:
                 raise ToolError("pass session (no git branch to default to)")
-        body = {"kind": kind, "project": project, "session": session, "instance": harness_instance(tree),
+        body = {"kind": kind, "project": project, "session": session, "instance": instance or harness_instance(tree),
                 "tree": resolved, "backend": backend,
                 "backend_tree": _tree(backend_tree) if backend_tree else None, "label": "mcp"}
         return tools.call("POST", "/api/leases/acquire", json=body, params={"waitSeconds": wait},
@@ -435,7 +439,7 @@ def register_driver_tools(server: MCPServer, tools: HarnessTools) -> None:
                  release: bool = False, tree: TreeArg = None,
                  backend: Annotated[str | None, Field(description="Backend to link to the lease: a backend lease "
                                                       "id, a backend id or a definition; none links nothing")] = None,
-                 backend_tree: str | None = None) -> dict[str, Any]:
+                 backend_tree: str | None = None, instance: InstanceArg = None) -> dict[str, Any]:
         if not flow and not code:
             raise ToolError("pass a flow path or inline code")
         argv = [sys.executable, "-m", "eks_harness.cli", "flow", "run", "--json"]
@@ -453,6 +457,8 @@ def register_driver_tools(server: MCPServer, tools: HarnessTools) -> None:
             argv += ["--backend", backend]
         if backend_tree:
             argv += ["--backend-tree", backend_tree]
+        if instance:
+            argv += ["--instance", instance]
         out = subprocess.run(argv, cwd=required_tree(tree), capture_output=True, text=True, timeout=3600)
         try:
             return json.loads(out.stdout)

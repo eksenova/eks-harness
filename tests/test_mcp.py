@@ -452,6 +452,11 @@ async def test_backend_lease_tools(mcp_env: McpEnv, monkeypatch) -> None:
     assert driver["status"] == "granted" and driver["backend"]["id"] == "api@mcp"
     linked = payload(await call(mcp_env, "lease_backend", {"sid": driver["sid"]}))
     assert linked["lease"]["driverSid"] == driver["sid"]
+    other = payload(await call(mcp_env, "lease_acquire", {"kind": "browser", "project": PROJECT, "session": SESSION,
+                                                          "backend": lease, "wait": 10, "instance": "agent:two"}))
+    assert other["sid"] != driver["sid"] and other["status"] == "granted"
+    assert len(payload(await call(mcp_env, "backend_leases", {}))["items"]) == 3
+    payload(await call(mcp_env, "lease_release", {"sid": other["sid"]}))
     payload(await call(mcp_env, "lease_release", {"sid": driver["sid"]}))
     released = payload(await call(mcp_env, "backend_release", {"lease": lease}))
     assert released["status"] == "released" and released["backend"]["leases"] == []

@@ -822,12 +822,17 @@ class BackendManager(ABC):
             record["info"] = redact_info(full)
             self.host.save()
 
-    def full_info(self, record: dict) -> dict:
+    def stored_info(self, record: dict) -> dict:
         try:
-            data = json.loads(self.info_file(record).read_text(encoding="utf-8"))
+            return json.loads(self.info_file(record).read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            data = record.get("info") or {}
-        return reveal_info(data)
+            return record.get("info") or {}
+
+    def full_info(self, record: dict) -> dict:
+        return reveal_info(self.stored_info(record))
+
+    def refresh_info(self, backend_id: str) -> dict | None:
+        return None
 
     def info(self, backend_id: str, secrets: bool = False) -> dict:
         record = self.records.get(backend_id)
@@ -904,8 +909,15 @@ class BackendManager(ABC):
 
     def instance_ended(self, instance: str) -> None:
         self.release_owner(instance, "harness instance ended")
-        for backend_id in [r["id"] for r in list(self.records.values()) if r.get("instance") == instance]:
-            self.stop(backend_id, final=True, reason="harness instance ended")
+        for record in list(self.records.values()):
+            if record.get("instance") != instance:
+                continue
+            shared = [lease for lease in (record.get("leases") or {}).values() if lease.get("kind") != "hold"]
+            if shared:
+                self.host.log(f"backend {record['id']}: harness instance {instance} ended but {len(shared)} other "
+                              f"lease(s) still hold it; keeping it")
+                continue
+            self.stop(record["id"], final=True, reason="harness instance ended")
 
     def stop_with_leases(self, backend_id: str, final: bool, reason: str) -> None:
         record = self.records.get(backend_id)

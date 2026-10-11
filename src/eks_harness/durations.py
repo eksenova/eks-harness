@@ -42,14 +42,22 @@ def duration_seconds(value: float | str | None) -> float | None:
     return float(value)
 
 
+_DESCRIBE_UNITS = (("d", 86400), ("h", 3600), ("m", 60), ("s", 1))
+
+
 def describe_duration(value: float | str | None) -> str:
     if value is None:
         return "-"
     if value == NEVER:
         return "never"
-    seconds = float(value)
-    if seconds < 120:
-        return f"{seconds:g}s"
-    if seconds < 7200:
-        return f"{seconds / 60:g} min"
-    return f"{seconds / 3600:g} h"
+    seconds = max(0.0, float(value))
+    if 0 < seconds < 1:
+        return f"{round(seconds, 1):g}s"
+    remaining = round(seconds)
+    amounts = []
+    for unit, size in _DESCRIBE_UNITS:
+        amounts.append((unit, remaining // size))
+        remaining %= size
+    first = next((i for i, (_, amount) in enumerate(amounts) if amount), len(amounts) - 1)
+    shown = [f"{amount}{unit}" for unit, amount in amounts[first:first + 2] if amount]
+    return " ".join(shown) or "0s"

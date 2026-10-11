@@ -189,3 +189,31 @@ def test_flow_links_a_backend_from_app_toml_and_hands_its_info_over(tmp_path, da
                           client=daemon, paths=config.paths, config=config,
                           host=PluginHost(config.paths, config), manager=FakeManager(fake))
     assert not report["ok"] and "backend" not in report
+
+
+def test_flows_of_one_instance_running_at_once_get_separate_leases(tmp_path, daemon, config, ctx) -> None:
+    from eks_harness.db.repos import leases as leases_repo
+    from eks_harness.flows.runner import prepare_app, release_claim
+
+    first_tree = make_tree(tmp_path / "first")
+    second_tree = make_tree(tmp_path / "second")
+    write(second_tree / ".harness/project.toml", '[project]\nid = "acme/other-app"\n[plugins]\ntrust = ["acme"]\n')
+    host = PluginHost(config.paths, config)
+    with FakeWorker({"url": "http://localhost:3000/x"}) as fake:
+        running = prepare_app(FlowRequest(code="pass", cwd=first_tree / "web", fetch=False, instance="session:same"),
+                              client=daemon, paths=config.paths, config=config, host=host,
+                              manager=FakeManager(fake))
+        parallel = run_flow(FlowRequest(code="result = app.url()", cwd=second_tree / "web", fetch=False,
+                                        instance="session:same"),
+                            client=daemon, paths=config.paths, config=config, host=host, manager=FakeManager(fake))
+        assert parallel["ok"], parallel
+        assert parallel["sid"] != running.sid
+        held = leases_repo.get_by_sid(ctx.db.conn(), running.sid)
+        assert held.project_id == "acme/web-app" and held.state == "active"
+        assert held.meta.get("claim", {}).get("run")
+        assert leases_repo.get_by_sid(ctx.db.conn(), parallel["sid"]).meta.get("claim") is None
+        release_claim(daemon, running.sid)
+        after = run_flow(FlowRequest(code="result = app.url()", cwd=first_tree / "web", fetch=False,
+                                     instance="session:same"),
+                         client=daemon, paths=config.paths, config=config, host=host, manager=FakeManager(fake))
+    assert after["sid"] == running.sid

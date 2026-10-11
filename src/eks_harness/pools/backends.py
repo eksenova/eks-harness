@@ -19,6 +19,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 from eks_harness.backends.registry import is_plugin_path, plugin_definitions, runner_command
 from eks_harness.paths import Paths
@@ -743,14 +744,7 @@ class BackendManager(BackendManagerBase):
             return
         reason: str | None = None
         try:
-            if self.implements(record, "fingerprint"):
-                try:
-                    fingerprint = self.json_of(record, "fingerprint").get("fingerprint")
-                except BackendError:
-                    fingerprint = None
-                if fingerprint and fingerprint != record.get("fingerprint"):
-                    reason = "its fingerprint changed (new code or configuration)"
-            reason = reason or self.down_reason(record)
+            reason = self.fingerprint_change(record) or self.down_reason(record)
         finally:
             with self.host.lock:
                 record.pop("checking", None)
@@ -759,6 +753,32 @@ class BackendManager(BackendManagerBase):
         if reason:
             self.host.log(f"backend {backend_id}: {reason}; replacing it")
             self.replace(backend_id, reason)
+
+    def current_fingerprint(self, record: dict) -> Any:
+        if not self.implements(record, "fingerprint"):
+            return None
+        try:
+            value = self.json_of(record, "fingerprint").get("fingerprint")
+        except BackendError as error:
+            self.host.log(f"backend {record['id']}: the fingerprint hook failed: {error}")
+            return None
+        return value or None
+
+    def fingerprint_change(self, record: dict) -> str | None:
+        recorded = record.get("fingerprint")
+        first = self.current_fingerprint(record)
+        if first is not None and recorded is None:
+            with self.host.lock:
+                record["fingerprint"] = first
+                self.host.save()
+        if first is None or recorded is None or first == recorded:
+            return None
+        second = self.current_fingerprint(record)
+        if second != first:
+            self.host.log(f"backend {record['id']}: its fingerprint is not stable ({first} then {second}); "
+                          f"keeping the running instance")
+            return None
+        return "its fingerprint changed (new code or configuration)"
 
     def check_running(self) -> None:
         for record in list(self.records.values()):
@@ -797,8 +817,6 @@ class BackendManager(BackendManagerBase):
                     record["ports"] = self.allocate_ports(record, [str(p) for p in described.get("ports") or []])
                     self.resolve_idle_timeout(record, described)
                     self.host.save()
-                if self.implements(record, "fingerprint"):
-                    record["fingerprint"] = self.json_of(record, "fingerprint").get("fingerprint")
                 if self.implements(record, "prepare"):
                     self.host.log(f"backend {backend_id}: prepare")
                     self.run(record, "prepare", timeout=3600, stream=True)
@@ -826,7 +844,10 @@ class BackendManager(BackendManagerBase):
                 info = merge_info(info, self.json_of(record, "info"))
             full = merge_info(default_info(record.get("ports") or {}, record.get("exports") or {},
                                            record.get("tree")), info)
+            fingerprint = self.current_fingerprint(record)
             with self.host.lock:
+                if fingerprint is not None:
+                    record["fingerprint"] = fingerprint
                 record["startedAt"] = record.get("startedAt") if resume == "launch" and record.get("startedAt") \
                     else time.time()
                 self.host.save()
@@ -849,6 +870,15 @@ class BackendManager(BackendManagerBase):
                     record.setdefault("idleSince", time.time())
                 self.host.save()
             self.emit(record, error=str(error)[:500])
+
+    def refresh_info(self, backend_id: str) -> dict | None:
+        record = self.records.get(backend_id)
+        if record is None or record.get("status") != "running" or not self.implements(record, "info"):
+            return None
+        fresh = self.json_of(record, "info")
+        self.store_info(record, merge_info(self.stored_info(record), fresh))
+        self.emit(record, infoRefreshed=True)
+        return record.get("info")
 
     def wait_healthy(self, record: dict) -> None:
         if not self.implements(record, "health"):

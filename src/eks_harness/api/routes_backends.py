@@ -168,6 +168,11 @@ async def seed(backend_id: str, request: Request, body: dict = Body(default_fact
         except BackendError as error:
             raise bad_request(str(error), error="seed_failed") from error
         results.append({"seeder": "definition", "result": out.strip()})
+    try:
+        await run_in_threadpool(ctx.pools.backends.refresh_info, backend_id)
+    except BackendError as error:
+        ctx.pools.host.log(f"backend {backend_id}: could not refresh its info after seeding: "
+                           f"{str(error).splitlines()[0] if str(error) else error!r}")
     ctx.events.publish("backend.seeded", resource=f"backend:{backend_id}", detail={"scenario": scenario})
     return {"backend": backend_id, "items": results}
 

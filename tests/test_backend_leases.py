@@ -49,9 +49,16 @@ SCRIPT = textwrap.dedent("""\
         print(json.dumps({{"description": "slow api", "ports": ["api"], "idleTimeout": knobs.get("idle", 30),
                           "implements": ["describe", "fingerprint", "prepare", "spec", "info", "stop", "cleanup"]}}))
     elif command == "fingerprint":
-        print(json.dumps({{"fingerprint": knobs.get("fingerprint", "v1")}}))
+        value = knobs.get("fingerprint", "v1")
+        if knobs.get("unstable"):
+            value = f"{{value}}-{{time.time_ns()}}"
+        if knobs.get("prepareChangesFingerprint") and (state / "prepared.marker").exists():
+            value = f"{{value}}+prepared"
+        print(json.dumps({{"fingerprint": value}}))
     elif command == "prepare":
         note("prepare")
+        if knobs.get("prepareChangesFingerprint"):
+            (state / "prepared.marker").write_text("1")
         time.sleep(knobs.get("prepare", 0))
         if knobs.get("fail"):
             print("prepare broke on purpose", file=sys.stderr)
@@ -70,7 +77,7 @@ SCRIPT = textwrap.dedent("""\
                      "secretEnv": ["SLOW_TOKEN"]}},
         }}))
     elif command == "info":
-        print(json.dumps({{"version": "9.9.9", "credentials": {{"admin": {{"username": "root",
+        print(json.dumps({{"version": knobs.get("version", "9.9.9"), "credentials": {{"admin": {{"username": "root",
                                                                           "password": "pw-very-secret"}}}},
                           "extra": {{"tenant": "acme", "apiKey": {{"$secret": "key-very-secret"}}}}}}))
     elif command == "stop":
@@ -215,6 +222,19 @@ def test_durations_and_identity() -> None:
     assert with_params != backend_identity("/tmp/a", params={"tenant": "y"})
 
 
+def test_durations_are_described_in_whole_units() -> None:
+    from eks_harness.cli.backend_cmds import idle_text
+    from eks_harness.durations import describe_duration
+
+    assert describe_duration(147.448) == "2m 27s" and describe_duration(96.2904) == "1m 36s"
+    assert describe_duration(900) == "15m" and describe_duration(5400) == "1h 30m"
+    assert describe_duration(45) == "45s" and describe_duration(0) == "0s" and describe_duration(0.25) == "0.2s"
+    assert describe_duration(2 * 86400 + 5 * 3600 + 7) == "2d 5h"
+    assert describe_duration("never") == "never" and describe_duration(None) == "-"
+    assert idle_text({"idleTimeout": 900, "stopsAt": time.time() + 147.4}) in ("no lease; stops in 2m 27s",
+                                                                              "no lease; stops in 2m 26s")
+
+
 def test_idle_timeout_setting_is_validated(config: Config) -> None:
     config.set("backend.idleTimeout", "never")
     assert config["backend.idleTimeout"] == "never"
@@ -356,6 +376,55 @@ def test_fingerprint_change_replaces_the_instance(paths, real, knobs: Path) -> N
     assert len(host.backends[backend_id]["leases"]) == 2
     wait_for(lambda: not alive(old.pid, old.started), 20)
     assert backends.registry.load_role("slowapi", "fp").pid != old.pid
+
+
+def test_fingerprint_is_recorded_after_prepare_so_prepare_changes_do_not_replace(paths, real, knobs: Path) -> None:
+    host, backends = real
+    set_knobs(knobs, prepareChangesFingerprint=True)
+    write_script(paths.backends_dir, knobs)
+    first = backends.acquire({"definition": "slowapi", "key": "fp-prepare", "holder": "a"})
+    backend_id = first["backend"]["id"]
+    assert backends.wait_ready(backend_id, 60) == "running"
+    record = host.backends[backend_id]
+    assert record["fingerprint"] == "v1+prepared"
+    record["verifiedAt"] = 0
+    backends.acquire({"definition": "slowapi", "key": "fp-prepare", "holder": "b"})
+    assert record["status"] == "running" and record["generation"] == 1
+    assert len(record["leases"]) == 2
+    assert calls(backends, record).count("prepare") == 1
+
+
+def test_unstable_fingerprint_keeps_the_running_instance(paths, real, knobs: Path) -> None:
+    host, backends = real
+    set_knobs(knobs, unstable=True)
+    write_script(paths.backends_dir, knobs)
+    first = backends.acquire({"definition": "slowapi", "key": "fp-unstable", "holder": "a"})
+    backend_id = first["backend"]["id"]
+    assert backends.wait_ready(backend_id, 60) == "running"
+    record = host.backends[backend_id]
+    for holder in ("b", "c"):
+        record["verifiedAt"] = 0
+        backends.acquire({"definition": "slowapi", "key": "fp-unstable", "holder": holder})
+        assert record["status"] == "running" and record["generation"] == 1
+    assert calls(backends, record).count("prepare") == 1
+
+
+def test_refresh_info_reruns_the_info_hook_and_keeps_secrets_redacted(paths, real, knobs: Path) -> None:
+    host, backends = real
+    write_script(paths.backends_dir, knobs)
+    taken = backends.acquire({"definition": "slowapi", "key": "refresh", "holder": "a"})
+    backend_id = taken["backend"]["id"]
+    assert backends.wait_ready(backend_id, 60) == "running"
+    assert backends.public(host.backends[backend_id])["info"]["version"] == "9.9.9"
+    set_knobs(knobs, version="10.0.0")
+    refreshed = backends.refresh_info(backend_id)
+    record = host.backends[backend_id]
+    assert refreshed["version"] == "10.0.0" and record["generation"] == 1
+    public = backends.public(record)["info"]
+    assert public["extra"]["apiKey"] == REDACTED and public["env"]["SLOW_TOKEN"] == REDACTED
+    full = backends.info(backend_id, secrets=True)
+    assert full["extra"]["apiKey"] == "key-very-secret" and full["credentials"]["admin"]["password"] == "pw-very-secret"
+    assert "key-very-secret" not in paths.pools_state_file.read_text()
 
 
 def test_daemon_restart_readopts_held_backends_and_cleans_up_orphans(paths, config: Config, real,
@@ -561,6 +630,26 @@ def test_instance_end_releases_its_backend_leases(client: TestClient, ctx) -> No
     manager(ctx).instance_ended("session:gone")
     leases = ctx.pools.backends.get("api@end")["leases"]
     assert list(leases) == [kept["lease"]["id"]] and taken["lease"]["id"] not in leases
+
+
+def test_instance_end_keeps_a_tree_backend_other_holders_still_use(client: TestClient, ctx, tmp_path: Path) -> None:
+    tree = (tmp_path / "api-tree").resolve()
+    tree.mkdir()
+    identity = f"tree:{tree}"
+    mine = client.post("/api/backend-leases", json={"definition": "api", "tree": str(tree), "instance": identity,
+                                                    "holder": "same tree"}).json()
+    other = client.post("/api/backend-leases", json={"definition": "api", "tree": str(tree),
+                                                     "instance": "session:other", "holder": "other"}).json()
+    backend_id = f"api@{identity}"
+    assert mine["backend"]["id"] == backend_id == other["backend"]["id"]
+    manager(ctx).instance_ended(identity)
+    record = ctx.pools.backends.get(backend_id)
+    assert record is not None and record["status"] == "running"
+    assert list(record["leases"]) == [other["lease"]["id"]]
+    legacy = client.post("/api/backends/ensure", json={"definition": "api", "instance": "session:legacy"})
+    assert legacy.status_code == 200, legacy.text
+    manager(ctx).instance_ended("session:legacy")
+    assert ctx.pools.backends.get("api@session:legacy") is None
 
 
 def test_stop_ends_every_lease(client: TestClient, ctx) -> None:
