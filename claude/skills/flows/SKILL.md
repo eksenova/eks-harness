@@ -69,3 +69,8 @@ text, or `{"role": "button", "name": "Save", "nth": 1}`.
 3. Check the checkpoint lines: URL or route, layout spill, console errors, failed requests, alerts.
 4. Keep driver leases short: release the lease when the run is done (`--release` on the run, or
    `eks-harness lease release`). A linked backend keeps running for the next run until its idle timeout.
+5. Before/after captures start with "before". When a task asks for a before/after video or screenshots,
+   record the before take first, on the untouched code, before changing anything: write the
+   `<feature>-demo.py` flow with a `take=before|after` param, run `take=before`, check it, then edit code.
+   Both takes use the same persona, page, filters and data. Recreating the old code afterwards needs an extra
+   worktree or overwriting work in progress.
