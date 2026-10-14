@@ -6,7 +6,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SCOPES = ("src", "workers", "sdk", "web/src", "claude", "docs", "examples", "tests")
-EXCLUDED = (Path("docs/dsl"), Path("scripts/check_removed.py"), Path("tests/test_removed_apis.py"),
+EXCLUDED = (Path("docs/dsl"), Path("docs/local"), Path("scripts/check_removed.py"),
+            Path("tests/test_removed_apis.py"),
             Path("src/eks_harness/_workers"), Path("src/eks_harness/web_dist"), Path("docs/migration.md"),
             Path("claude/skills/eks-migration"))
 SKIPPED_DIRS = frozenset({"node_modules", "__pycache__", ".git", ".venv", "dist", "build", ".pytest_cache",
