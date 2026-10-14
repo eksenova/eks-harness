@@ -8,7 +8,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from eks_harness.capture.steplog import event_times, read_jsonl
+from eks_harness.capture.trim import step_times
 from eks_harness.store.encode import (
     FPS,
     EncodeError,
@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pad-to", type=float, help="make the clip exactly this many seconds long")
     parser.add_argument("--json", action="store_true", help="print a JSON result instead of paths")
     args = parser.parse_args(argv)
-    events = event_times(read_jsonl(args.step_log)) if args.step_log and args.step_log.is_file() else None
+    events = step_times(args.step_log) if args.step_log and args.step_log.is_file() else None
     try:
         if args.timed_frames:
             if not args.out:

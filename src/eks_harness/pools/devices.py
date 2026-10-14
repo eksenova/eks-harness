@@ -32,6 +32,8 @@ IOS_READY_TEXT = "Recording started"
 RECORD_STOP_TIMEOUT = 20.0
 ANY_STATUS = object()
 SIMULATOR_APP_ID = "com.apple.iphonesimulator"
+SHOW_ATTEMPTS = 3
+SHOW_WAIT = 10.0
 DEVICE_HUB_APP_ID = "com.apple.dt.Devices"
 JDK_FORMULAS = ("openjdk@17", "openjdk")
 HOMEBREW_PREFIXES = (Path("/opt/homebrew"), Path("/usr/local"))
@@ -420,13 +422,19 @@ class DevicePool(DevicePoolBase):
     def show_simulator(self, device: dict, udid: str) -> None:
         ui = simulator_ui()
         if ui is None:
-            self.host.log(f"warning: {device['name']}: neither Simulator.app nor DeviceHub.app was found "
-                          f"(xcode-select -p, Spotlight); the simulator runs without a window")
-            return
-        code, out = sh(ui.open_command(udid), timeout=30)
-        if code != 0:
-            self.host.log(f"warning: {device['name']}: could not open {ui.name} ({ui.path}) for {udid}; the simulator "
-                          f"runs without a window: {out[-300:]}")
+            raise PoolError(f"{device['name']}: neither Simulator.app nor DeviceHub.app was found (xcode-select -p, "
+                            f"Spotlight); the pool never runs a simulator without a window")
+        last = ""
+        for _ in range(SHOW_ATTEMPTS):
+            code, out = sh(ui.open_command(udid), timeout=30)
+            last = out
+            deadline = time.time() + SHOW_WAIT
+            while code == 0 and time.time() < deadline:
+                if ui.running():
+                    return
+                time.sleep(0.5)
+        raise PoolError(f"{device['name']}: {ui.name} ({ui.path}) did not open a window for {udid}; the pool never "
+                        f"runs a simulator without a window: {last[-300:]}")
 
     def quit_simulator_ui(self) -> None:
         ui = simulator_ui()

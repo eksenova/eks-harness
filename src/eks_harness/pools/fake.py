@@ -12,7 +12,6 @@ from pathlib import Path
 
 from eks_harness.pools.base import (
     AppTargets,
-    device_name,
     BackendError,
     BackendManager,
     BrowserPool,
@@ -22,11 +21,17 @@ from eks_harness.pools.base import (
     PoolHost,
     browser_resource,
     device_key,
+    device_name,
     iso_now,
     parse_browser_resource,
     parse_device_key,
 )
-from eks_harness.pools.fake_media import TINY_JPEG, TINY_MP4, TINY_MP4_DURATION_MS, TINY_MP4_SIZE
+from eks_harness.pools.fake_media import (
+    TINY_JPEG,
+    TINY_MP4,
+    TINY_MP4_DURATION_MS,
+    TINY_MP4_SIZE,
+)
 
 FAKE_ENV = "EKS_HARNESS_FAKE_POOLS"
 FAKE_SCREENSHOT_SIZE = (4, 8)
@@ -361,6 +366,10 @@ class FakeDevicePool(DevicePool):
 
 
 class FakeBackendManager(BackendManager):
+    def __init__(self, host: PoolHost) -> None:
+        super().__init__(host)
+        self.snapshots: dict[str, set[str]] = {}
+
     def definitions(self, tree: str | None = None) -> list[dict]:
         found = []
         for source, folder in self.definition_dirs(tree):
@@ -369,10 +378,36 @@ class FakeBackendManager(BackendManager):
                     if entry.is_file() and not entry.name.startswith((".", "_")):
                         found.append({"name": entry.stem, "path": str(entry), "source": source, "tree": tree})
         names = {item["name"] for item in found}
+        from eks_harness.backends.eks_defs import eks_definitions
         from eks_harness.backends.registry import plugin_definitions
 
         found.extend(item for item in plugin_definitions(self.host.plugin_host(), tree) if item["name"] not in names)
+        names = {item["name"] for item in found}
+        found.extend(item for item in eks_definitions(tree) if item["name"] not in names)
         return found
+
+    def step(self, backend_id: str, step: str, *, name: str | None = None, phase: str | None = None,
+             timeout: float = 3600) -> dict:
+        record = self.records.get(backend_id)
+        if record is None:
+            raise BackendError(f"no backend {backend_id}")
+        saved = self.snapshots.setdefault(record["definition"], set())
+        self._log(record, f"fake seed hook {step} {name or phase or ''}".rstrip())
+        if step == "migrations":
+            return {"migrations": "fake"}
+        if step == "snapshot":
+            saved.add(str(name))
+            return {"digest": "sha256:" + "0" * 64}
+        if step == "restore":
+            if name not in saved:
+                raise BackendError(f"fake backend {backend_id} has no snapshot {name}")
+            return {}
+        if step == "drop_snapshot":
+            saved.discard(str(name))
+            return {}
+        if step in ("reset", "seed_phase"):
+            return {}
+        raise BackendError(f"{step} is not a seed hook")
 
     def find_definition(self, name: str, tree: str | None) -> Path:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", name or ""):
@@ -424,6 +459,15 @@ class FakeBackendManager(BackendManager):
                 return
             if plan == "restart" or not record.get("ports"):
                 record["ports"] = self._allocate_ports(record, ["api", "proxy"])
+        try:
+            self.acquire_dependencies(record)
+        except BackendError as error:
+            with self.host.lock:
+                record["status"] = "failed"
+                record["error"] = str(error)
+                self.host.save()
+            return
+        with self.host.lock:
             definition = record["definition"]
             record["processes"] = ["fake-api"]
             record["captured"] = {"url": f"http://127.0.0.1:{record['ports']['api']}"}
@@ -460,6 +504,11 @@ class FakeBackendManager(BackendManager):
                        detail={"status": "running", "adopted": True})
 
     def stop(self, backend_id: str, final: bool = False, reason: str = "") -> None:
+        record = self.records.get(backend_id)
+        if record is None:
+            return
+        if final and not (bool(record.get("resume")) and bool(record.get("leases"))):
+            self.release_dependencies(record, reason)
         with self.host.lock:
             record = self.records.get(backend_id)
             if record is None:

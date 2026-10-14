@@ -1,0 +1,13 @@
+from types import SimpleNamespace
+
+import pytest
+from pydantic import ValidationError
+
+from {{module}}.ops import Greet, greet
+
+
+def test_greet_validates_its_arguments_and_greets() -> None:
+    args = Greet(name="Ada")
+    assert greet(SimpleNamespace(args=args)) == {"greeting": "Hello Ada"}
+    with pytest.raises(ValidationError):
+        Greet()

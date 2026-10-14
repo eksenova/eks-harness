@@ -957,6 +957,7 @@ class BackendEnsureRequest(ApiModel):
 class BackendStopRequest(ApiModel):
     final: bool = False
     cleanup: bool = False
+    force: bool = False
     reason: str | None = None
 
 
@@ -1030,6 +1031,8 @@ class BackendOut(ApiModel):
     idle_timeout_source: str | None = None
     idle_since: float | None = None
     stops_at: float | None = None
+    dependencies: dict[str, str] = Field(default_factory=dict)
+    dependents: list[str] = Field(default_factory=list)
 
 
 class BackendList(ApiModel):
@@ -1089,11 +1092,13 @@ class BackendLinkOut(ApiModel):
 class BackendDefinitionOut(ApiModel):
     name: str
     path: str
-    source: Literal["tree", "config", "plugin"]
+    source: Literal["tree", "config", "plugin", "eks"]
     tree: str | None = None
     plugin: str | None = None
     description: str | None = None
     idle_timeout: float | str | None = None
+    identity: str | None = None
+    requires: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class BackendDefinitionList(ApiModel):

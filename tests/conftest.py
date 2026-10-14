@@ -43,6 +43,27 @@ def harness_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return home
 
 
+EKS_TESTS = Path(__file__).resolve().parent / "eks"
+
+
+@pytest.fixture(autouse=True)
+def eks_registry(request: pytest.FixtureRequest) -> Iterator[object]:
+    # Tests of the eks DSL (tests/eks) may register ops, flows and resources; restore the process-wide
+    # registry after each of them so nothing leaks between tests. A conftest.py inside tests/eks would clash
+    # with this module's name under pytest's prepend import mode, so the fixture lives here.
+    if not Path(str(request.node.path)).resolve().is_relative_to(EKS_TESTS):
+        yield None
+        return
+    from eks_harness.ir.registry import default_registry
+
+    registry = default_registry()
+    state = registry.snapshot()
+    try:
+        yield registry
+    finally:
+        registry.restore(state)
+
+
 @pytest.fixture
 def paths(harness_home: Path) -> Paths:
     resolved = resolve_paths()

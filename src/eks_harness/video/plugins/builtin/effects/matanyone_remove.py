@@ -66,6 +66,7 @@ class _MatAnyoneProcessor(FrameProcessor):
         self._rembg: Any = None
         self._mask_session: Any = None
         self._seeded: bool = False
+        self.last_alpha: np.ndarray | None = None
 
     def process(self, frame: Any, t: float, frame_idx: int) -> Any:
         if self._core is None:
@@ -97,6 +98,7 @@ class _MatAnyoneProcessor(FrameProcessor):
         if alpha.ndim == 3:
             alpha = alpha[0] if alpha.shape[0] >= 1 else alpha.squeeze()
         alpha = np.clip(alpha, 0.0, 1.0)
+        self.last_alpha = _fit_alpha(alpha, h, w)
 
         return _composite_bgr(alpha, frame, self._background)
 
@@ -128,6 +130,16 @@ class MatAnyoneRemovePlugin(Effect):
         install_autoep_session_hook()
         proc._mask_session = rembg.new_session("birefnet-portrait")
         return proc
+
+
+def _fit_alpha(alpha: np.ndarray, h: int, w: int) -> np.ndarray:
+    if alpha.shape == (h, w):
+        return alpha.astype(np.float32)
+    from PIL import Image
+
+    a = Image.fromarray((alpha * 255).clip(0, 255).astype(np.uint8))
+    a = a.resize((w, h), Image.Resampling.BILINEAR)
+    return np.asarray(a, dtype=np.float32) / 255.0
 
 
 def _composite_bgr(

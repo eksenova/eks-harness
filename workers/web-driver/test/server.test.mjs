@@ -69,7 +69,6 @@ describe.skipIf(!CHROME)('web driver worker', () => {
       let token = kit.restore(kit.id)?.token ?? null
       return {
         helpers: { signIn: async (name) => { token = 't-' + name; kit.persist(kit.id, { token }); return token } },
-        routes: { '/acme/token': async () => ({ token }) },
         apiHeaders: async () => (token ? { Authorization: 'Bearer ' + token } : {}),
         status: async () => ({ signedIn: Boolean(token) }),
       }
@@ -104,13 +103,11 @@ describe.skipIf(!CHROME)('web driver worker', () => {
     expect(run.body.steps.map((s) => s.name)).toEqual(expect.arrayContaining(['goto', 'fill', 'click', 'text', 'shot']))
   })
 
-  it('uses extension helpers, routes, api headers and status', async () => {
+  it('uses extension helpers and api headers', async () => {
     const run = await worker.post('/exec', { script: `const t = await signIn('ada'); return { t, me: await api('GET', '/me') }` })
     expect(run.body.value).toEqual({ t: 't-ada', me: { auth: 'Bearer t-ada' } })
-    expect((await worker.post('/acme/token')).body).toEqual({ token: 't-ada' })
-    const status = await worker.post('/status')
-    expect(status.body).toMatchObject({ up: true, sid: 'sid1', extensions: ['acme'], extensionStatus: { acme: { signedIn: true } } })
-    expect(status.body.viewports.desktop).toBe('desktop-900x700')
+    const health = await worker.get('/health')
+    expect(health.body).toMatchObject({ kind: 'web', extensions: ['acme'] })
     const session = JSON.parse(fs.readFileSync(path.join(worker.stateDir, 'session.json'), 'utf8'))
     expect(session.extensions.acme).toEqual({ token: 't-ada' })
   })
@@ -125,13 +122,12 @@ describe.skipIf(!CHROME)('web driver worker', () => {
     controller.abort()
     expect(JSON.parse(text.split('data: ').pop())).toMatchObject({ source: 'web', name: 'card-flipped', data: { side: 'back' } })
     expect(daemon.calls.filter((c) => c.path === '/api/leases/sid1/heartbeat').length).toBeGreaterThan(0)
-    expect((await worker.post('/wait-for', { selector: '#out' })).status).toBe(200)
-    expect((await worker.post('/wait')).status).toBe(404)
+    expect((await worker.post('/wait-for', { selector: '#out' })).status).toBe(404)
   })
 
   it.skipIf(!fs.existsSync(PYTHON))('records the live page into a verified mp4 with a step log', async () => {
     const run = await worker.post('/exec', { script: `
-      await video.start('demo', { pace: 'fast', fromHere: true, hold: 300 })
+      await video.start('demo', { pace: { moveMs: 0, dwellMs: 0, typeMsPerChar: 0, holdMs: 0, screenHoldMs: 0 }, fromHere: true, hold: 300 })
       await annotate.caption('Typing a name', { hold: 300 })
       await fill('#name', 'Grace')
       await click('Save')

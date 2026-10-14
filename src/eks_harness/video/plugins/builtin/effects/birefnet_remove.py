@@ -45,6 +45,7 @@ class _BiRefNetProcessor(FrameProcessor):
         self._rembg: Any = None
         self._session: Any = None
         self._warned_video = False
+        self.last_alpha: np.ndarray | None = None
 
     def process(self, frame: Any, t: float, frame_idx: int) -> Any:
         if frame_idx > 0 and not self._warned_video:
@@ -59,6 +60,7 @@ class _BiRefNetProcessor(FrameProcessor):
 
         rgb = frame[..., [2, 1, 0]]  # BGR -> RGB
         rgba = self._rembg.remove(rgb, session=self._session)
+        self.last_alpha = rgba[..., 3].astype(np.float32) / 255.0
         return _composite_bgr(rgba, frame, self._background)
 
 

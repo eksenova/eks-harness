@@ -5,12 +5,13 @@ import json
 import logging
 import os
 import re
+import socket
 import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -77,7 +78,7 @@ def parse_device_key(key: str) -> tuple[str, int]:
 
 
 def iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 EventSink = Callable[..., Any]
@@ -279,7 +280,7 @@ class AppTargets:
 class DevicePool(ABC):
     def __init__(self, host: PoolHost) -> None:
         self.host = host
-        self.stray_patterns: Callable[[], list[str]] = lambda: []
+        self.stray_patterns: Callable[[], list[str]] = list
 
     @property
     def config(self) -> Config:
@@ -378,6 +379,13 @@ def renew_lease(lease: dict, ttl: float | None, stamp: float) -> None:
     lease["expires"] = stamp + ttl if ttl else None
 
 
+GLOBAL_IDENTITY = "global"
+HOST_IDENTITY_PREFIX = "host:"
+DEPENDENCY_LEASE = "dependency"
+DEPENDENCY_OWNER_PREFIX = "backend:"
+MAX_DEPENDENCY_DEPTH = 8
+
+
 class BackendManager(ABC):
     def __init__(self, host: PoolHost) -> None:
         self.host = host
@@ -448,6 +456,10 @@ class BackendManager(ABC):
     def readopt(self, backend_id: str) -> None:
         return None
 
+    def step(self, backend_id: str, step: str, *, name: str | None = None, phase: str | None = None,
+             timeout: float = 3600) -> dict:
+        raise BackendError(f"backend {backend_id}: this pool runs no seed hooks")
+
     def sweep_orphans(self) -> list[str]:
         return []
 
@@ -471,13 +483,55 @@ class BackendManager(ABC):
                                "kind": lease.get("kind"), "holder": lease.get("holder"),
                                "leases": len(record.get("leases") or {}), **detail})
 
-    def identity_of(self, body: dict) -> str:
+    def identity_of(self, body: dict, meta: dict | None = None) -> str:
         if body.get("instance") and not body.get("key"):
             return str(body["instance"])
         params = body.get("params") or {}
         if not isinstance(params, dict):
             raise BackendError("params must be an object")
+        kind = (meta or {}).get("identity") or "tree"
+        if kind == "global":
+            return GLOBAL_IDENTITY
+        if kind == "host":
+            return f"{HOST_IDENTITY_PREFIX}{socket.gethostname()}"
         return backend_identity(body.get("tree"), body.get("key"), params)
+
+    def definition_meta(self, name: str, tree: str | None) -> dict:
+        try:
+            items = self.definitions(tree)
+        except Exception as error:
+            self.host.log(f"backend definitions of {tree or 'the hub'} could not be listed: {error}")
+            return {}
+        return next((item for item in items if item.get("name") == name), {})
+
+    def requirements(self, name: str, tree: str | None, meta: dict | None = None) -> list[dict]:
+        found: list[dict] = []
+        own = (meta if meta is not None else self.definition_meta(name, tree)).get("requires") or []
+        section = self.project_backends(tree).get(name)
+        extra = section.get("requires") if isinstance(section, dict) else None
+        for item in [*own, *(extra if isinstance(extra, list) else [])]:
+            if isinstance(item, str):
+                item = {"name": item}
+            if not isinstance(item, dict) or not isinstance(item.get("name"), str) or not item["name"]:
+                raise BackendError(f"backend {name}: a requirement must be a name or a table with a name, got {item!r}")
+            params = item.get("params") or {}
+            if not isinstance(params, dict):
+                raise BackendError(f"backend {name}: the params of requirement {item['name']} must be a table")
+            if item["name"] == name:
+                raise BackendError(f"backend {name} requires itself")
+            if any(other["name"] == item["name"] for other in found):
+                continue
+            found.append({"name": item["name"], "key": item.get("key"), "params": params})
+        return found
+
+    def check_requirements(self, name: str, tree: str | None, path: tuple[str, ...] = ()) -> None:
+        if name in path:
+            raise BackendError(f"backend dependency cycle: {' -> '.join([*path, name])}")
+        if len(path) >= MAX_DEPENDENCY_DEPTH:
+            raise BackendError(f"backend dependencies nest deeper than {MAX_DEPENDENCY_DEPTH}: "
+                               f"{' -> '.join([*path, name])}")
+        for requirement in self.requirements(name, tree):
+            self.check_requirements(requirement["name"], tree, (*path, name))
 
     def acquire(self, body: dict) -> dict:
         definition = str(body.get("definition") or "")
@@ -487,8 +541,6 @@ class BackendManager(ABC):
         if not isinstance(params, dict):
             raise BackendError("params must be an object")
         tree = str(Path(body["tree"]).expanduser().resolve()) if body.get("tree") else None
-        identity = self.identity_of({**body, "tree": tree})
-        backend_id = body.get("id") or self.backend_id(definition, identity)
         with_lease = not body.get("noLease")
         ttl = None if body.get("driverSid") else (self.lease_ttl(body.get("ttl")) if with_lease else None)
         idle_request = None
@@ -498,6 +550,12 @@ class BackendManager(ABC):
             except ValueError as error:
                 raise BackendError(str(error)) from error
         definition_path = self.find_definition(definition, tree)
+        meta = self.definition_meta(definition, tree)
+        identity = self.identity_of({**body, "tree": tree}, meta)
+        backend_id = body.get("id") or self.backend_id(definition, identity)
+        requires = self.requirements(definition, tree, meta)
+        if requires:
+            self.check_requirements(definition, tree)
         stamp = time.time()
         lease: dict | None = None
         with self.host.lock:
@@ -512,6 +570,11 @@ class BackendManager(ABC):
             record["definitionPath"] = str(definition_path)
             record["key"] = record.get("instance") or identity
             record["params"] = params or record.get("params") or {}
+            record["requires"] = requires
+            if meta.get("identity"):
+                record["identityKind"] = meta["identity"]
+            if meta.get("idleTimeout") is not None and "definitionIdleTimeout" not in record:
+                record["definitionIdleTimeout"] = meta["idleTimeout"]
             if idle_request is not None:
                 record["idleTimeoutRequest"] = idle_request
             record.setdefault("leases", {})
@@ -696,7 +759,8 @@ class BackendManager(ABC):
         if target.get("id"):
             return str(target["id"])
         tree = str(Path(target["tree"]).expanduser().resolve()) if target.get("tree") else None
-        return self.backend_id(target["definition"], self.identity_of({**target, "tree": tree}))
+        meta = self.definition_meta(target["definition"], tree)
+        return self.backend_id(target["definition"], self.identity_of({**target, "tree": tree}, meta))
 
     def resolve_ref(self, ref: str, *, tree: str | None, key: str | None, params: dict | None) -> dict:
         ref = (ref or "").strip()
@@ -919,6 +983,112 @@ class BackendManager(ABC):
                 continue
             self.stop(record["id"], final=True, reason="harness instance ended")
 
+    def dependency_context(self, record: dict) -> dict:
+        out: dict = {}
+        for name, item in (record.get("dependencies") or {}).items():
+            other = self.records.get(str(item.get("backend")))
+            if other is not None:
+                out[name] = self.full_info(other)
+        return out
+
+    def acquire_dependencies(self, record: dict) -> dict:
+        timeout = float(self.host.config["backend.readyTimeoutSeconds"])
+        for requirement in record.get("requires") or []:
+            name = requirement["name"]
+            current = (record.get("dependencies") or {}).get(name)
+            if current and self.find_lease(str(current.get("lease"))) is not None:
+                backend_id = str(current["backend"])
+                if (self.records.get(backend_id) or {}).get("status") in ("stopped", "failed"):
+                    plan = None
+                    with self.host.lock:
+                        plan = self.plan(self.records[backend_id], False)
+                        self.host.save()
+                    if plan:
+                        self.bring_up(backend_id, plan)
+            else:
+                response = self.acquire({
+                    "definition": name, "tree": record.get("tree"), "key": requirement.get("key"),
+                    "params": requirement.get("params") or {}, "kind": DEPENDENCY_LEASE, "ttl": "never",
+                    "holder": f"backend {record['id']}", "owner": f"{DEPENDENCY_OWNER_PREFIX}{record['id']}",
+                    "reuseHolder": True})
+                lease, backend = response.get("lease") or {}, response.get("backend") or {}
+                if not lease.get("id") or not backend.get("id"):
+                    raise BackendError(f"dependency {name} of {record['id']} gave no lease: "
+                                       f"{response.get('error') or response.get('status')}")
+                backend_id = str(backend["id"])
+                with self.host.lock:
+                    record.setdefault("dependencies", {})[name] = {"backend": backend_id, "lease": lease["id"]}
+                    self.host.save()
+                self.host.log(f"backend {record['id']}: holds dependency {name} ({backend_id})")
+            status = self.wait_ready(backend_id, timeout)
+            if status != "running":
+                error = str((self.records.get(backend_id) or {}).get("error") or "").splitlines()
+                raise BackendError(f"dependency {name} ({backend_id}) of {record['id']} is {status}"
+                                   + (f": {error[0]}" if error else ""))
+        return self.dependency_context(record)
+
+    def release_dependencies(self, record: dict, reason: str) -> list[str]:
+        with self.host.lock:
+            held = record.pop("dependencies", None) or {}
+            self.host.save()
+        released: list[str] = []
+        for name, item in held.items():
+            if self.release(str(item.get("lease")), f"dependent {record['id']} stopped: {reason}") is not None:
+                released.append(name)
+        return released
+
+    def dependents(self, backend_id: str) -> list[str]:
+        record = self.records.get(backend_id)
+        if record is None:
+            return []
+        found: list[str] = []
+        for lease in (record.get("leases") or {}).values():
+            owner = str(lease.get("owner") or "")
+            if lease.get("kind") == DEPENDENCY_LEASE and owner.startswith(DEPENDENCY_OWNER_PREFIX):
+                found.append(owner[len(DEPENDENCY_OWNER_PREFIX):])
+        return sorted(set(found))
+
+    def live_dependents(self, backend_id: str) -> list[str]:
+        return [other for other in self.dependents(backend_id)
+                if (self.records.get(other) or {}).get("status") not in (None, "stopped")]
+
+    def stop_checked(self, backend_id: str, final: bool, reason: str, force: bool = False) -> None:
+        live = self.live_dependents(backend_id)
+        if live and not force:
+            raise BackendError(f"backend {backend_id} is a dependency of {', '.join(live)}; stop those first or "
+                               "pass force to stop them too")
+        for other in live:
+            self.stop_checked(other, final, f"its dependency {backend_id} is stopping: {reason}", force=True)
+        self.stop_with_leases(backend_id, final, reason)
+
+    def reconcile_dependencies(self) -> None:
+        for record in list(self.records.values()):
+            for lease_id, lease in list((record.get("leases") or {}).items()):
+                owner = str(lease.get("owner") or "")
+                if lease.get("kind") != DEPENDENCY_LEASE or not owner.startswith(DEPENDENCY_OWNER_PREFIX):
+                    continue
+                holder = self.records.get(owner[len(DEPENDENCY_OWNER_PREFIX):])
+                held = (holder or {}).get("dependencies") or {}
+                if holder is None or holder.get("status") == "stopped" \
+                        or all(item.get("lease") != lease_id for item in held.values()):
+                    self.drop_leases(record, [lease_id], "the dependent backend is gone")
+        for record in list(self.records.values()):
+            if record.get("status") in (None, "stopped") or not record.get("requires"):
+                continue
+            missing = [name for name, item in (record.get("dependencies") or {}).items()
+                       if self.find_lease(str(item.get("lease"))) is None]
+            if not missing and len(record.get("dependencies") or {}) == len(record.get("requires") or []):
+                continue
+            with self.host.lock:
+                for name in missing:
+                    (record.get("dependencies") or {}).pop(name, None)
+                self.host.save()
+            try:
+                self.acquire_dependencies(record)
+                self.host.log(f"backend {record['id']}: dependency leases recreated after the restart")
+            except BackendError as error:
+                self.host.log(f"backend {record['id']}: its dependencies could not be held again: {error}")
+
     def stop_with_leases(self, backend_id: str, final: bool, reason: str) -> None:
         record = self.records.get(backend_id)
         if record is None:
@@ -962,6 +1132,7 @@ class BackendManager(ABC):
         for backend_id in running:
             self.host.spawn(self.readopt, backend_id)
         self.host.spawn(self.sweep_orphans)
+        self.host.spawn(self.reconcile_dependencies)
         return pending
 
     def upgrade_record(self, record: dict, stamp: float) -> None:
@@ -991,6 +1162,9 @@ class BackendManager(ABC):
         seconds = duration_seconds(record.get("idleTimeout"))
         out["stopsAt"] = (float(record["idleSince"]) + seconds
                           if record.get("idleSince") and seconds is not None and not leases else None)
+        out["dependencies"] = {name: str(item.get("backend"))
+                               for name, item in (record.get("dependencies") or {}).items()}
+        out["dependents"] = self.dependents(record["id"])
         return out
 
 

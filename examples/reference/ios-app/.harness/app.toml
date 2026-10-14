@@ -1,0 +1,8 @@
+[app]
+name = "reference-ios"
+platforms = ["ios"]
+
+[mobile]
+metro_port = 8181
+ios_bundle = "com.eksenova.reference"
+locale = "tr-TR"

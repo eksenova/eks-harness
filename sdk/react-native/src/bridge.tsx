@@ -15,6 +15,8 @@ import {
 import { configure, harnessOptions, navigationAdapter, themeOf, type HarnessOptions } from "./config";
 import { registeredFakes } from "./fakes";
 import { Box, markerFrame, relativeTo, revealOffset } from "./geometry";
+import { clockCommand } from "./clock";
+import { installNetwork, networkCommand } from "./network";
 import { HarnessOverlay, overlay } from "./overlay";
 import { harnessEnabled, harnessReport, harnessUrl } from "./runtime";
 
@@ -51,8 +53,22 @@ type UiNode = {
   children: UiNode[];
 };
 
+type StrictTarget = {
+  strict: true;
+  testID?: string;
+  text?: string;
+  label?: string;
+  placeholder?: string;
+  kind?: NodeKind;
+  exact?: boolean;
+  nth?: number | null;
+  within?: StrictTarget;
+  near?: StrictTarget;
+};
+
 type Target =
   | string
+  | StrictTarget
   | {
       testID?: string;
       id?: string;
@@ -196,14 +212,23 @@ async function glideTo(fiber: Fiber, glideMs: unknown) {
 }
 
 const anchors = new Map<string, Target>();
+const TO_SUFFIX = "::to";
+const OVERLAY_KINDS = ["title", "caption", "callout", "highlight", "spotlight", "beacon", "arrow", "blur", "redact", "icon", "image", "step"];
 let anchorTimer: ReturnType<typeof setInterval> | null = null;
 
 async function refreshAnchors() {
   const host = overlay();
   if (!host) return;
   for (const [key, target] of anchors) {
-    const node = findAll(target)[0];
-    host.move(key, node ? await layoutOf(node.fiber) : null);
+    let node: UiNode | null;
+    try {
+      node = isStrict(target) ? await resolveStrict(target) : findAll(target)[0] ?? null;
+    } catch {
+      node = null;
+    }
+    const box = node ? await layoutOf(node.fiber) : null;
+    if (key.endsWith(TO_SUFFIX)) host.move(key.slice(0, -TO_SUFFIX.length), box, "toBox");
+    else host.move(key, box);
   }
 }
 
@@ -415,7 +440,7 @@ function buildTree(options: { all?: boolean } = {}): UiNode[] {
         const text = hostTextOf(fiber);
         if (text) {
           if (button) button.texts.push(text);
-          else add(out, { kind: "text", fiber, texts: [text], depth, children: [] });
+          else add(out, { kind: "text", fiber, id: props.testID ?? props.nativeID, texts: [text], depth, children: [] });
         }
         return;
       }
@@ -613,6 +638,143 @@ function findOne(target: Target, preferred?: NodeKind[]): UiNode {
     throw new Error(`no element matches ${JSON.stringify(target)} on ${currentRouteName()}`);
   }
   return node;
+}
+
+const HANDLER_WAIT_MS = 1000;
+
+async function settleHandler(result: unknown, what: string): Promise<void> {
+  if (!result || typeof (result as Promise<unknown>).then !== "function") return;
+  const pending = (result as Promise<unknown>).then(
+    () => true,
+    (error: unknown) => {
+      emit("bridge.handler_error", { target: what, message: String((error as Error)?.message ?? error) });
+      return true;
+    },
+  );
+  await Promise.race([pending, sleep(HANDLER_WAIT_MS)]);
+}
+
+class BridgeError extends Error {
+  code: string;
+  detail: Record<string, unknown>;
+
+  constructor(code: string, message: string, detail: Record<string, unknown> = {}) {
+    super(message);
+    this.code = code;
+    this.detail = detail;
+  }
+}
+
+function isStrict(target: Target | null | undefined): target is StrictTarget {
+  return typeof target === "object" && target !== null && (target as StrictTarget).strict === true;
+}
+
+function describeStrict(spec: StrictTarget): string {
+  const head = spec.testID !== undefined
+    ? `#${spec.testID}`
+    : spec.text !== undefined
+      ? `text=${spec.text}`
+      : spec.label !== undefined
+        ? `label=${spec.label}`
+        : spec.placeholder !== undefined
+          ? `placeholder=${spec.placeholder}`
+          : `kind=${spec.kind}`;
+  const parts = [head];
+  if (spec.kind && spec.testID === undefined && head !== `kind=${spec.kind}`) parts.push(`(${spec.kind})`);
+  if (spec.within) parts.push(`within ${describeStrict(spec.within)}`);
+  if (spec.near) parts.push(`near ${describeStrict(spec.near)}`);
+  if (spec.nth !== undefined && spec.nth !== null) parts.push(`nth ${spec.nth}`);
+  return parts.join(" ");
+}
+
+function textMatches(value: string | undefined, needle: string, exact: boolean): boolean {
+  if (value === undefined || value === null) return false;
+  return exact ? clean(value) === clean(needle) : fold(value).includes(fold(needle));
+}
+
+function strictMatch(node: UiNode, spec: StrictTarget): boolean {
+  if (node.kind === "screen") return false;
+  const exact = spec.exact !== false;
+  if (spec.testID !== undefined && node.id !== spec.testID) return false;
+  if (spec.kind && node.kind !== spec.kind) return false;
+  if (spec.text !== undefined && !textMatches(labelOf(node), spec.text, exact)) return false;
+  if (spec.label !== undefined && !textMatches(node.label ?? labelOf(node), spec.label, exact)) return false;
+  if (spec.placeholder !== undefined && !textMatches(node.placeholder, spec.placeholder, exact)) return false;
+  return spec.testID !== undefined || spec.text !== undefined || spec.label !== undefined || spec.placeholder !== undefined || Boolean(spec.kind);
+}
+
+function outermost(matches: UiNode[]): UiNode[] {
+  const inner = new Set<UiNode>();
+  for (const node of matches) for (const child of flatten(node.children)) inner.add(child);
+  return matches.filter((node) => !inner.has(node));
+}
+
+function centre(box: Box | null): { x: number; y: number } | null {
+  return box ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : null;
+}
+
+async function strictCandidates(spec: StrictTarget): Promise<UiNode[]> {
+  let pool: UiNode[];
+  if (spec.within) {
+    const scope = await resolveStrict(spec.within);
+    pool = flatten(scope.children);
+  } else {
+    pool = flatten(buildTree());
+  }
+  const matches = outermost(pool.filter((node) => strictMatch(node, spec)));
+  if (!spec.near || matches.length === 0) return matches;
+  const anchor = centre(await layoutOf((await resolveStrict(spec.near)).fiber));
+  if (!anchor) throw new BridgeError("target_not_found", `the near anchor ${describeStrict(spec.near)} has no box on ${currentRouteName()}`);
+  const placed = await Promise.all(matches.map(async (node) => ({ node, at: centre(await layoutOf(node.fiber)) })));
+  return placed
+    .filter((item) => item.at)
+    .sort((a, b) => Math.hypot(a.at!.x - anchor.x, a.at!.y - anchor.y) - Math.hypot(b.at!.x - anchor.x, b.at!.y - anchor.y))
+    .map((item) => item.node);
+}
+
+function nearMisses(spec: StrictTarget): string[] {
+  const needle = spec.text ?? spec.label ?? spec.placeholder;
+  if (!needle) return [];
+  try {
+    return findAll({ text: needle }).slice(0, 8).map(describe);
+  } catch {
+    return [];
+  }
+}
+
+async function resolveStrict(spec: StrictTarget): Promise<UiNode> {
+  const matches = await strictCandidates(spec);
+  if (!matches.length) {
+    throw new BridgeError("target_not_found", `no element matches ${describeStrict(spec)} on ${currentRouteName()}`, { nearMisses: nearMisses(spec) });
+  }
+  const nth = spec.nth;
+  if ((nth === undefined || nth === null) && !spec.near) {
+    if (matches.length > 1) {
+      throw new BridgeError("target_ambiguous", `${matches.length} elements match ${describeStrict(spec)} on ${currentRouteName()}; add nth, first or last, or narrow it with within`, {
+        count: matches.length,
+        candidates: matches.slice(0, 10).map(describe),
+      });
+    }
+    return matches[0];
+  }
+  const wanted = nth ?? 0;
+  const index = wanted < 0 ? matches.length + wanted : wanted;
+  const node = matches[index];
+  if (!node) throw new BridgeError("target_not_found", `${describeStrict(spec)} asks for match ${wanted} but ${matches.length} match`, { count: matches.length });
+  return node;
+}
+
+async function locateNode(target: Target, preferred?: NodeKind[]): Promise<UiNode> {
+  return isStrict(target) ? resolveStrict(target) : findOne(target, preferred);
+}
+
+async function matchInfo(target: Target) {
+  if (!isStrict(target)) {
+    const found = findAll(target);
+    return { count: found.length, candidates: found.slice(0, 10).map(describe) };
+  }
+  const found = await strictCandidates(target);
+  return { count: found.length, candidates: found.slice(0, 10).map(describe) };
 }
 
 function enclosingButton(node: UiNode): UiNode | null {
@@ -871,7 +1033,7 @@ async function waitFor(target: Target, { timeout = 10000, gone = false } = {}) {
   let lastError = "";
   while (Date.now() - start < timeout) {
     try {
-      const found = findAll(target).length > 0;
+      const found = (await matchInfo(target)).count > 0;
       if (found !== gone) return { ms: Date.now() - start };
     } catch (error: any) {
       lastError = error?.message ?? String(error);
@@ -881,6 +1043,53 @@ async function waitFor(target: Target, { timeout = 10000, gone = false } = {}) {
   throw new Error(
     `timed out after ${timeout}ms waiting for ${JSON.stringify(target)} to ${gone ? "disappear" : "appear"} on ${currentRouteName()}${lastError ? ` (${lastError})` : ""}`
   );
+}
+
+const BOX_ROLES: Partial<Record<NodeKind, string>> = { button: "button", input: "textbox", switch: "switch", text: "text" };
+const MAX_BOXES = 3000;
+
+async function boxMap() {
+  const screen = Dimensions.get("window");
+  const entries: { node: UiNode; parent: number | null }[] = [];
+  const collect = (list: UiNode[], parent: number | null) => {
+    for (const node of list) {
+      if (entries.length >= MAX_BOXES * 2) return;
+      if (node.kind === "screen") {
+        collect(node.children, parent);
+        continue;
+      }
+      entries.push({ node, parent });
+      collect(node.children, entries.length - 1);
+    }
+  };
+  collect(buildTree(), null);
+  const measured = await Promise.all(entries.map((entry) => measureInWindow(publicInstance(entry.node.fiber))));
+  const kept = new Map<number, number>();
+  const nodes: Record<string, unknown>[] = [];
+  entries.forEach((entry, index) => {
+    const box = measured[index];
+    let parent = entry.parent;
+    while (parent !== null && !kept.has(parent)) parent = entries[parent].parent;
+    const shown =
+      box && box.width > 0 && box.height > 0 && box.x < screen.width && box.y < screen.height &&
+      box.x + box.width > 0 && box.y + box.height > 0;
+    if (!shown || nodes.length >= MAX_BOXES) return;
+    kept.set(index, nodes.length);
+    const node = entry.node;
+    const text = labelOf(node);
+    nodes.push({
+      testId: node.id ?? null,
+      kind: node.kind,
+      role: BOX_ROLES[node.kind] ?? null,
+      name: text || null,
+      label: node.label ? clean(node.label) || null : null,
+      placeholder: node.placeholder ?? null,
+      text: text || null,
+      box: [box.x, box.y, box.width, box.height],
+      parent: parent === null ? null : kept.get(parent) ?? null,
+    });
+  });
+  return { window: { width: screen.width, height: screen.height }, pixelRatio: PixelRatio.get(), route: currentRouteName(), nodes };
 }
 
 function snapshotInfo(maxLines = 160) {
@@ -899,16 +1108,40 @@ const commands: Record<string, (args: any) => Promise<unknown> | unknown> = {
     tree: renderTree(buildTree({ all }), maxLines ?? 250),
   }),
   snapshot: ({ maxLines } = {}) => snapshotInfo(maxLines),
+  boxes: () => boxMap(),
+  clock: (args) => clockCommand(args),
   find: ({ target }) =>
     findAll(target).slice(0, 20).map((node) => ({ line: describe(node), kind: node.kind, id: node.id })),
   exists: ({ target }) => findAll(target).length > 0,
-  text: ({ target }) => {
+  match: ({ target }) => matchInfo(target),
+  inspect: async ({ target }) => {
+    const node = await locateNode(target);
+    return {
+      kind: node.kind,
+      id: node.id ?? null,
+      label: labelOf(node),
+      text: [labelOf(node), ...flatten(node.children).map(labelOf)].filter(Boolean).join("\n"),
+      value: node.value ?? null,
+      placeholder: node.placeholder ?? null,
+      disabled: Boolean(node.disabled),
+      checked: node.checked ?? null,
+    };
+  },
+  toasts: ({ pattern }) => {
+    const wanted = new RegExp(pattern ?? "toast|snackbar|alert|error", "i");
+    return flatten(buildTree())
+      .filter((node) => node.id && wanted.test(node.id))
+      .map((node) => [labelOf(node), ...flatten(node.children).map(labelOf)].filter(Boolean).join(" "))
+      .filter(Boolean)
+      .slice(0, 5);
+  },
+  text: async ({ target }) => {
     if (!target) return flatten(buildTree()).map(labelOf).filter(Boolean).join("\n");
-    const node = findOne(target);
+    const node = await locateNode(target);
     return [labelOf(node), ...flatten(node.children).map(labelOf)].filter(Boolean).join("\n");
   },
   press: async ({ target, long, pressMs, glideMs, mark }) => {
-    let node = findOne(target, ["button", "switch"]);
+    let node = await locateNode(target, ["button", "switch"]);
     if (node.kind === "switch") return commands.toggle({ target, pressMs });
     if (node.kind !== "button") {
       const wrapper = enclosingButton(node);
@@ -929,12 +1162,12 @@ const commands: Record<string, (args: any) => Promise<unknown> | unknown> = {
       clearMarker();
     }
     props.onPressIn?.(syntheticEvent());
-    await fn(syntheticEvent());
+    await settleHandler(fn(syntheticEvent()), describe(node));
     props.onPressOut?.(syntheticEvent());
     return describe(node);
   },
   fill: async ({ target, text, submit, blur, glideMs, mark }) => {
-    const node = findOne(target, ["input"]);
+    const node = await locateNode(target, ["input"]);
     if (node.kind !== "input") throw new Error(`${describe(node)} is not a text input`);
     if (node.disabled) throw new Error(`${describe(node)} is not editable`);
     await reveal(node.fiber);
@@ -947,7 +1180,7 @@ const commands: Record<string, (args: any) => Promise<unknown> | unknown> = {
     if (typeof owner.onChangeText === "function") owner.onChangeText(value);
     else if (typeof owner.onChange === "function") owner.onChange(syntheticEvent({ text: value }));
     await sleep(32);
-    const fresh = findAll(target, ["input"])[0] ?? node;
+    const fresh = (isStrict(target) ? await resolveStrict(target).catch(() => null) : findAll(target, ["input"])[0]) ?? node;
     const controlled = fresh.handler?.memoizedProps && "value" in fresh.handler.memoizedProps;
     if (!controlled) publicInstance(fresh.fiber)?.setNativeProps?.({ text: value });
     await nextTwoFrames();
@@ -959,15 +1192,15 @@ const commands: Record<string, (args: any) => Promise<unknown> | unknown> = {
     }
     return `filled ${describe({ ...node, value })}`;
   },
-  submit: ({ target }) => {
-    const node = findOne(target, ["input"]);
+  submit: async ({ target }) => {
+    const node = await locateNode(target, ["input"]);
     const owner = nearestHandler(node.fiber, "onSubmitEditing")?.memoizedProps;
     if (!owner) throw new Error(`${describe(node)} has no onSubmitEditing`);
     owner.onSubmitEditing(syntheticEvent({ text: node.value }));
     return describe(node);
   },
   toggle: async ({ target, value, pressMs }) => {
-    const node = findOne(target, ["switch"]);
+    const node = await locateNode(target, ["switch"]);
     if (node.kind !== "switch" || !node.handler) throw new Error(`${describe(node)} is not a switch`);
     if (node.disabled) throw new Error(`${describe(node)} is disabled`);
     await reveal(node.fiber);
@@ -978,13 +1211,13 @@ const commands: Record<string, (args: any) => Promise<unknown> | unknown> = {
     return next;
   },
   invoke: async ({ target, prop, args }) => {
-    const node = findOne(target);
+    const node = await locateNode(target);
     const holder = nearestHandler(node.fiber, prop) ?? (node.handler && typeof node.handler.memoizedProps?.[prop] === "function" ? node.handler : null);
     if (!holder) throw new Error(`${describe(node)} has no ${prop} handler within reach`);
     return jsonSafe(await holder.memoizedProps[prop](...(args ?? [])));
   },
-  scroll: ({ target, to = "end", offset, index, animated = false }) => {
-    const origin = target ? findOne(target).fiber : focusedScreenFiber();
+  scroll: async ({ target, to = "end", offset, index, animated = false }) => {
+    const origin = target ? (await locateNode(target)).fiber : focusedScreenFiber();
     const scrollable = (target && scrollableFrom(origin, false)) || scrollableFrom(origin, true);
     if (!scrollable) throw new Error(`no scrollable container around ${JSON.stringify(target ?? currentRouteName())}`);
     if (typeof index === "number" && scrollable.scrollToIndex) scrollable.scrollToIndex({ index, animated });
@@ -1032,6 +1265,7 @@ const commands: Record<string, (args: any) => Promise<unknown> | unknown> = {
     if (!host) throw new Error("the harness overlay is not mounted");
     if (op === "remove") {
       anchors.delete(key);
+      anchors.delete(`${key}${TO_SUFFIX}`);
       host.remove(key);
       return true;
     }
@@ -1041,16 +1275,25 @@ const commands: Record<string, (args: any) => Promise<unknown> | unknown> = {
       return true;
     }
     if (op === "list") return host.list();
-    if (!["title", "caption", "callout", "highlight", "spotlight", "beacon"].includes(op)) throw new Error(`unknown annotation ${op}`);
-    if (target !== undefined && target !== null) {
-      const node = findOne(target);
+    if (!OVERLAY_KINDS.includes(op)) throw new Error(`unknown annotation ${op}`);
+    const { to, ...shown } = rest;
+    if (op === "arrow") {
+      if (!to) throw new BridgeError("args_invalid", "an arrow needs a to target");
+      const [fromNode, toNode] = [await locateNode(target), await locateNode(to)];
+      await reveal(fromNode.fiber);
+      anchors.set(key, target);
+      anchors.set(`${key}${TO_SUFFIX}`, to);
+      host.set({ key, kind: "arrow", box: await layoutOf(fromNode.fiber), toBox: await layoutOf(toNode.fiber), ...shown } as any);
+      trackAnchors();
+    } else if (target !== undefined && target !== null) {
+      const node = await locateNode(target);
       await reveal(node.fiber);
       const box = await layoutOf(node.fiber);
       anchors.set(key, target);
-      host.set({ key, kind: op, box, ...rest } as any);
+      host.set({ key, kind: op, box, ...shown } as any);
       trackAnchors();
     } else {
-      host.set({ key, kind: op, ...rest } as any);
+      host.set({ key, kind: op, ...shown } as any);
     }
     await nextTwoFrames();
     return key;
@@ -1062,7 +1305,7 @@ const commands: Record<string, (args: any) => Promise<unknown> | unknown> = {
       host.hidePointer();
       return true;
     }
-    const node = findOne(target);
+    const node = await locateNode(target);
     await reveal(node.fiber);
     return glideTo(node.fiber, typeof ms === "number" ? ms : 300);
   },
@@ -1085,7 +1328,7 @@ const commands: Record<string, (args: any) => Promise<unknown> | unknown> = {
     return true;
   },
   patch: async ({ target, key, props, style, text }) => {
-    const node = findOne(target);
+    const node = await locateNode(target);
     const name = key ?? `p${++patchCounter}`;
     const instance = publicInstance(node.fiber);
     const native: Record<string, unknown> = { ...(props ?? {}) };
@@ -1121,7 +1364,7 @@ const commands: Record<string, (args: any) => Promise<unknown> | unknown> = {
     const name = key ?? `i${++patchCounter}`;
     let frame = box ?? null;
     if (target !== undefined && target !== null) {
-      const node = findOne(target);
+      const node = await locateNode(target);
       frame = await layoutOf(node.fiber);
       anchors.set(name, target);
       trackAnchors();
@@ -1135,7 +1378,8 @@ const commands: Record<string, (args: any) => Promise<unknown> | unknown> = {
     return true;
   },
   fakes: () => registeredFakes(),
-  layout: ({ target }) => layoutOf(findOne(target).fiber),
+  net: (args) => networkCommand(args),
+  layout: async ({ target }) => layoutOf((await locateNode(target)).fiber),
   idle: (options) => waitIdle(options ?? {}),
   waitFor: ({ target, timeout, gone }) => waitFor(target, { timeout, gone }),
   eval: async ({ code }) => {
@@ -1148,7 +1392,7 @@ const commands: Record<string, (args: any) => Promise<unknown> | unknown> = {
       Dimensions,
       captureClean,
     };
-    const fn = new Function("ctx", `const { nav, store, tree, find, Platform, Dimensions, captureClean } = ctx; ${code}`);
+    const fn = new Function("ctx", `const { nav, store, tree, find, Platform, Dimensions, captureClean } = ctx; return (async () => {\n${code}\n})();`);
     return jsonSafe(await Promise.resolve(fn(context)));
   },
 };
@@ -1161,7 +1405,12 @@ async function execute(command: { id: string; cmd: string; args?: any }) {
     return { id: command.id, ok: true, value: jsonSafe(value) };
   } catch (error: any) {
     clearMarker();
-    return { id: command.id, ok: false, error: error?.message ?? String(error) };
+    return {
+      id: command.id,
+      ok: false,
+      error: error?.message ?? String(error),
+      ...(error instanceof BridgeError ? { code: error.code, detail: jsonSafe(error.detail) } : {}),
+    };
   }
 }
 
@@ -1172,9 +1421,7 @@ function trackNetwork() {
   const open = proto.open;
   const send = proto.send;
   proto.open = function (method: string, url: string, ...rest: unknown[]) {
-    this.__ehxIgnored =
-      typeof url === "string" &&
-      (url.startsWith(harnessUrl()) || url.includes("/symbolicate") || url.includes(":8081/") || ignoredUrl(url));
+    this.__ehxIgnored = typeof url === "string" && isHarnessUrl(url);
     return open.call(this, method, url, ...rest);
   };
   proto.send = function (...args: unknown[]) {
@@ -1249,6 +1496,7 @@ export function startHarnessBridge(options: HarnessOptions = {}) {
   if (!harnessEnabled() || started) return;
   started = true;
   trackNetwork();
+  installNetwork(isHarnessUrl);
   trackCommits();
   routeNativeAlerts();
   captureClean();
@@ -1273,6 +1521,10 @@ function requireStore() {
   const store = harnessOptions().store;
   if (!store) throw new Error("this app did not give startHarnessBridge a store");
   return store;
+}
+
+function isHarnessUrl(url: string) {
+  return url.startsWith(harnessUrl()) || url.includes("/symbolicate") || url.includes(":8081/") || ignoredUrl(url);
 }
 
 function ignoredUrl(url: string) {

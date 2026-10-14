@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Referans",
+    "slug": "eks-reference",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.eksenova.reference",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Referans uygulamas\u0131 konum iznini dener."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "scheme": "eksref",
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Referans uygulamas\u0131 konum iznini dener."
+        }
+      ],
+      "expo-status-bar",
+      "./plugins/with-scene-lifecycle"
+    ]
+  }
+}

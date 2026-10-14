@@ -3,6 +3,8 @@ name: scores
 description: "Author, plan, render and play scores: one timeline that synchronizes video edits, Blender scenes, HTML/JS scenes, device takes and audio to beats and cues, with events flowing between tracks in both directions (a beat triggers a device action, a device event flips a web scene, a Blender impact drives the edit). Use for any synchronized video or live demo."
 ---
 
+> The eks API covers edits now (`eks-harness:eks-edit`) and plans scores with `@eks.score` (`eks-harness:eks-scores`, `eks-harness:eks-scenes`); device takes, Blender renders and live preview under `eks-harness run` are not built yet. Until they are, this skill's earlier score engine (`eks_harness.score`, `eks-harness score`) renders synchronized scores of edits, Blender and web scenes. Its device tracks ran flow files of the earlier flow runner, which the eks API replaced; record device footage with an eks flow (`s.record`) and cut it in instead.
+
 # Scores
 
 ```python

@@ -10,13 +10,15 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from importlib import import_module, resources
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 from eks_harness import __version__
 from eks_harness.api.errors import install_handlers, not_found
 from eks_harness.api.schemas import HealthResponse
+from eks_harness.api.schemas_engine import RunRefused
 from eks_harness.auth.middleware import RequestGuard, RobotsTag
 from eks_harness.config import Config
 from eks_harness.config import load as load_config
@@ -25,6 +27,7 @@ from eks_harness.daemon.context import AppContext
 from eks_harness.daemon.events import EventBus
 from eks_harness.db import open_database
 from eks_harness.db.repos import users as users_repo
+from eks_harness.engine.errors import AdmissionError, EngineError
 from eks_harness.paths import Paths, resolve_paths
 from eks_harness.pools import create_pools
 
@@ -53,9 +56,17 @@ ROUTER_MODULES = (
     "routes_nodes",
     "routes_scores",
     "routes_drivers",
+    "routes_plans",
+    "routes_runs",
+    "routes_ops",
+    "routes_flows",
+    "routes_seeds",
+    "routes_sessions_engine",
 )
 WEB_DIST_ENV = "EKS_HARNESS_WEB_DIST"
 API_PREFIX = "/api"
+_ENGINE_ERROR_STATUS = {"run_refused": 422, "plan_build": 400, "run_not_found": 404, "run_finished": 409,
+                       "hub_stopping": 503}
 
 mimetypes.add_type("application/javascript", ".js")
 mimetypes.add_type("application/javascript", ".mjs")
@@ -173,7 +184,21 @@ def _serve_spa(request: Request, path: str) -> Response:
     return FileResponse(root / "index.html", media_type="text/html", headers=spa_headers(root / "index.html"))
 
 
-def mount_mcp(ctx: AppContext) -> tuple[object | None, object | None]:
+def _engine_error_response(error: EngineError) -> JSONResponse:
+    status = _ENGINE_ERROR_STATUS.get(error.code, 400)
+    if isinstance(error, AdmissionError):
+        refused = RunRefused(message=error.message, issues=list(error.issues))
+        return JSONResponse(refused.model_dump(mode="json", by_alias=True), status_code=status)
+    return JSONResponse({**error.detail, "error": error.code, "message": error.message}, status_code=status)
+
+
+def _install_engine_handlers(app: FastAPI) -> None:
+    @app.exception_handler(EngineError)
+    async def _engine_error(_: Request, exc: EngineError) -> JSONResponse:
+        return _engine_error_response(exc)
+
+
+def mount_mcp(ctx: AppContext) -> tuple[Any, Any]:
     try:
         from eks_harness.mcp_http import build
     except ImportError as error:
@@ -219,6 +244,7 @@ def create_app(config: Config | None = None, paths: Paths | None = None, *, fake
                   openapi_url=f"{API_PREFIX}/openapi.json", redoc_url=None)
     app.state.ctx = ctx
     install_handlers(app)
+    _install_engine_handlers(app)
     app.add_middleware(RequestGuard, config=ctx.config)
     app.add_middleware(RobotsTag)
 

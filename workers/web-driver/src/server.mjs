@@ -10,6 +10,10 @@ import { chromeEndpoint, heartbeatSids, leaseBackend, leaseReleased, request as 
 import { createBackendLink } from '../../kit/src/backend-link.mjs'
 import { loadWorkerConfig, resolveTheme } from '../../kit/src/config.mjs'
 import { loadExtensions } from '../../kit/src/extensions.mjs'
+import { watchOwner } from '../../kit/src/lifetime.mjs'
+import { createOpRegistry, loadSchemas } from '../../kit/src/ops.mjs'
+import { createPace } from '../../kit/src/pace.mjs'
+import { defineWebOps } from './ops.mjs'
 
 const CONFIG = loadWorkerConfig()
 const PORT = Number(CONFIG.port ?? 0)
@@ -19,6 +23,7 @@ const STATE_DIR = CONFIG.stateDir || path.resolve('.ehx-web-state')
 const LEASE_SID = CONFIG.sid || process.env.EHX_LEASE_SID || null
 const LOCALE = CONFIG.locale || 'en-US'
 const TIMEZONE = CONFIG.timezone || undefined
+const FROZEN_NOW = CONFIG.now ? new Date(CONFIG.now) : null
 const HOME_PATH = CONFIG.home || '/'
 let API_BASE_URL = CONFIG.apiBaseUrl ? String(CONFIG.apiBaseUrl).replace(/\/+$/, '') : null
 const API_FROM_BACKEND = Boolean(CONFIG.apiFromBackend)
@@ -260,8 +265,10 @@ const ANNOTATION_OVERLAY = `(() => {
       };
       return add(key, 'callout', [ring, arrow, bubble], true, place, find);
     },
-    highlight({ key, find }) {
-      const ring = node('position:fixed;left:0;top:0;border:3px solid ' + GOLD_LIGHT + ';border-radius:10px;box-shadow:0 0 0 6px rgba(' + T.accentRgb + ',.22),0 0 24px rgba(' + T.accentRgb + ',.45)');
+    highlight({ key, find, shape = 'rounded' }) {
+      const radius = shape === 'box' ? '0' : shape === 'outline' ? '4px' : '10px';
+      const glow = shape === 'outline' ? 'none' : '0 0 0 6px rgba(' + T.accentRgb + ',.22),0 0 24px rgba(' + T.accentRgb + ',.45)';
+      const ring = node('position:fixed;left:0;top:0;border:3px solid ' + GOLD_LIGHT + ';border-radius:' + radius + ';box-shadow:' + glow);
       const place = () => {
         const r = rectOf(key, find);
         ring.style.visibility = r ? 'visible' : 'hidden';
@@ -272,7 +279,8 @@ const ANNOTATION_OVERLAY = `(() => {
       };
       return add(key, 'highlight', [ring], true, place, find);
     },
-    spotlight({ key, find }) {
+    spotlight({ key, find, dim = 0.62 }) {
+      const shade = Math.max(0, Math.min(1, Number(dim)));
       const hole = node('position:fixed;left:0;top:0;border-radius:12px;box-shadow:0 0 0 200vmax rgba(' + T.surfaceRgb + ',.62);outline:3px solid ' + GOLD_LIGHT);
       const place = () => {
         const r = rectOf(key, find);
@@ -280,13 +288,96 @@ const ANNOTATION_OVERLAY = `(() => {
         if (!r) return;
         const covers = (r.width * r.height) / (innerWidth * innerHeight) > 0.6;
         const inset = covers ? 14 : -8;
-        hole.style.boxShadow = covers ? 'inset 0 0 0 3px ' + GOLD_LIGHT + ',inset 0 0 28px rgba(' + T.accentRgb + ',.45),0 0 0 200vmax rgba(' + T.surfaceRgb + ',.28)' : '0 0 0 200vmax rgba(' + T.surfaceRgb + ',.62)';
+        hole.style.boxShadow = covers ? 'inset 0 0 0 3px ' + GOLD_LIGHT + ',inset 0 0 28px rgba(' + T.accentRgb + ',.45),0 0 0 200vmax rgba(' + T.surfaceRgb + ',' + (shade * 0.45) + ')' : '0 0 0 200vmax rgba(' + T.surfaceRgb + ',' + shade + ')';
         hole.style.outline = covers ? 'none' : '3px solid ' + GOLD_LIGHT;
         hole.style.transform = 'translate(' + (Math.max(0, r.left) + inset) + 'px,' + (Math.max(0, r.top) + inset) + 'px)';
         hole.style.width = (Math.min(innerWidth, r.right) - Math.max(0, r.left) - inset * 2) + 'px';
         hole.style.height = (Math.min(innerHeight, r.bottom) - Math.max(0, r.top) - inset * 2) + 'px';
       };
       return add(key, 'spotlight', [hole], true, place, find);
+    },
+    arrow({ key, find, toFind, toKey, text }) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('data-ehx-overlay', 'item');
+      svg.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;overflow:visible;pointer-events:none';
+      svg.innerHTML = '<path fill="none" stroke="' + GOLD_LIGHT + '" stroke-width="4" stroke-linecap="round"></path><path fill="' + GOLD_LIGHT + '"></path>';
+      const label = node('position:fixed;left:0;top:0;padding:8px 14px;border-radius:10px;background:' + NAVY + ';color:' + T.onSurface + ';font-size:16px;font-weight:600;border:2px solid ' + GOLD_LIGHT, esc(text));
+      const els = text ? [svg, label] : [svg];
+      const place = () => {
+        const a = rectOf(key, find), b = rectOf(toKey, toFind);
+        for (const el of els) el.style.visibility = a && b ? 'visible' : 'hidden';
+        if (!a || !b) return;
+        const sx = a.left + a.width / 2, sy = a.top + a.height / 2;
+        const tx = b.left + b.width / 2, ty = b.top + b.height / 2;
+        const angle = Math.atan2(ty - sy, tx - sx), size = 14;
+        const ex = tx - Math.cos(angle) * Math.min(b.width, b.height) / 2, ey = ty - Math.sin(angle) * Math.min(b.width, b.height) / 2;
+        const [line, head] = svg.children;
+        line.setAttribute('d', 'M' + sx + ' ' + sy + ' L' + ex + ' ' + ey);
+        const lx = ex - Math.cos(angle) * size - Math.sin(angle) * size * 0.6, ly = ey - Math.sin(angle) * size + Math.cos(angle) * size * 0.6;
+        const rx = ex - Math.cos(angle) * size + Math.sin(angle) * size * 0.6, ry = ey - Math.sin(angle) * size - Math.cos(angle) * size * 0.6;
+        head.setAttribute('d', 'M' + ex + ' ' + ey + ' L' + lx + ' ' + ly + ' L' + rx + ' ' + ry + ' Z');
+        if (text) label.style.transform = 'translate(' + (sx + 12) + 'px,' + (sy - label.offsetHeight - 12) + 'px)';
+      };
+      return add(key, 'arrow', els, true, place, find);
+    },
+    blur({ key, find, radius = 8 }) {
+      const veil = node('position:fixed;left:0;top:0;border-radius:6px;backdrop-filter:blur(' + Number(radius) + 'px);-webkit-backdrop-filter:blur(' + Number(radius) + 'px)');
+      const place = () => {
+        const r = rectOf(key, find);
+        veil.style.visibility = r ? 'visible' : 'hidden';
+        if (!r) return;
+        veil.style.transform = 'translate(' + r.left + 'px,' + r.top + 'px)';
+        veil.style.width = r.width + 'px';
+        veil.style.height = r.height + 'px';
+      };
+      return add(key, 'blur', [veil], true, place, find);
+    },
+    redact({ key, find }) {
+      const bar = node('position:fixed;left:0;top:0;border-radius:4px;background:#000');
+      const place = () => {
+        const r = rectOf(key, find);
+        bar.style.visibility = r ? 'visible' : 'hidden';
+        if (!r) return;
+        bar.style.transform = 'translate(' + (r.left - 2) + 'px,' + (r.top - 2) + 'px)';
+        bar.style.width = (r.width + 4) + 'px';
+        bar.style.height = (r.height + 4) + 'px';
+      };
+      return add(key, 'redact', [bar], true, place, find);
+    },
+    icon({ key, find, glyph }) {
+      const badge = node('position:fixed;left:0;top:0;min-width:38px;height:38px;padding:0 8px;border-radius:19px;display:flex;align-items:center;justify-content:center;background:' + GOLD_LIGHT + ';color:' + NAVY_DEEP + ';font-size:20px;font-weight:800;box-shadow:0 6px 18px rgba(0,0,0,.3)', esc(glyph));
+      const place = () => {
+        const r = rectOf(key, find);
+        badge.style.visibility = r ? 'visible' : 'hidden';
+        if (!r) return;
+        badge.style.transform = 'translate(' + (r.right - 14) + 'px,' + (r.top - 24) + 'px)';
+      };
+      return add(key, 'icon', [badge], true, place, find);
+    },
+    image({ key, find, src, width = 160 }) {
+      const box = node('position:fixed;left:0;top:0;width:' + Number(width) + 'px;border-radius:10px;overflow:hidden;box-shadow:0 12px 34px rgba(0,0,0,.35);border:2px solid ' + GOLD_LIGHT);
+      const img = document.createElement('img');
+      img.src = src;
+      img.style.cssText = 'display:block;width:100%';
+      box.appendChild(img);
+      const place = () => {
+        const r = rectOf(key, find);
+        box.style.visibility = r ? 'visible' : 'hidden';
+        if (!r) return;
+        const x = Math.min(innerWidth - Number(width) - 16, r.right + 16);
+        box.style.transform = 'translate(' + Math.max(16, x) + 'px,' + Math.max(16, r.top) + 'px)';
+      };
+      return add(key, 'image', [box], true, place, find);
+    },
+    step({ key, find, index }) {
+      const dot = node('position:fixed;left:0;top:0;width:36px;height:36px;border-radius:18px;display:flex;align-items:center;justify-content:center;background:' + GOLD_LIGHT + ';color:' + NAVY_DEEP + ';font-size:18px;font-weight:800;box-shadow:0 0 0 4px rgba(' + T.accentRgb + ',.3)', esc(index));
+      const place = () => {
+        const r = rectOf(key, find);
+        dot.style.visibility = r ? 'visible' : 'hidden';
+        if (!r) return;
+        dot.style.transform = 'translate(' + (r.left - 18) + 'px,' + (r.top - 18) + 'px)';
+      };
+      return add(key, 'step', [dot], true, place, find);
     },
     remove,
     clear(kind) {
@@ -825,7 +916,23 @@ function contextOptions(profile, extra = {}) {
   }
 }
 
+const STARTED_AT = Date.now()
+const BROWSER_MODE = CONFIG.browser ?? opt('browser', 'lease')
+const INIT_SCRIPTS = []
+const CONTEXT_HOOKS = []
+
 async function connectBrowser() {
+  if (BROWSER_MODE === 'launch') {
+    if (session.browser?.isConnected()) return
+    session.browser = await chromium.launch({ headless: false, args: ['--use-mock-keychain'] })
+    session.cdpUrl = 'launch'
+    session.context = null
+    session.page = null
+    session.mobile = null
+    session.recording = null
+    log('launched a local Chromium (browser: launch)')
+    return
+  }
   const endpoint = await chromeEndpoint(session.sid)
   if (session.browser?.isConnected() && session.cdpUrl === endpoint) return
   if (session.browser) await session.browser.close().catch(() => {})
@@ -842,10 +949,13 @@ async function connectBrowser() {
 async function newProfileContext(profile) {
   const context = await session.browser.newContext(contextOptions(profile))
   context.setDefaultTimeout(15_000)
+  if (FROZEN_NOW) await context.clock.install({ time: FROZEN_NOW })
   await context.addInitScript(POINTER_OVERLAY)
   await context.addInitScript(ANNOTATION_OVERLAY)
   await context.addInitScript(NETWORK_TRACKER)
   await context.addInitScript(PAGE_ACTIONS)
+  for (const source of INIT_SCRIPTS) await context.addInitScript(source)
+  for (const hook of CONTEXT_HOOKS) await hook(context)
   for (const ext of EXTENSIONS) if (ext.onContext) await ext.onContext(context)
   context.on('close', () => {
     if (session.context === context) {
@@ -985,51 +1095,8 @@ function runEncoder(args) {
 }
 
 
-const PACE_DEFAULTS = { moveMs: 300, dwellMs: 400, typeMsPerChar: 40, holdMs: 700, screenHoldMs: 1500, mobilePressMs: 250 }
-const PACE_FAST = { moveMs: 0, dwellMs: 100, typeMsPerChar: 0, holdMs: 150, screenHoldMs: 400, mobilePressMs: 0 }
-const paceEnv = (name, fallback) => {
-  const raw = process.env[name]
-  if (raw === undefined || raw === '') return fallback
-  const value = Number(raw)
-  if (!Number.isInteger(value) || value < 0) throw new Error(`${name} must be a non-negative integer of ms (got ${raw})`)
-  return value
-}
-const PACE_ENV = {
-  moveMs: paceEnv('EHX_PACE_MOVE_MS', PACE_DEFAULTS.moveMs),
-  dwellMs: paceEnv('EHX_PACE_DWELL_MS', PACE_DEFAULTS.dwellMs),
-  typeMsPerChar: paceEnv('EHX_PACE_TYPE_MS_PER_CHAR', PACE_DEFAULTS.typeMsPerChar),
-  holdMs: paceEnv('EHX_PACE_HOLD_MS', PACE_DEFAULTS.holdMs),
-  screenHoldMs: paceEnv('EHX_PACE_SCREEN_HOLD_MS', PACE_DEFAULTS.screenHoldMs),
-  mobilePressMs: paceEnv('EHX_PACE_MOBILE_PRESS_MS', PACE_DEFAULTS.mobilePressMs),
-  ...(CONFIG.pace ?? {}),
-}
-const PACE_KEYS = [['moveMs', 'move_ms'], ['dwellMs', 'dwell_ms'], ['typeMsPerChar', 'type_ms_per_char'],
-  ['holdMs', 'hold_ms'], ['screenHoldMs', 'screen_hold_ms'], ['mobilePressMs', 'mobile_press_ms']]
-function parsePace(spec) {
-  if (spec === undefined || spec === null || spec === '' || spec === 'demo') return { name: 'demo', ...PACE_ENV }
-  if (spec === 'fast') return { name: 'fast', ...PACE_FAST }
-  let object
-  try {
-    object = typeof spec === 'string' ? JSON.parse(spec) : spec
-  } catch {
-    throw new Error(`--pace takes demo, fast or a JSON object (got ${JSON.stringify(spec)?.slice(0, 80)})`)
-  }
-  if (!object || typeof object !== 'object' || Array.isArray(object)) {
-    throw new Error('--pace takes demo, fast or a JSON object')
-  }
-  const known = new Set(PACE_KEYS.flat())
-  for (const key of Object.keys(object)) {
-    if (!known.has(key)) throw new Error(`unknown pace key ${JSON.stringify(key)}`)
-  }
-  const merged = { ...PACE_ENV }
-  for (const [camel, snake] of PACE_KEYS) {
-    const value = object[camel] ?? object[snake]
-    if (value === undefined) continue
-    if (!Number.isInteger(value) || value < 0) throw new Error(`pace.${camel} must be a non-negative integer of ms`)
-    merged[camel] = value
-  }
-  return { name: typeof spec === 'string' ? spec : 'custom', ...merged }
-}
+const PACE = createPace(CONFIG.pace)
+const parsePace = PACE.parsePace
 const paceSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const MOTION_W = 192
@@ -1224,14 +1291,6 @@ async function wheelInPage(page, locator, deltaX = 0, deltaY = 400, timeout = 10
   return inPage(page, locator, 'wheel', { deltaX, deltaY }, { timeout })
 }
 
-function resolveLocator(page, { selector, text, testId, role, name }) {
-  if (testId) return page.getByTestId(testId)
-  if (role) return page.getByRole(role, name ? { name } : undefined)
-  if (text) return page.getByText(text, { exact: false }).first()
-  if (selector) return page.locator(selector).first()
-  throw new Error('one of selector / text / testId / role is required')
-}
-
 async function setPointerVisible(page, visible) {
   await page.evaluate((show) => {
     const dot = document.getElementById('ehx-pointer-dot')
@@ -1261,8 +1320,6 @@ async function clearHide(page) {
   await page.evaluate((id) => document.getElementById(id)?.remove(), HIDE_STYLE_ID).catch(() => {})
 }
 
-const PACED_ACTIONS = new Set(['click', 'fill', 'press', 'hover', 'wheel'])
-const MARKED_ACTIONS = new Set(['click', 'fill'])
 async function showPressMark(page, box) {
   return page.evaluate(({ x, y, width, height }) => new Promise((resolve) => {
     if (!window.__ehxMark?.show(x, y, width, height)) return resolve(false)
@@ -1307,15 +1364,6 @@ async function leadTo(page, locator, pace, { mark = false } = {}) {
   if (pace.dwellMs) await paceSleep(pace.dwellMs)
   return box
 }
-async function presentationLead(page, body, pace, action) {
-  let locator = null
-  try { locator = resolveLocator(page, body) } catch {}
-  if (!locator) {
-    if (pace.dwellMs) await paceSleep(pace.dwellMs)
-    return null
-  }
-  return leadTo(page, locator, pace, { mark: MARKED_ACTIONS.has(action) })
-}
 async function presentationHold(page, pace, urlBefore) {
   let changed = false
   try { changed = page.url() !== urlBefore } catch {}
@@ -1354,6 +1402,15 @@ async function scriptHold(page, urlBefore = null) {
   const pace = recPace()
   if (!pace) return
   await presentationHold(page, pace, urlBefore)
+}
+function describeTarget(body) {
+  const target = {}
+  for (const key of ['selector', 'text', 'testId', 'role', 'name', 'path', 'key']) {
+    if (body[key] !== undefined) target[key] = body[key]
+  }
+  if (body.expression !== undefined) target.expression = String(body.expression).slice(0, 200)
+  if (body.value !== undefined) target.valueLength = String(body.value).length
+  return target
 }
 function scriptTarget(args) {
   if (!Array.isArray(args)) return {}
@@ -1419,129 +1476,38 @@ async function storeUpload({ file, sid, kind, caption, tags, name }) {
   }
 }
 
+function harDocument(rec, from = 0) {
+  const entries = rec.order
+    .slice(from)
+    .filter((entry) => entry.request)
+    .map((entry) => ({
+      startedDateTime: new Date(entry.wallTime * 1000).toISOString(),
+      time: Math.max(0, ((entry.finished ?? entry.received ?? entry.started) - entry.started) * 1000),
+      request: {
+        method: entry.request.method, url: entry.request.url, httpVersion: 'HTTP/1.1',
+        headers: Object.entries(entry.request.headers ?? {}).map(([n, v]) => ({ name: n, value: String(v) })),
+        queryString: [], cookies: [], headersSize: -1, bodySize: -1,
+      },
+      response: {
+        status: entry.response?.status ?? 0, statusText: entry.failed ? 'failed' : '',
+        httpVersion: 'HTTP/1.1',
+        headers: Object.entries(entry.response?.headers ?? {}).map(([n, v]) => ({ name: n, value: String(v) })),
+        cookies: [], content: { size: entry.size ?? 0, mimeType: entry.response?.mimeType ?? '' },
+        redirectURL: '', headersSize: -1, bodySize: entry.size ?? 0,
+        ...(entry.failed ? { _failed: entry.failed } : {}),
+      },
+      cache: {}, timings: { send: 0, wait: 0, receive: 0 },
+    }))
+  return {
+    log: {
+      version: '1.2', creator: { name: 'eks-harness', version: '1' },
+      pages: [{ startedDateTime: rec.startedAt, id: 'page', title: rec.url }],
+      entries,
+    },
+  }
+}
+
 const handlers = {
-  async status() {
-    const page = activePage()
-    const extra = {}
-    for (const ext of EXTENSIONS) if (ext.status) extra[ext.id] = await ext.status().catch((error) => ({ error: error.message }))
-    return {
-      up: Boolean(session.browser?.isConnected()),
-      chrome: session.cdpUrl,
-      webBaseUrl: WEB_BASE_URL,
-      bypassCsp: BYPASS_CSP,
-      url: page ? page.url() : null,
-      sid: session.sid,
-      extensions: EXTENSIONS.map((ext) => ext.id),
-      ...(Object.keys(extra).length ? { extensionStatus: extra } : {}),
-      recording: session.recording
-        ? { name: session.recording.name, viewport: session.recording.which, frames: session.recording.frames.length,
-            interactions: session.recording.interactions.length }
-        : null,
-      viewports: {
-        desktop: VIEWPORTS.desktop.label,
-        mobile: VIEWPORTS.mobile.label,
-        mobileContextOpen: Boolean(session.mobile),
-      },
-      artifactsDir: ARTIFACTS_DIR,
-      counts: {
-        console: session.console.length,
-        pageErrors: session.pageErrors.length,
-        failedRequests: session.failedRequests.length,
-        wsFrames: session.wsFrames.length,
-      },
-    }
-  },
-
-  async goto({ path: target }) {
-    return { url: await gotoPath(target) }
-  },
-
-  async click(body) {
-    const page = activePage()
-    const matchCount = await locatorCount(page, body).catch(() => null)
-    const popup = page.context().waitForEvent('page', { timeout: 1_500 }).catch(() => null)
-    const locator = resolveLocator(page, body)
-    let newTab = null
-    if (body.real) {
-      await locator.click({ timeout: body.timeout ?? 15_000 })
-    } else {
-      await releaseHover(page)
-      newTab = (await inPage(page, locator, 'click', { hitTest: !body.force }, { timeout: body.timeout ?? 15_000 })).newTab
-    }
-    await settle(page, { timeout: 10_000 })
-    const opened = await popup
-    if (opened) {
-      instrument(opened)
-      await opened.close().catch(() => {})
-    }
-    persistSession()
-    return {
-      url: page.isClosed() ? null : page.url(),
-      matchCount,
-      popupClosed: opened ? opened.url() : undefined,
-      newTab: newTab && !opened ? newTab : undefined,
-    }
-  },
-
-  async hover(body) {
-    const page = activePage()
-    const locator = resolveLocator(page, body)
-    if (body.real) {
-      await locator.hover({ timeout: body.timeout ?? 15_000 })
-      return { ok: true }
-    }
-    const outcome = await hoverInPage(page, locator, body.timeout ?? 15_000)
-    return { ok: true, forcedHover: outcome.forcedHover }
-  },
-
-  async wheel(body) {
-    const page = activePage()
-    const locator = resolveLocator(page, body)
-    if (body.real) {
-      await locator.hover({ timeout: body.timeout ?? 15_000 })
-      await page.mouse.wheel(body.deltaX ?? 0, body.deltaY ?? 400)
-      return { ok: true }
-    }
-    const { box, done, ...moved } = await wheelInPage(page, locator, body.deltaX ?? 0, body.deltaY ?? 400, body.timeout ?? 15_000)
-    return { ok: true, ...moved }
-  },
-
-  async fill(body) {
-    const page = activePage()
-    const locator = resolveLocator(page, body)
-    if (body.real) await locator.fill(body.value ?? '')
-    else await inPage(page, locator, 'fill', { value: String(body.value ?? '') }, { timeout: body.timeout ?? 15_000 })
-    return { ok: true }
-  },
-
-  async press({ key, real }) {
-    const page = activePage()
-    if (real) {
-      await page.keyboard.press(key)
-      return { ok: true }
-    }
-    const outcome = await pressInPage(page, key)
-    return { ok: true, target: outcome.target, action: outcome.action ?? undefined }
-  },
-
-  async waitFor({ text, selector, timeout }) {
-    const page = activePage()
-    if (text) await page.getByText(text, { exact: false }).first().waitFor({ timeout: timeout ?? 15_000 })
-    else if (selector) await page.locator(selector).first().waitFor({ timeout: timeout ?? 15_000 })
-    else await page.waitForLoadState('networkidle')
-    return { ok: true }
-  },
-
-  async evaluate({ expression }) {
-    return { result: await activePage().evaluate(expression) }
-  },
-
-  async text({ selector }) {
-    const page = activePage()
-    const target = selector ? page.locator(selector).first() : page.locator('body')
-    return { text: (await target.innerText()).slice(0, 20_000) }
-  },
-
   async shot({ name, fullPage, selector, viewport, focus, pad, here, hide, sid, caption, tags }) {
     const wanted = viewport ? [viewport] : ['desktop', 'mobile']
     const shots = {}
@@ -1951,33 +1917,8 @@ const handlers = {
     if (!rec) throw new Error('har is not recording - run har start first')
     session.har = null
     await rec.cdp.detach().catch(() => {})
-    const entries = rec.order
-      .filter((entry) => entry.request)
-      .map((entry) => ({
-        startedDateTime: new Date(entry.wallTime * 1000).toISOString(),
-        time: Math.max(0, ((entry.finished ?? entry.received ?? entry.started) - entry.started) * 1000),
-        request: {
-          method: entry.request.method, url: entry.request.url, httpVersion: 'HTTP/1.1',
-          headers: Object.entries(entry.request.headers ?? {}).map(([n, v]) => ({ name: n, value: String(v) })),
-          queryString: [], cookies: [], headersSize: -1, bodySize: -1,
-        },
-        response: {
-          status: entry.response?.status ?? 0, statusText: entry.failed ? 'failed' : '',
-          httpVersion: 'HTTP/1.1',
-          headers: Object.entries(entry.response?.headers ?? {}).map(([n, v]) => ({ name: n, value: String(v) })),
-          cookies: [], content: { size: entry.size ?? 0, mimeType: entry.response?.mimeType ?? '' },
-          redirectURL: '', headersSize: -1, bodySize: entry.size ?? 0,
-          ...(entry.failed ? { _failed: entry.failed } : {}),
-        },
-        cache: {}, timings: { send: 0, wait: 0, receive: 0 },
-      }))
-    const har = {
-      log: {
-        version: '1.2', creator: { name: 'eks-harness', version: '1' },
-        pages: [{ startedDateTime: rec.startedAt, id: 'page', title: rec.url }],
-        entries,
-      },
-    }
+    const har = harDocument(rec)
+    const entries = har.log.entries
     let file = stamp(`${name || 'har'}`, 'har')
     fs.writeFileSync(file, JSON.stringify(har))
     const store = await storeUpload({ file, sid, kind: 'har', caption, tags, name: name || 'har' })
@@ -2026,63 +1967,6 @@ const handlers = {
     session.wsFrames.length = 0
     return { ok: true }
   },
-
-  async down() {
-    setTimeout(async () => {
-      try {
-        if (session.har) await session.har.cdp.detach().catch(() => {})
-        if (session.recording) await session.recording.cdp.send('Page.stopScreencast').catch(() => {})
-        if (session.mobile) await session.mobile.context.close()
-        await session.browser?.close()
-      } finally {
-        process.exit(0)
-      }
-    }, 50)
-    return { stopping: true }
-  },
-}
-const TRACKED = new Set(['click', 'hover', 'wheel', 'fill', 'press', 'waitFor', 'evaluate', 'goto'])
-const LOCATOR_ACTIONS = new Set(['click', 'hover', 'wheel', 'fill'])
-
-function describeTarget(body) {
-  const target = {}
-  for (const key of ['selector', 'text', 'testId', 'role', 'name', 'path', 'key']) {
-    if (body[key] !== undefined) target[key] = body[key]
-  }
-  if (body.expression !== undefined) target.expression = String(body.expression).slice(0, 200)
-  if (body.value !== undefined) target.valueLength = String(body.value).length
-  return target
-}
-
-async function locatorCount(page, { selector, text, testId, role, name }) {
-  if (testId) return page.getByTestId(testId).count()
-  if (role) return page.getByRole(role, name ? { name } : undefined).count()
-  if (text) return page.getByText(text, { exact: false }).count()
-  if (selector) return page.locator(selector).count()
-  return null
-}
-
-const ROUTES = {
-  '/status': 'status',
-  '/goto': 'goto',
-  '/click': 'click',
-  '/hover': 'hover',
-  '/wheel': 'wheel',
-  '/fill': 'fill',
-  '/press': 'press',
-  '/wait-for': 'waitFor',
-  '/eval': 'evaluate',
-  '/text': 'text',
-  '/shot': 'shot',
-  '/video/start': 'videoStart',
-  '/video/stop': 'videoStop',
-  '/dump': 'dump',
-  '/har/start': 'harStart',
-  '/har/stop': 'harStop',
-  '/console': 'consoleExcerpt',
-  '/logs': 'logs',
-  '/logs/clear': 'clearLogs',
-  '/down': 'down',
 }
 
 const TREE_MAX_LINES = Number(opt('treeMaxLines', 160))
@@ -2653,6 +2537,101 @@ const backendLink = createBackendLink({
   log,
 })
 
+function recordInteraction({ action, target, started, ok, error, box }) {
+  const rec = session.recording
+  if (!rec) return
+  const page = activePage()
+  rec.interactions.push({
+    at: Number(((started - rec.startedAt) / 1000).toFixed(2)),
+    action,
+    target: target ?? {},
+    page: rec.which,
+    url: page?.isClosed() ? null : page?.url(),
+    ok,
+    error: error ? String(error?.message ?? error).slice(0, 300) : undefined,
+    ms: Date.now() - started,
+    ...(box ? { boxes: [{ x: box.x, y: box.y, w: box.width, h: box.height, scale: VIEWPORTS[rec.which]?.deviceScaleFactor ?? 1 }] } : {}),
+  })
+}
+
+async function ariaOf(locator, maxLines = TREE_MAX_LINES) {
+  const yaml = compactAria(await locator.ariaSnapshot({ timeout: 5_000 }))
+  const lines = yaml.split('\n')
+  if (lines.length <= maxLines) return yaml
+  return `${lines.slice(0, maxLines).join('\n')}\n... ${lines.length - maxLines} more lines (a target narrows it)`
+}
+
+const cdpSessions = new WeakMap()
+async function cdpFor(page) {
+  let cdp = cdpSessions.get(page)
+  if (!cdp) {
+    cdp = await page.context().newCDPSession(page)
+    cdpSessions.set(page, cdp)
+  }
+  return cdp
+}
+
+async function ensureHar() {
+  if (!session.har) await handlers.harStart()
+  return session.har
+}
+
+const WEB = {
+  config: CONFIG,
+  session,
+  log,
+  startedAt: STARTED_AT,
+  baseUrl: WEB_BASE_URL,
+  viewports: VIEWPORTS,
+  treeMaxLines: TREE_MAX_LINES,
+  handlers,
+  keptAnnotations,
+  activePage,
+  contexts: () => [session.context, session.mobile?.context].filter(Boolean),
+  onContext: (hook) => CONTEXT_HOOKS.push(hook),
+  async addInitScript(source) {
+    INIT_SCRIPTS.push(source)
+    for (const context of WEB.contexts()) await context.addInitScript(source)
+  },
+  cdpFor,
+  isAppUrl,
+  locate,
+  nearMisses,
+  settle,
+  gotoPath,
+  nav: (href) => scriptHelpers().nav(href),
+  reload: () => scriptHelpers().reload(),
+  back: () => scriptHelpers().back(),
+  inPage,
+  pressInPage,
+  releaseHover,
+  hoverInPage,
+  wheelInPage,
+  recPace,
+  parsePace,
+  leadTo,
+  stampAction,
+  pressed,
+  scriptHold,
+  persistSession,
+  recordInteraction,
+  applyHide,
+  clearHide,
+  hideSelectorsFor,
+  setPointerVisible,
+  ariaOf,
+  ensureHar,
+  harDocument,
+  annoFind,
+  annoShow,
+  annoCall,
+  annoRecord,
+  readMs,
+}
+
+const OPS = createOpRegistry({ platform: 'web', schemas: loadSchemas(CONFIG.opsSchemaFile), log })
+const WEB_OPS = defineWebOps(OPS.define, WEB)
+
 const KIT = {
   config: CONFIG,
   get session() { return session },
@@ -2681,16 +2660,12 @@ const KIT = {
   upload: (options) => storeUpload({ sid: session.sid, ...options }),
   helpers: () => scriptHelpers(),
   handlers: () => handlers,
+  defineOp: OPS.define,
+  web: WEB,
 }
 
 const EXTENSIONS = await loadExtensions(CONFIG.extensions ?? [], KIT, log)
-const EXTENSION_ROUTES = {}
-for (const ext of EXTENSIONS) {
-  for (const [route, fn] of Object.entries(ext.routes ?? {})) {
-    const key = route.startsWith('/') ? route : `/${route}`
-    EXTENSION_ROUTES[key] = async (body) => fn(body ?? {})
-  }
-}
+for (const ext of EXTENSIONS) if (typeof ext.ops === 'function') await ext.ops(OPS.define, WEB)
 
 function extensionHelpers() {
   const merged = {}
@@ -2760,11 +2735,16 @@ const RUN_ROUTES = {
   },
 }
 
+let lifetime = null
 const server = http.createServer((req, res) => {
+  lifetime?.touch()
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`)
   if (req.method === 'GET' && url.pathname === '/events') return streamEvents(req, res)
-  const handlerName = ROUTES[url.pathname]
-
+  if (req.method === 'GET' && url.pathname === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+    return res.end(JSON.stringify({ kind: 'web', version: CONFIG.codeHash ?? null, platforms: ['web'], ops: OPS.names(), extensions: EXTENSIONS.map((ext) => ext.id), pid: process.pid, startedAt: new Date(STARTED_AT).toISOString(), schemaHash: CONFIG.opsSchemaHash ?? null }))
+  }
+  if (req.method === 'POST' && (url.pathname === '/op' || url.pathname === '/snapshot')) return opRoute(req, res, url.pathname)
   const send = (status, body) => {
     if (res.headersSent || res.writableEnded) return
     try {
@@ -2777,7 +2757,7 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  const runRoute = RUN_ROUTES[url.pathname] ?? EXTENSION_ROUTES[url.pathname]
+  const runRoute = RUN_ROUTES[url.pathname]
   if (runRoute) {
     let raw = ''
     req.on('data', (chunk) => {
@@ -2809,80 +2789,41 @@ const server = http.createServer((req, res) => {
     return
   }
 
-  if (!handlerName) return send(404, { error: `unknown route ${url.pathname}`, routes: [...Object.keys(ROUTES), ...Object.keys(RUN_ROUTES), ...Object.keys(EXTENSION_ROUTES)] })
+  return send(404, { error: `unknown route ${url.pathname}`, routes: ['/health', '/events', '/op', '/snapshot', ...Object.keys(RUN_ROUTES)] })
+})
 
+function opRoute(req, res, route) {
   let raw = ''
   req.on('data', (chunk) => {
     raw += chunk
   })
-  req.on('error', (error) => log(`request error on ${url.pathname}: ${error.message}`))
   req.on('end', () => {
-    let body = {}
-    if (raw) {
-      try {
-        body = JSON.parse(raw)
-      } catch {
-        return send(400, { error: 'body is not valid JSON' })
-      }
+    const reply = (status, body) => {
+      if (res.headersSent || res.writableEnded) return
+      res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify(body))
     }
-    for (const [key, value] of url.searchParams) body[key] = value
-
+    let body
+    try {
+      body = raw ? JSON.parse(raw) : {}
+    } catch {
+      return reply(400, { ok: false, error: { code: 'args_invalid', message: 'the body is not valid JSON', detail: {}, retryable: false } })
+    }
     const started = Date.now()
-    const recording = TRACKED.has(handlerName) ? session.recording : null
-    const paced = recording && PACED_ACTIONS.has(handlerName) ? recording : null
-    let urlBefore = null
-    let actionAt = null
-    let actionBox = null
-    const track = async (ok, result, error) => {
-      if (!recording || session.recording !== recording) return
-      const page = activePage()
-      const matchCount = result?.matchCount ?? (LOCATOR_ACTIONS.has(handlerName)
-        ? await locatorCount(page, body).catch(() => null) : undefined)
-      const box = actionBox ?? (LOCATOR_ACTIONS.has(handlerName)
-        ? await resolveLocator(page, body).boundingBox().catch(() => null) : null)
-      recording.interactions.push({
-        at: Number((((actionAt ?? started) - recording.startedAt) / 1000).toFixed(2)),
-        action: handlerName,
-        target: describeTarget(body),
-        page: recording.which,
-        url: page?.isClosed() ? null : page?.url(),
-        matchCount,
-        ok,
-        error: error ? String(error?.message ?? error).slice(0, 300) : undefined,
-        ms: Date.now() - started,
-        ...(box ? {
-          boxes: [{
-            x: box.x, y: box.y, w: box.width, h: box.height,
-            scale: VIEWPORTS[recording.which]?.deviceScaleFactor ?? 1,
-          }],
-        } : {}),
-      })
-    }
     Promise.resolve()
-      .then(async () => {
-        await ensureBrowser()
-        try { urlBefore = activePage()?.url() } catch {}
-        if (paced && session.recording === recording) {
-          actionBox = await presentationLead(activePage(), body, recording.pace, handlerName)
-        }
-        if (recording) actionAt = Date.now()
+      .then(() => ensureBrowser())
+      .then(() => ensureHar().catch((error) => log(`har tracking unavailable: ${error.message}`)))
+      .then(() => (route === '/op' ? OPS.handle(body) : WEB_OPS.snapshot(body)))
+      .then((result) => {
+        if (route === '/op') log(`${body.op} ${body.phase ?? 'run'} ${result.ok ? 'ok' : `failed (${result.error?.code})`} ${Date.now() - started}ms`)
+        reply(200, result)
       })
-      .then(() => (paced ? pressed(activePage(), () => handlers[handlerName](body)) : handlers[handlerName](body)))
-      .then(async (result) => {
-        if (paced && session.recording === recording) {
-          await presentationHold(activePage(), recording.pace, urlBefore)
-        }
-        await track(true, result)
-        log(`${url.pathname} ok ${Date.now() - started}ms`)
-        send(200, result)
-      })
-      .catch(async (error) => {
-        await track(false, null, error).catch(() => {})
-        log(`${url.pathname} failed after ${Date.now() - started}ms: ${error?.stack ?? error}`)
-        send(500, { error: error?.message ?? String(error) })
+      .catch((error) => {
+        log(`${route} failed: ${error?.stack ?? error}`)
+        reply(200, { ok: false, error: { code: 'driver_error', message: error?.message ?? String(error), detail: {}, retryable: true }, files: [] })
       })
   })
-})
+}
 
 server.on('clientError', (error, socket) => {
   log(`client error: ${error.message}`)
@@ -2921,6 +2862,7 @@ function startHeartbeat() {
 }
 
 server.listen(PORT, '127.0.0.1', () => {
+  lifetime = watchOwner()
   const bound = server.address().port
   const ready = { ready: true, port: bound, pid: process.pid, baseUrl: WEB_BASE_URL, sid: session.sid, extensions: EXTENSIONS.map((ext) => ext.id) }
   fs.writeFileSync(path.join(STATE_DIR, 'worker.json'), JSON.stringify(ready))

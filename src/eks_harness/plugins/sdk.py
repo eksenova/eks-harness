@@ -163,7 +163,7 @@ class ManagedBackend(Protocol):
 
 
 BACKEND_HOOKS = ("describe", "fingerprint", "prepare", "spec", "start", "health", "info", "stop", "cleanup",
-                 "teardown", "seed", "snapshot", "restore")
+                 "teardown", "seed", "reset", "seed_phase", "snapshot", "restore", "migrations", "drop_snapshot")
 
 
 @runtime_checkable

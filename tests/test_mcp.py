@@ -114,6 +114,12 @@ async def test_lists_every_tool_with_schemas(mcp_env: McpEnv) -> None:
     assert tools["list_annotation_versions"].annotations.read_only_hint is True
     assert tools["annotate"].annotations.read_only_hint is False
     assert all(tool.description for tool in listed.tools)
+    assert {"eks_session_open", "eks_session_do", "eks_session_close", "eks_session_export", "eks_seeds",
+            "eks_seed_show"} <= set(tools)
+    assert tools["eks_session_open"].input_schema["required"] == ["app"]
+    assert tools["eks_session_export"].annotations.read_only_hint is True
+    assert not {"driver_act", "driver_observe", "driver_capture", "flow_run", "seed_backend", "list_personas",
+                "ensure_backend"} & set(tools)
 
 
 async def test_upload_returns_links_and_lands_in_project_and_session(mcp_env: McpEnv) -> None:

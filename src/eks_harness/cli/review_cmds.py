@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from eks_harness.cli.client import client_from_args
+from eks_harness.cli.client import client_from_args, download_artifacts
 from eks_harness.cli.ui import EXIT_ERROR, EXIT_USAGE, console, fail, ok, print_json, table, warn
 from eks_harness.paths import resolve_paths
 
@@ -113,11 +113,9 @@ def cmd_sheet(args: argparse.Namespace) -> int:
             warn("stored nowhere: pass an artifact id, or --sid / --project to keep it in the harness")
         return 0
     body = {"markers": markers.as_dict(), "frames": args.frames, "maxEdge": args.max_edge, "replace": not args.keep}
-    from eks_harness.flows.client import download
-
     with client_from_args(args) as client:
         data = client.post(f"/api/artifacts/{artifact_id}/sheet", json=body, timeout=900)
-        found = download(client, [s["id"] for s in data["sheets"]], args.out or _cache(artifact_id))
+        found = download_artifacts(client, [s["id"] for s in data["sheets"]], args.out or _cache(artifact_id))
     for sheet in data["sheets"]:
         sheet["local"] = str(found.get(sheet["id"])) if found.get(sheet["id"]) else None
     if args.json:

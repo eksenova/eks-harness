@@ -39,9 +39,3 @@ def flow_helpers(host: PluginHost, platform: str, tree: Path | None = None) -> l
         mixins.append(target)
     return mixins
 
-
-def driver_for(host: PluginHost, platform: str, tree: Path | None = None) -> Any:
-    matches = [c for c in host.contributions("driver", tree) if c.id == platform or c.get("platform") == platform]
-    if not matches:
-        raise PluginError(f"no active plugin contributes a driver for {platform}")
-    return host.load(matches[-1], tree)

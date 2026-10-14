@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from eks_harness.capture.trim import (
@@ -8,6 +10,7 @@ from eks_harness.capture.trim import (
     filter_graph,
     output_offset,
     plan,
+    step_times,
 )
 
 
@@ -90,3 +93,17 @@ def test_config_reads_env_overrides() -> None:
     assert config.keep_before_sec == 0.5
     assert config.max_speedup == 2.0
     assert TrimConfig.from_env({}) == TrimConfig()
+
+
+def test_step_times_read_the_worker_step_log_in_order(tmp_path: Path) -> None:
+    path = tmp_path / "steps.jsonl"
+    path.write_text('{"t": 2.0, "action": "fill"}\n\n{"t": 1.25, "action": "click", "boxes": []}\n', encoding="utf-8")
+    assert step_times(path) == [1.25, 2.0]
+
+
+@pytest.mark.parametrize("row", ["not json", '{"t": -1, "action": "click"}', '{"action": "click"}', '{"t": true}', "[1]"])
+def test_step_times_reject_bad_rows(tmp_path: Path, row: str) -> None:
+    path = tmp_path / "steps.jsonl"
+    path.write_text(row + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="steps.jsonl:1"):
+        step_times(path)

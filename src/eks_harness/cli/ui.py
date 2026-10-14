@@ -15,6 +15,7 @@ from prompt_toolkit.styles import Style
 from prompt_toolkit.validation import ValidationError, Validator
 from rich import box
 from rich.console import Console, Group
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -76,19 +77,19 @@ def fail(message: str, code: int = EXIT_ERROR) -> NoReturn:
 
 
 def ok(message: str) -> None:
-    err.print(f"[bold green]✓[/] {message}", soft_wrap=True)
+    err.print(f"[bold green]✓[/] {escape(message)}", soft_wrap=True)
 
 
 def warn(message: str) -> None:
-    err.print(f"[bold yellow]![/] {message}", soft_wrap=True)
+    err.print(f"[bold yellow]![/] {escape(message)}", soft_wrap=True)
 
 
 def error(message: str) -> None:
-    err.print(f"[bold red]✗[/] {message}", soft_wrap=True)
+    err.print(f"[bold red]✗[/] {escape(message)}", soft_wrap=True)
 
 
 def info(message: str) -> None:
-    err.print(f"[{HINT}]{message}[/]", soft_wrap=True)
+    err.print(f"[{HINT}]{escape(message)}[/]", soft_wrap=True)
 
 
 def write_line(text: str) -> None:
@@ -138,7 +139,7 @@ def table(columns: Sequence[str | tuple[str, dict]], rows: Iterable[Sequence[Any
     return result
 
 
-def human_size(size: int | float | None) -> str:
+def human_size(size: float | None) -> str:
     if size is None:
         return ""
     value = float(size)
@@ -156,7 +157,7 @@ class Suggestion:
     search: str = ""
 
     @classmethod
-    def of(cls, value: str, meta: str = "", *extra: str) -> "Suggestion":
+    def of(cls, value: str, meta: str = "", *extra: str) -> Suggestion:
         return cls(value=value, meta=meta, search=normalize(" ".join([value, meta, *extra])))
 
 

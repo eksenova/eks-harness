@@ -115,6 +115,11 @@ def local_checks() -> list[dict[str, Any]]:
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
+    if args.kill_orphans:
+        from eks_harness.cli.reap_cmds import cmd_reap
+
+        return cmd_reap(argparse.Namespace(all_installs=True, include_dev=False, dry_run=False, yes=args.yes,
+                                           json=args.json))
     rows = [{"check": "version", "state": "info", "detail": __version__}, *local_checks(), *tool_checks()]
     if not args.offline:
         rows += hub_checks(args)
@@ -129,5 +134,9 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 def register(subparsers: argparse._SubParsersAction) -> None:
     p = subparsers.add_parser("doctor", help="check the hub, paths, services, tools, plugins and nodes")
     p.add_argument("--offline", action="store_true", help="skip the checks that need the hub")
+    p.add_argument("--kill-orphans", action="store_true",
+                   help="stop orphaned harness workers and dev servers of every install (same as eks-harness reap "
+                        "--all-installs)")
+    p.add_argument("--yes", action="store_true", help="with --kill-orphans, stop without asking")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_doctor)

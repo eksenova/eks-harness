@@ -3,6 +3,8 @@ name: web-scenes
 description: "Write HTML/CSS/JS scenes for videos and scores with @eks-harness/scene: the virtual clock (timers, rAF, CSS and Web Animations are frame-exact), score inputs, beat helpers, textures from other tracks, emitting events, live mode. Use when building motion graphics or UI mockups that must sync to beats or other tracks."
 ---
 
+> The eks API (`@eks.scene(kind="web")`, skill `eks-harness:eks-scenes`) declares web scenes now, and edits are written with `eks-harness:eks-edit`; web scene renders under `eks-harness run` wait for the scene executor. The page side below (`@eks-harness/scene`, the virtual clock) is the same for both.
+
 # Web scenes
 
 A web scene is an HTML entry (plus any CSS, JS and assets beside it). In renders it runs on a virtual

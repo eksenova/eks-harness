@@ -43,8 +43,6 @@ class FakeWorker:
             def do_POST(self) -> None:
                 length = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(length) or b"{}")
-                if self.path == "/status":
-                    return self._send(200, {"up": True})
                 if self.path != "/exec":
                     return self._send(404, {"error": "not found"})
                 script = body.get("script", "")

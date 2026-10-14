@@ -1,24 +1,34 @@
 from __future__ import annotations
 
+import argparse
 import json
 import shutil
 import time
-import urllib.request
 from pathlib import Path
 
 import pytest
+from fake_worker import FakeWorker
 
+from eks_harness.cli import driver_cmds
 from eks_harness.drivers import WorkerClient, WorkerError, WorkerManager, workers_root
 from eks_harness.drivers.sessions import WorkerSession
 from eks_harness.drivers.workers import code_hash, config_hash, pid_alive
 
-from fake_worker import FakeWorker
-
 needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+
+
+def test_driver_cmds_list_workers(capsys: pytest.CaptureFixture[str]) -> None:
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command")
+    driver_cmds.register(sub)
+    args = parser.parse_args(["driver", "workers", "--json"])
+    assert args.func(args) == 0
+    assert json.loads(capsys.readouterr().out) == {"items": []}
 
 
 def test_workers_root_points_at_sources() -> None:
     root = workers_root()
+    assert root == Path(__file__).resolve().parents[2] / "workers"
     assert (root / "web-driver/src/server.mjs").is_file()
     assert (root / "mobile-driver/src/server.mjs").is_file()
     assert code_hash("web", root) != code_hash("mobile", root)
@@ -101,8 +111,6 @@ def test_web_session_uses_web_helpers() -> None:
 
 
 def test_worker_client_reports_unreachable_workers() -> None:
-    status, body = WorkerClient("http://127.0.0.1:9").post("/exec", {}, 2)
+    status, body = WorkerClient("http://127.0.0.1:9").get("/health", 2)
     assert status == 0 and "not reachable" in body["error"]
-    with pytest.raises(WorkerError, match="not reachable"):
-        WorkerClient("http://127.0.0.1:9").call("click", "x", timeout=2)
-    assert urllib.request is not None
+    assert not WorkerClient("http://127.0.0.1:9").alive()

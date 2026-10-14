@@ -323,3 +323,18 @@ def client_from_args(args: Any) -> HarnessClient:
     config = load_config(paths)
     return HarnessClient(base_url=getattr(args, "url", None), api_key=getattr(args, "api_key", None),
                          paths=paths, config=config)
+
+
+def download_artifacts(client: HarnessClient, ids: list[str], out: Path) -> dict[str, Path]:
+    found: dict[str, Path] = {}
+    out.mkdir(parents=True, exist_ok=True)
+    for artifact_id in [i for i in ids if i]:
+        try:
+            info = client.get(f"/api/artifacts/{artifact_id}")
+            raw = str(info.get("rawUrl") or "")
+            path = raw.split("://", 1)[-1].split("/", 1)[-1] if "://" in raw else raw.lstrip("/")
+            target = out / f"{artifact_id}-{info.get('filename') or 'artifact'}"
+            found[artifact_id] = client.download("/" + path, target, params={"download": "1"})
+        except (ApiClientError, httpx.HTTPError, OSError):
+            continue
+    return found

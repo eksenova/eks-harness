@@ -359,6 +359,12 @@ def idle_text(record: dict) -> str:
     return f"stops {describe_duration(timeout)} after the last lease"
 
 
+def dependency_text(record: dict) -> str:
+    parts = [f"needs {backend}" for backend in (record.get("dependencies") or {}).values()]
+    parts += [f"held by {backend}" for backend in record.get("dependents") or []]
+    return ", ".join(parts) or "-"
+
+
 def render_backend(record: dict) -> None:
     rows = [("id", record.get("id")), ("status", record.get("status")),
             ("definition", record.get("definition")), ("identity", record.get("instance")),
@@ -367,6 +373,11 @@ def render_backend(record: dict) -> None:
             ("leases", ", ".join(record.get("bindings") or []) or "-"), ("idle", idle_text(record)),
             ("processes", ", ".join(f"{name} ({'alive' if alive else 'dead'})"
                                     for name, alive in (record.get("alive") or {}).items()) or "-")]
+    if record.get("dependencies"):
+        rows.append(("depends on", ", ".join(f"{name} ({backend})"
+                                             for name, backend in record["dependencies"].items())))
+    if record.get("dependents"):
+        rows.append(("held by", ", ".join(record["dependents"])))
     if record.get("error"):
         rows.append(("error", str(record["error"]).splitlines()[0]))
     console.print(table(("field", "value"), rows, title=f"Backend {record.get('id')}"))
@@ -383,8 +394,8 @@ def cmd_stop(args: argparse.Namespace) -> int:
     _, _, backend_id = backend_target(args)
     cleanup = bool(args.final or args.cleanup)
     with client_from_args(args) as client:
-        record = client.post(backend_path(backend_id, "/stop"), json={"cleanup": cleanup, "reason": "requested"},
-                             timeout=1900)
+        record = client.post(backend_path(backend_id, "/stop"),
+                             json={"cleanup": cleanup, "force": bool(args.force), "reason": "requested"}, timeout=1900)
     if args.json:
         print_json(record)
     else:
@@ -413,8 +424,8 @@ def cmd_list(args: argparse.Namespace) -> int:
         return 0
     rows = [(b.get("id"), b.get("status"), str(b.get("generation") or 0),
              ", ".join(f"{k}={v}" for k, v in (b.get("ports") or {}).items()) or "-",
-             str(len(b.get("leases") or [])), idle_text(b)) for b in result.get("items") or []]
-    console.print(table(("id", "status", "gen", "ports", "leases", "idle"), rows, title="Backends"))
+             str(len(b.get("leases") or [])), dependency_text(b), idle_text(b)) for b in result.get("items") or []]
+    console.print(table(("id", "status", "gen", "ports", "leases", "dependencies", "idle"), rows, title="Backends"))
     for b in result.get("items") or []:
         url = (b.get("info") or {}).get("url")
         if url:
@@ -429,8 +440,10 @@ def cmd_definitions(args: argparse.Namespace) -> int:
     if args.json:
         print_json(result.get("items") or [])
         return 0
-    console.print(table(("name", "source", "path"), [(d.get("name"), d.get("source"), d.get("path"))
-                                                     for d in result.get("items") or []], title="Backend definitions"))
+    console.print(table(("name", "source", "requires", "path"),
+                        [(d.get("name"), d.get("source"),
+                          ", ".join(item.get("name", "") for item in d.get("requires") or []) or "-", d.get("path"))
+                         for d in result.get("items") or []], title="Backend definitions"))
     return 0
 
 
@@ -607,6 +620,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p = sub.add_parser("stop", help="stop the backend now and end its leases")
     add_target(p)
     p.add_argument("--cleanup", action="store_true", help="also run the project's cleanup (drop its data)")
+    p.add_argument("--force", action="store_true", help="also stop the backends that depend on this one")
     p.add_argument("--final", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--json", dest="json", action="store_true")
     p.set_defaults(func=cmd_stop)

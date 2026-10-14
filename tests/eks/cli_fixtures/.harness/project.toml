@@ -1,0 +1,5 @@
+[project]
+id = "acme/cli"
+
+[plugins]
+trust = ["fixtures"]

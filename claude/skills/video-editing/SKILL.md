@@ -3,6 +3,8 @@ name: video-editing
 description: Use this skill when authoring or editing eks-harness video projects (eks_harness.video Project files) for short-form video edits - beat-synced cuts, captioned talking heads, motion graphics, Blender scenes, TikTok/Reels/Shorts deliverables - or when rendering, publishing or inspecting them through the eks-harness video tools, CLI or studio.
 ---
 
+> New edits use the eks API (`@eks.edit`, `eks-harness run`), which covers clips, effects, transitions, video overlays, the audio mix and review checks now: load `eks-harness:eks-edit` and `eks-harness:eks-gfx-audio`. This skill documents the earlier `eks_harness.video` project API, kept for existing projects and for Blender and web scene media until the eks scene and score executors land.
+
 # Video editing with eks-harness
 
 `eks_harness.video` is the declarative, IR-driven video engine of eks-harness. A

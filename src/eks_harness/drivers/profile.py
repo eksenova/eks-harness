@@ -159,6 +159,8 @@ def web_worker_config(profile: AppProfile, *, sid: str, extensions: list[dict[st
         "wsIgnore": web.get("ws_ignore"),
         "viewports": web.get("viewports"),
         "appOrigins": web.get("app_origins"),
+        "browser": web.get("browser"),
+        "alerts": profile.checks.get("alerts"),
         "theme": {**(theme or {}), **(web.get("theme") or {})} or None,
         "playwrightFrom": [*(str(profile.resolve(p)) for p in web.get("playwright_from") or []),
                            *(str(p) for p in playwright_dirs or [])] or None,

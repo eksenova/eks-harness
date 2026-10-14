@@ -12,9 +12,13 @@ def test_mcp_server_lists_all_tool_groups(tmp_path: Path) -> None:
     listed = asyncio.run(server.list_tools())
     names = {tool.name for tool in listed}
     for expected in ("list_projects", "list_plugins", "trust_plugin", "list_nodes", "submit_job", "choose_backend",
-                     "seed_backend", "list_personas", "score_plan", "score_validate", "video_validate",
-                     "video_render", "video_effects", "video_add_segment"):
+                     "backend_acquire", "lease_acquire", "driver_workers", "eks_session_open", "eks_seeds",
+                     "eks_seed_show", "score_plan", "score_validate", "video_validate", "video_render",
+                     "video_effects", "video_add_segment"):
         assert expected in names, expected
+    removed = {"driver_act", "driver_observe", "driver_capture", "flow_run", "seed_backend", "list_personas",
+               "ensure_backend"}
+    assert not removed & names
     resources = asyncio.run(server.list_resource_templates()) if hasattr(server, "list_resource_templates") else []
     assert resources is not None
     tools.close()

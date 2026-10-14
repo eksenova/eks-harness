@@ -30,7 +30,25 @@ one session can span several projects, for example the web and mobile app of the
   downloadUrl. Give the user the url and rawUrl of anything worth showing. Both need a login;
   share_artifact returns a directUrl that opens the file itself (no page, no player) without one.
 - Sessions can be named by their name (for example a branch name like feature/x) or their slug.
-- get_artifact can attach the image itself (image="full") or its thumbnail (image="thumbnail")."""
+- get_artifact can attach the image itself (image="full") or its thumbnail (image="thumbnail").
+- Runs: eks_run starts a flow, seed, edit, scene or score (a file, Python source or plan JSON) on the hub and
+  returns its report once it ends: status, failures with source lines, checkpoints, artifacts with links, values,
+  timings and cache use. A run that is still going or paused comes back with its id and pause details; follow it
+  with eks_run_status (wait=, report=true) and drive a paused run with eks_run_control (continue, step, retry,
+  skip, edit, do, abort, breakpoints). eks_plan and eks_validate check a plan without running it; eks_ops lists
+  the ops and their argument schemas; eks_flows, eks_flow_get, eks_flow_save and eks_flow_delete read and edit the
+  entry files of a tree.
+- One op: eks_do runs a single op (ui.tap, api.get, capture.shot, ...) without a file; the hub takes the lease and
+  backend it needs and returns its value and artifacts.
+- Interactive sessions (not the store sessions above), for step by step work in one browser or device:
+  eks_session_open(app, platform=, seed=, as_=, backend=) returns a session id once its lease (and backend) is
+  held; eks_session_do(session, op, args) runs one op there and returns its value, artifacts and failure (read
+  the screen cheaply with ui.tree or ui.text before taking a capture.shot); eks_session_export(session, name=)
+  turns the ops that passed into a validated Python flow to save with eks_flow_save; eks_session_close(session)
+  ends it and releases the lease. A session left idle ends after engine.sessionTimeoutSeconds.
+- Seeds: eks_seeds lists the seed snapshots on the hub and eks_seed_show one of them with its personas.
+- Backends and leases: backend_acquire, backend_renew and backend_release hold a shared backend; lease_acquire
+  and lease_release a browser or device; choose_backend, list_backends and backend_info describe them."""
 
 ProjectArg = Annotated[str, Field(description="Project id as owner/name, for example acme/web-app")]
 SessionArg = Annotated[str, Field(description="Session name (often the branch name) or its slug")]
@@ -524,12 +542,18 @@ def create_server(client_factory: Callable[[], HarnessClient], tools: HarnessToo
     ) -> dict[str, Any]:
         return tools.restore_annotation_version(artifact_id, version)
 
-    from eks_harness.mcp_system import register_driver_tools, register_plugin_tools, register_system_tools
+    from eks_harness.mcp_engine import register_engine_tools
+    from eks_harness.mcp_system import (
+        register_driver_tools,
+        register_plugin_tools,
+        register_system_tools,
+    )
     from eks_harness.mcp_video import register_video_tools
 
     register_system_tools(server, tools)
     register_driver_tools(server, tools)
     register_video_tools(server)
+    register_engine_tools(server, tools)
     if plugin_tools is None:
         register_plugin_tools(server, tools)
     return server, tools

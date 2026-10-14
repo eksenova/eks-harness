@@ -1,0 +1,10 @@
+[app]
+name = "reference-web"
+platforms = ["web"]
+
+[web]
+url = "http://127.0.0.1:5391"
+dev_port = 5391
+locale = "tr-TR"
+timezone = "Europe/Istanbul"
+browser = "lease"

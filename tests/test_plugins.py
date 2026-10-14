@@ -59,18 +59,20 @@ def test_manifest_parsing_and_errors(tmp_path: Path) -> None:
         slot = "backend.inspector"
         module = "ui/dist/panel.js"
 
-        [[contributes.skill]]
-        path = "skills/acme"
+        [[contributes.driver_extension]]
+        path = "web/acme.mjs"
     """)
     manifest = load_manifest(root)
     assert manifest.id == "acme.backend" and manifest.api == "1"
-    assert [c.type for c in manifest.contributions] == ["seeder", "ui", "skill"]
+    assert [c.type for c in manifest.contributions] == ["seeder", "ui", "driver_extension"]
     assert manifest.of_type("ui")[0].id == "backend.inspector:panel"
     assert manifest.defaults() == {"count": 2, "label": "base"}
     for bad, message in [
         ({"plugin": {"id": "Bad Id"}}, "plugin.id"),
         ({"plugin": {"id": "a.b", "api": "2"}}, "not supported"),
         ({"plugin": {"id": "a.b"}, "contributes": {"nope": [{"id": "x"}]}}, "unknown contribution"),
+        ({"plugin": {"id": "a.b"}, "contributes": {"driver": [{"id": "x", "entry": "m:a"}]}}, "unknown contribution"),
+        ({"plugin": {"id": "a.b"}, "contributes": {"skill": [{"path": "skills/x"}]}}, "unknown contribution"),
         ({"plugin": {"id": "a.b"}, "contributes": {"backend": [{"id": "x", "entry": "nocolon"}]}}, "entry"),
         ({"plugin": {"id": "a.b"}, "contributes": {"ui": [{"slot": "nowhere", "module": "x.js"}]}}, "slot"),
         ({"plugin": {"id": "a.b"}, "contributes": {"effect": [{"id": "x", "entry": "m:a"},
@@ -199,8 +201,8 @@ def test_plugin_api_lists_trusts_and_serves_ui(client, ctx, tmp_path: Path) -> N
     assert client.get("/api/plugins/nope.plugin").status_code == 404
 
 
-@pytest.mark.parametrize("kind", ["api", "backend", "cli", "credentials", "driver", "mcp-tools", "node-capability",
-                                  "seeder", "skill", "ui"])
+@pytest.mark.parametrize("kind", ["api", "backend", "cli", "credentials", "macro", "mcp-tools", "node-capability",
+                                  "op", "seeder", "ui"])
 def test_scaffold_templates_produce_valid_plugins(kind: str, tmp_path: Path) -> None:
     from eks_harness.cli.plugin_cmds import validate_path
     from eks_harness.plugins.scaffold import scaffold
@@ -236,3 +238,43 @@ def test_plugin_cli_new_and_validate(tmp_path: Path, capsys) -> None:
     assert main(["plugin", "validate", str(tmp_path / "api"), "--json"]) == 0
     assert '"ok": true' in capsys.readouterr().out
     assert main(["plugin", "validate", str(tmp_path / "missing")]) != 0
+
+
+@pytest.mark.parametrize("kind", ["op", "macro"])
+def test_scaffolded_op_and_macro_pass_their_own_tests(kind: str, tmp_path: Path) -> None:
+    import os
+    import subprocess
+    import sys
+
+    from eks_harness.plugins.scaffold import scaffold
+
+    target = tmp_path / kind
+    scaffold(kind, target, f"acme.{kind}kit")
+    env = {**os.environ, "PYTHONPATH": str(target)}
+    done = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(target / "tests")],
+                          cwd=target, env=env, capture_output=True, text=True, timeout=300, check=False)
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
+def test_scaffolded_op_is_listed_by_the_ops_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                                    capsys: pytest.CaptureFixture[str]) -> None:
+    import json
+
+    from eks_harness.cli import main
+    from eks_harness.ir.registry import default_registry
+    from eks_harness.plugins.scaffold import scaffold
+
+    tree = tmp_path / "shop"
+    (tree / ".harness").mkdir(parents=True)
+    (tree / ".harness" / "project.toml").write_text('[project]\nid = "acme/shop"\n\n[plugins]\ntrust = ["acme.opkit"]\n',
+                                                    encoding="utf-8")
+    scaffold("op", tree / ".harness" / "plugins" / "opkit", "acme.opkit")
+    monkeypatch.chdir(tree)
+    monkeypatch.setenv("EKS_HARNESS_NO_PLUGIN_CLI", "1")
+    state = default_registry().snapshot()
+    try:
+        assert main(["ops", "acme_opkit.greet", "--json"]) == 0
+    finally:
+        default_registry().restore(state)
+    listed = json.loads(capsys.readouterr().out)
+    assert "acme_opkit.greet" in json.dumps(listed)

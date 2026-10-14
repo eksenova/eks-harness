@@ -1,5 +1,5 @@
 import React from "react";
-import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, Image, StyleSheet, Text, View } from "react-native";
 import { harnessOptions, themeOf } from "./config";
 import type { Box } from "./geometry";
 
@@ -11,7 +11,13 @@ export type OverlayItem =
   | { key: string; kind: "caption"; text: string; step?: string | number; position?: "top" | "bottom" }
   | { key: string; kind: "callout"; text: string; box: Box | null; placement?: "auto" | "top" | "bottom" }
   | { key: string; kind: "highlight"; box: Box | null }
-  | { key: string; kind: "spotlight"; box: Box | null }
+  | { key: string; kind: "spotlight"; box: Box | null; dim?: number }
+  | { key: string; kind: "arrow"; box: Box | null; toBox: Box | null; text?: string }
+  | { key: string; kind: "blur"; box: Box | null }
+  | { key: string; kind: "redact"; box: Box | null }
+  | { key: string; kind: "icon"; box: Box | null; glyph: string }
+  | { key: string; kind: "image"; box: Box | null; src: string; width?: number }
+  | { key: string; kind: "step"; box: Box | null; index: number | string }
   | { key: string; kind: "beacon"; color: string }
   | { key: string; kind: "patch"; box: Box | null; style?: Record<string, unknown>; text?: string }
   | { key: string; kind: "component"; component: string; props?: Record<string, unknown>; box: Box | null; position?: Record<string, number> };
@@ -27,7 +33,7 @@ type State = {
 
 export type OverlayHost = {
   set: (item: OverlayItem) => void;
-  move: (key: string, box: Box | null) => void;
+  move: (key: string, box: Box | null, field?: "box" | "toBox") => void;
   remove: (key: string) => void;
   clear: (kind?: string) => void;
   list: () => { key: string; kind: string; anchored: boolean; visible: boolean }[];
@@ -100,9 +106,9 @@ export class HarnessOverlay extends React.Component<object, State> {
   componentDidMount() {
     overlayHost = {
       set: (item) => this.setState(({ items }) => ({ items: [...items.filter((i) => i.key !== item.key), item] })),
-      move: (key, box) =>
+      move: (key, box, field = "box") =>
         this.setState(({ items }) => ({
-          items: items.map((i) => (i.key === key && "box" in i ? ({ ...i, box } as OverlayItem) : i)),
+          items: items.map((i) => (i.key === key && field in i ? ({ ...i, [field]: box } as OverlayItem) : i)),
         })),
       remove: (key) => this.setState(({ items }) => ({ items: items.filter((i) => i.key !== key) })),
       clear: (kind) => this.setState(({ items }) => ({ items: kind ? items.filter((i) => i.kind !== kind) : [] })),
@@ -181,16 +187,72 @@ export class HarnessOverlay extends React.Component<object, State> {
         const bottom = b.y + b.height + pad;
         const left = Math.max(0, b.x - pad);
         const right = b.x + b.width + pad;
+        const shade = item.dim === undefined ? null : { opacity: Math.max(0, Math.min(1, item.dim)) / 0.62 };
         return (
           <FadeIn key={item.key} style={StyleSheet.absoluteFill}>
-            <View style={[styles.dim, { left: 0, right: 0, top: 0, height: top }]} />
-            <View style={[styles.dim, { left: 0, right: 0, top: bottom, bottom: 0 }]} />
-            <View style={[styles.dim, { left: 0, width: left, top, height: bottom - top }]} />
-            <View style={[styles.dim, { left: right, right: 0, top, height: bottom - top }]} />
+            <View style={[styles.dim, shade, { left: 0, right: 0, top: 0, height: top }]} />
+            <View style={[styles.dim, shade, { left: 0, right: 0, top: bottom, bottom: 0 }]} />
+            <View style={[styles.dim, shade, { left: 0, width: left, top, height: bottom - top }]} />
+            <View style={[styles.dim, shade, { left: right, right: 0, top, height: bottom - top }]} />
             <View style={[styles.ring, ringFrame(b)]} />
           </FadeIn>
         );
       }
+      case "arrow": {
+        if (!item.box || !item.toBox) return null;
+        const from = { x: item.box.x + item.box.width / 2, y: item.box.y + item.box.height / 2 };
+        const to = { x: item.toBox.x + item.toBox.width / 2, y: item.toBox.y + item.toBox.height / 2 };
+        const angle = Math.atan2(to.y - from.y, to.x - from.x);
+        const inset = Math.min(item.toBox.width, item.toBox.height) / 2;
+        const end = { x: to.x - Math.cos(angle) * inset, y: to.y - Math.sin(angle) * inset };
+        const length = Math.max(0, Math.hypot(end.x - from.x, end.y - from.y));
+        return (
+          <FadeIn key={item.key} style={StyleSheet.absoluteFill}>
+            <View
+              style={[
+                styles.arrowLine,
+                { left: (from.x + end.x) / 2 - length / 2, top: (from.y + end.y) / 2 - 2, width: length, transform: [{ rotate: `${angle}rad` }] },
+              ]}
+            />
+            <View style={[styles.arrowHead, { left: end.x - 9, top: end.y - 9, transform: [{ rotate: `${angle + Math.PI / 2}rad` }] }]} />
+            {item.text ? (
+              <View style={[styles.bubble, { position: "absolute", left: Math.max(8, from.x + 12), top: Math.max(8, from.y - 52) }]}>
+                <Text style={styles.bubbleText}>{item.text}</Text>
+              </View>
+            ) : null}
+          </FadeIn>
+        );
+      }
+      case "blur":
+        if (!item.box) return null;
+        return <View key={item.key} pointerEvents="none" style={[styles.frost, boxFrame(item.box)]} />;
+      case "redact":
+        if (!item.box) return null;
+        return <View key={item.key} pointerEvents="none" style={[styles.redact, boxFrame(item.box, 2)]} />;
+      case "icon":
+        if (!item.box) return null;
+        return (
+          <FadeIn key={item.key} style={[styles.iconBadge, { left: item.box.x + item.box.width - 14, top: item.box.y - 24 }]}>
+            <Text style={styles.iconText}>{item.glyph}</Text>
+          </FadeIn>
+        );
+      case "image": {
+        if (!item.box) return null;
+        const width = item.width ?? 160;
+        const left = Math.max(12, Math.min(size.width - width - 12, item.box.x + item.box.width + 12));
+        return (
+          <FadeIn key={item.key} style={[styles.imageCard, { left, top: Math.max(12, item.box.y), width }]}>
+            <Image source={{ uri: item.src }} style={{ width: "100%", aspectRatio: 1.6 }} resizeMode="contain" />
+          </FadeIn>
+        );
+      }
+      case "step":
+        if (!item.box) return null;
+        return (
+          <FadeIn key={item.key} style={[styles.stepDot, { left: item.box.x - 16, top: item.box.y - 16 }]}>
+            <Text style={styles.badgeText}>{String(item.index)}</Text>
+          </FadeIn>
+        );
       case "beacon":
         return <View key={item.key} pointerEvents="none" style={[styles.beacon, { backgroundColor: item.color }]} />;
       case "patch":
@@ -263,6 +325,10 @@ export class HarnessOverlay extends React.Component<object, State> {
   }
 }
 
+function boxFrame(box: Box, pad = 0) {
+  return { left: box.x - pad, top: box.y - pad, width: box.width + pad * 2, height: box.height + pad * 2 };
+}
+
 function ringFrame(box: Box) {
   return { left: box.x - 6, top: box.y - 6, width: box.width + 12, height: box.height + 12 };
 }
@@ -301,6 +367,23 @@ function stylesFor() {
     finger: {
       position: "absolute", left: 0, top: 0, width: 34, height: 34, borderRadius: 17, backgroundColor: t.pointerFill,
       borderColor: t.pointerBorder, borderWidth: 3, elevation: 6,
+    },
+    arrowLine: { position: "absolute", height: 4, borderRadius: 2, backgroundColor: t.accentLight },
+    arrowHead: {
+      position: "absolute", width: 0, height: 0, borderLeftWidth: 9, borderRightWidth: 9, borderBottomWidth: 18,
+      borderLeftColor: "transparent", borderRightColor: "transparent", borderBottomColor: t.accentLight, marginTop: -4,
+    },
+    frost: { position: "absolute", borderRadius: 6, backgroundColor: t.surface, opacity: 0.94 },
+    redact: { position: "absolute", borderRadius: 4, backgroundColor: "#000" },
+    iconBadge: {
+      position: "absolute", minWidth: 36, height: 36, borderRadius: 18, paddingHorizontal: 8, alignItems: "center",
+      justifyContent: "center", backgroundColor: t.accentLight, elevation: 4,
+    },
+    iconText: { color: t.surfaceDeep, fontSize: 18, fontWeight: "800" },
+    imageCard: { position: "absolute", borderRadius: 10, overflow: "hidden", borderWidth: 2, borderColor: t.accentLight, backgroundColor: t.surface },
+    stepDot: {
+      position: "absolute", width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center",
+      backgroundColor: t.accentLight,
     },
     ripple: { position: "absolute", width: 64, height: 64, borderRadius: 32, borderWidth: 4, borderColor: t.accentLight, backgroundColor: t.ringFill },
   });

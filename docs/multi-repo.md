@@ -41,8 +41,8 @@ the tree a command runs in.
 - MCP over HTTP (`<hub>/mcp/`): one server in the daemon serves every repository, so the client names its
   tree per request with the `X-Eks-Harness-Tree` header or `?tree=` on the URL (an absolute path on the hub
   machine). Plugin MCP tools are then the ones that tree's plugins contribute, `tree` arguments default to
-  it, and `flow_run` runs in it. Without a tree only hub-wide plugin tools are listed and `flow_run` asks for
-  one. Prefer the stdio server for local repositories.
+  it, and `eks_run` and `eks_flows` work in it. Without a tree only hub-wide plugin tools are listed and the
+  tools that need a tree ask for one. Prefer the stdio server for local repositories.
 
 ```json
 {
@@ -117,7 +117,7 @@ A frontend worktree points at a backend worktree by naming that tree:
 
 ```bash
 eks-harness backend acquire --definition api --backend-tree "$BACKEND_TREE"   # prints the lease id and URL
-eks-harness flow run web/.harness/flows/x-check.py --backend api --backend-tree "$BACKEND_TREE"
+eks-harness run web/.harness/flows/x_check.py --backend api --backend-tree "$BACKEND_TREE"
 ```
 
 or in `<app>/.harness/app.toml`:

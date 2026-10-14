@@ -247,7 +247,6 @@ export const systemKeys = {
   scorePlan: (path: string) => ["score-plan", path] as const,
   live: ["score-live"] as const,
   drivers: ["drivers"] as const,
-  driver: (sid: string) => ["driver", sid] as const,
 };
 
 export function useNodes() {
@@ -321,27 +320,6 @@ export function useLiveSessions() {
 
 export function useDriverWorkers() {
   return useQuery({ queryKey: systemKeys.drivers, queryFn: () => api.get<{ items: DriverWorker[] }>("/api/drivers/workers"), refetchInterval: 10_000 });
-}
-
-export function useDriver(sid: string | null) {
-  return useQuery({
-    queryKey: systemKeys.driver(sid ?? ""),
-    queryFn: () => api.get<{ sid: string; platform: string; lease: string; state: string; worker: { kind: string; port: number } | null }>(`/api/drivers/${encodeSegment(sid ?? "")}`),
-    enabled: Boolean(sid),
-    retry: false,
-  });
-}
-
-export function driverAct(sid: string, action: string, params: Record<string, unknown> = {}) {
-  return api.post<{ action: string; value: unknown }>(`/api/drivers/${encodeSegment(sid)}/act`, { action, params });
-}
-
-export function driverObserve(sid: string, query: string, params: Record<string, unknown> = {}) {
-  return api.post<{ query: string; value: unknown }>(`/api/drivers/${encodeSegment(sid)}/observe`, { query, params });
-}
-
-export function driverCapture(sid: string, kind: string, params: Record<string, unknown> = {}) {
-  return api.post<{ kind: string; value: unknown }>(`/api/drivers/${encodeSegment(sid)}/capture`, { kind, params });
 }
 
 export function jobDuration(job: JobOut, now = Date.now() / 1000): number | null {

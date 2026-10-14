@@ -23,7 +23,9 @@ if TYPE_CHECKING:
     from eks_harness.video.compile.markers import MarkerSet
     from eks_harness.video.render.context import RenderContext
 
-__all__ = ["PunchInPlugin"]
+__all__ = ["TRIGGER_STREAM", "PunchInPlugin"]
+
+TRIGGER_STREAM = "punch_in.trigger"
 
 
 class _PunchInProcessor(FrameProcessor):
@@ -71,12 +73,13 @@ class PunchInPlugin(Effect):
         triggers = _resolve_triggers(ir, ctx, ctx.project.fps, seg_duration)
 
         face_locator: Any | None = None
-        try:
-            from .auto_reframe import _FaceTracker
+        if ir.track_speaker:
+            try:
+                from .auto_reframe import _FaceTracker
 
-            face_locator = _FaceTracker()
-        except RuntimeError:
-            face_locator = None
+                face_locator = _FaceTracker()
+            except RuntimeError:
+                face_locator = None
 
         return _PunchInProcessor(zoom_value, triggers, face_locator)
 
@@ -87,6 +90,8 @@ def _resolve_triggers(
     if ir.trigger is not None:
         t = float(resolve_time(ir.trigger, ctx.project, ctx.markers))
         return [round(t * fps)]
+    if TRIGGER_STREAM in ctx.markers.streams:
+        return [round(t * fps) for t in ctx.markers.streams[TRIGGER_STREAM]]
     if not ir.track_speaker:
         return None
     streams: MarkerSet = ctx.markers

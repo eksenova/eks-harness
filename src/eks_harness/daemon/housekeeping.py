@@ -10,6 +10,7 @@ from eks_harness.daemon.hooks import on_shutdown, on_startup
 from eks_harness.daemon.leases import manager as lease_manager
 from eks_harness.db.repos import leases as leases_repo
 from eks_harness.db.repos import web_sessions as web_sessions_repo
+from eks_harness.drivers.procs import Owner, ProcRegistry, reap, stop_owned_by
 from eks_harness.store import retention as store_retention
 
 if TYPE_CHECKING:
@@ -22,13 +23,14 @@ ENDED_LEASE_KEEP_DAYS = 90
 
 
 class Housekeeping:
-    def __init__(self, ctx: "AppContext") -> None:
+    def __init__(self, ctx: AppContext) -> None:
         self.ctx = ctx
         self.stop_event = threading.Event()
         self.thread: threading.Thread | None = None
         self.last_sweep = 0.0
         self.last_retention = 0.0
         self.last_prune = 0.0
+        self.last_reap = 0.0
         self.last_report: dict[str, Any] = {}
 
     @property
@@ -49,6 +51,10 @@ class Housekeeping:
         self.thread = None
 
     def loop(self) -> None:
+        try:
+            self.reap()
+        except Exception:
+            log.exception("initial process reap failed")
         if self.sweep_enabled:
             try:
                 self.sweep()
@@ -73,6 +79,10 @@ class Housekeeping:
         reaped = self.ctx.db.reap()
         if reaped:
             report["closedConnections"] = reaped
+        if force or stamp - self.last_reap > float(self.ctx.config["daemon.sweepSeconds"]):
+            reaped = self.reap()
+            if reaped:
+                report["reaped"] = reaped
         if self.sweep_enabled and (force or stamp - self.last_sweep > float(self.ctx.config["daemon.sweepSeconds"])):
             report["sweep"] = self.sweep()
         if force or stamp - self.last_retention > float(self.ctx.config["retention.checkMinutes"]) * 60:
@@ -83,6 +93,16 @@ class Housekeeping:
             self.last_prune = stamp
         self.last_report = report
         return report
+
+    def reap(self) -> list[dict[str, Any]]:
+        self.last_reap = time.time()
+        found = reap(ProcRegistry.for_paths(self.ctx.paths))
+        for item in found:
+            if item.reason == "owner_gone":
+                log.warning("stopped %s pid %s: its owner %s is gone", item.record.kind, item.record.pid,
+                            item.record.owner_pid)
+        return [{"kind": item.record.kind, "pid": item.record.pid, "reason": item.reason, "killed": item.killed}
+                for item in found if item.reason == "owner_gone"]
 
     def sweep(self) -> dict:
         self.last_sweep = time.time()
@@ -113,18 +133,21 @@ class Housekeeping:
                                             keep_tmp=recording)
 
 
-def housekeeping(ctx: "AppContext") -> Housekeeping:
+def housekeeping(ctx: AppContext) -> Housekeeping:
     if not ctx.has_service(SERVICE):
         ctx.register_service(SERVICE, Housekeeping(ctx))
     return ctx.service(SERVICE)
 
 
 @on_startup(order=30)
-def _start(ctx: "AppContext") -> None:
+def _start(ctx: AppContext) -> None:
     housekeeping(ctx).start()
 
 
 @on_shutdown(order=10)
-def _stop(ctx: "AppContext") -> None:
+def _stop(ctx: AppContext) -> None:
     if ctx.has_service(SERVICE):
         ctx.service(SERVICE).stop()
+    stopped = stop_owned_by(ProcRegistry.for_paths(ctx.paths), Owner.current())
+    if stopped:
+        log.info("stopped %d processes the hub owned", len(stopped))

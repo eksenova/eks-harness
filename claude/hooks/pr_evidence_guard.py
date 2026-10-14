@@ -62,9 +62,10 @@ def main() -> None:
     if any(marker in body for marker in markers):
         return
     deny("This branch changes UI (" + ", ".join(touched) + ") and the PR body carries no UI evidence. Capture "
-         "screenshots (and a video for animated changes) with a flow (eks-harness flow run ...), create share links "
-         "(eks-harness share create <artifact-id>) and paste them into the body. For a change with no visible "
-         "effect put NO-UI-EVIDENCE and one line of why in the body.")
+         "screenshots (and a recording for animated changes) with an eks flow (eks-harness run <flow file>, or the "
+         "eks_run MCP tool), create share links for the artifacts in its report (eks-harness share create "
+         "<artifact-id>) and paste them into the body. For a change with no visible effect put NO-UI-EVIDENCE and "
+         "one line of why in the body.")
 
 
 if __name__ == "__main__":

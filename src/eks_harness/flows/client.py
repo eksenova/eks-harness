@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from eks_harness.cli.client import download_artifacts
+
 FONT_CANDIDATES = ("/System/Library/Fonts/Supplemental/Arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
                    "C:/Windows/Fonts/arial.ttf")
 
@@ -53,21 +55,6 @@ def artifact_of(kind: str, name: str, value: dict | None) -> Artifact | None:
         store = store["video"]
     return Artifact(kind=kind, name=name, id=store.get("id"), url=store.get("url"), raw=store.get("rawUrl"),
                     session=store.get("sessionUrl"))
-
-
-def download(client: Any, ids: list[str], out: Path) -> dict[str, Path]:
-    found: dict[str, Path] = {}
-    out.mkdir(parents=True, exist_ok=True)
-    for artifact_id in [i for i in ids if i]:
-        try:
-            info = client.get(f"/api/artifacts/{artifact_id}")
-            raw = str(info.get("rawUrl") or "")
-            path = raw.split("://", 1)[-1].split("/", 1)[-1] if "://" in raw else raw.lstrip("/")
-            target = out / f"{artifact_id}-{info.get('filename') or 'artifact'}"
-            found[artifact_id] = client.download("/" + path, target, params={"download": "1"})
-        except Exception:
-            continue
-    return found
 
 
 def _font(size: int, image_font: Any) -> Any:
@@ -178,7 +165,7 @@ def stored_sheet(client: Any, art: Artifact, out: Path) -> bool:
     except NotFound:
         return False
     sheets = data.get("sheets") or []
-    found = download(client, [s["id"] for s in sheets], out)
+    found = download_artifacts(client, [s["id"] for s in sheets], out)
     rows = [{"page": s.get("url"), "local": str(found[s["id"]]) if s["id"] in found else None,
              "range": s.get("range")} for s in sheets]
     if rows:

@@ -15,6 +15,12 @@ from _common import claude_config, enabled, payload, project_dir, state_file  # 
 WORKTREE_ADD = re.compile(r"\bgit\s+worktree\s+add\b(?:\s+-\S+(?:\s+\S+)?)*\s+(\S+)")
 
 
+def warm_command(exe: str, target: str) -> list[str]:
+    app, _sep, platform = target.rpartition(":")
+    command = [exe, "do", "ui.settle", "strict=false", "--platform", platform]
+    return [*command, "--app", app] if app else command
+
+
 def target_tree(data: dict) -> Path | None:
     name = data.get("tool_name")
     given = data.get("tool_input") or {}
@@ -48,11 +54,11 @@ def main() -> None:
     env = dict(os.environ)
     if data.get("session_id"):
         env["CLAUDE_CODE_SESSION_ID"] = str(data["session_id"])
-    for platform in config.get("prewarm") or ["web"]:
-        subprocess.Popen([exe, "flow", "run", "-e", "result = 'warm'", "--platform", str(platform), "--no-fetch"],
-                         cwd=str(tree), env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, start_new_session=True)
-    print(f"eks-harness: warming {', '.join(map(str, config.get('prewarm') or ['web']))} for {tree} in the background")
+    targets = [str(item) for item in config.get("prewarm") or ["web"]]
+    for target in targets:
+        subprocess.Popen(warm_command(exe, target), cwd=str(tree), env=env, stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    print(f"eks-harness: warming {', '.join(targets)} for {tree} in the background")
 
 
 if __name__ == "__main__":
