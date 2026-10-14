@@ -1,17 +1,35 @@
 from __future__ import annotations
 
 import argparse
+import json
+import math
 import os
 import sys
 from dataclasses import dataclass
-
-from eks_harness.capture.steplog import read_jsonl
+from pathlib import Path
 
 KEEP_BEFORE_SEC = 1.2
 KEEP_AFTER_SEC = 2.0
 MAX_SPEEDUP = 4.0
 MIN_SCREEN_SEC = 2.0
 FPS = 30
+
+
+def step_times(path: str | Path) -> list[float]:
+    times: list[float] = []
+    with open(path, encoding="utf-8") as handle:
+        for line_no, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise ValueError(f"{path}:{line_no}: not valid JSON") from error
+            t = row.get("t") if isinstance(row, dict) else None
+            if isinstance(t, bool) or not isinstance(t, int | float) or not math.isfinite(t) or t < 0:
+                raise ValueError(f"{path}:{line_no}: step t must be seconds since recording start, not {t!r}")
+            times.append(float(t))
+    return sorted(times)
 
 
 @dataclass(frozen=True)
@@ -180,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     events: list[float] = []
     if args.steps:
         try:
-            events = [entry.t for entry in read_jsonl(args.steps)]
+            events = step_times(args.steps)
         except (OSError, ValueError) as error:
             print(f"step log unreadable, encoder falls back to pixel trim: {error}", file=sys.stderr)
             return 2

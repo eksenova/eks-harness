@@ -3,6 +3,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { resolveTheme, loadWorkerConfig } from '../src/config.mjs'
 import { loadExtensions } from '../src/extensions.mjs'
+import { createPace } from '../src/pace.mjs'
 import { createRunner } from '../src/script-runner.mjs'
 import { tempDir } from '../src/testing.mjs'
 
@@ -24,16 +25,29 @@ describe('extensions', () => {
     const dir = tempDir()
     const module = path.join(dir, 'ext.mjs')
     fs.writeFileSync(module, `export default function extend(kit) {
-      return { helpers: { greet: () => 'hi ' + kit.settings.name + ' ' + kit.id }, routes: { '/x': () => 1 }, junk: 1 }
+      return { helpers: { greet: () => 'hi ' + kit.settings.name + ' ' + kit.id }, ops: () => {}, junk: 1 }
     }`)
     const [ext] = await loadExtensions([{ id: 'acme', module, settings: { name: 'ada' } }], { flag: true })
     expect(ext.id).toBe('acme')
     expect(ext.helpers.greet()).toBe('hi ada acme')
-    expect(Object.keys(ext)).toEqual(['id', 'helpers', 'routes'])
+    expect(Object.keys(ext)).toEqual(['id', 'helpers', 'ops'])
     const broken = path.join(dir, 'broken.mjs')
     fs.writeFileSync(broken, 'export const nothing = 1')
     await expect(loadExtensions([{ module: broken }], {})).rejects.toThrow(/no default export/)
     expect(await loadExtensions([{ module: broken, required: false }], {})).toEqual([])
+  })
+})
+
+describe('pace', () => {
+  it('starts from the configured pace and merges overrides in any key spelling', () => {
+    const { base, parsePace } = createPace({ moveMs: 0 })
+    expect(base).toMatchObject({ moveMs: 0, dwellMs: 400, mobilePressMs: 250 })
+    expect(parsePace('demo')).toMatchObject({ name: 'demo', moveMs: 0, holdMs: 700 })
+    expect(parsePace({ hold_ms: 10, type_per_char: 5 })).toMatchObject({ name: 'custom', holdMs: 10, typeMsPerChar: 5, moveMs: 0 })
+    expect(parsePace('{"screenHoldMs": 20}').screenHoldMs).toBe(20)
+    expect(() => parsePace('fast')).toThrow(/pace takes demo/)
+    expect(() => parsePace({ speed: 1 })).toThrow(/unknown pace key/)
+    expect(() => parsePace({ holdMs: -1 })).toThrow(/non-negative/)
   })
 })
 

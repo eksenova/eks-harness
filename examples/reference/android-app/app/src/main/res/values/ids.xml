@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="title" type="id" />
+    <item name="invoice_list" type="id" />
+    <item name="customer" type="id" />
+    <item name="save" type="id" />
+    <item name="status" type="id" />
+    <item name="camera" type="id" />
+    <item name="permission" type="id" />
+    <item name="delete" type="id" />
+    <item name="route" type="id" />
+</resources>

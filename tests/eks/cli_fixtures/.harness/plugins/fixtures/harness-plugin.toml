@@ -1,0 +1,7 @@
+[plugin]
+id = "fixtures"
+name = "CLI fixtures"
+version = "1.0.0"
+api = "1"
+description = "The backend the CLI fixture flows and seeds run against"
+modules = ["fixture_backends"]

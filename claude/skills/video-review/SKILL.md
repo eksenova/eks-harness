@@ -1,6 +1,6 @@
 ---
 name: video-review
-description: Review a video (recording or render) without opening frames one by one - build a contact sheet (one image with frame-labelled tiles, highlighted cue frames and the audio waveform with beat and cue ticks) and run machine checks against an expected timeline (cuts, motion, OCR text, logos and colour regions, black or frozen spans, safe area, loudness, onsets and beats). Use after every render or recording you need to judge.
+description: "Review a video (recording or render) without opening frames one by one: build a contact sheet (one image with frame-labelled tiles, highlighted cue frames and the audio waveform with beat and cue ticks) and run machine checks against an expected timeline (cuts, motion, OCR text, logos and colour regions, black or frozen spans, safe area, loudness, onsets and beats). Use after every render or recording you need to judge."
 ---
 
 # Video review
@@ -23,8 +23,9 @@ eks-harness video sheet ./render.mp4 --local                                   #
   and a local copy: Read the local copy. Give people the page link, not the raw link.
 - Markers JSON: `{"beats": [s], "downbeats": [s], "cues": [{"t", "label"}], "markers": [{"t", "kind",
   "label"}], "frames": [{"t", "label"}]}`, or a list of markers. Cues and frames become highlighted tiles.
-- Flow recordings get a sheet automatically; the flow report prints `contact sheet` (local) and
-  `contact sheet page`.
+- Recordings from `s.record(...)` and renders from `eks-harness run` appear in the run report as
+  `video <name> <page url> <raw url>` lines (`kind: video` in JSON). Pass the artifact id to `video sheet`;
+  MCP `video_sheet(artifact_id=...)` attaches the sheet images directly.
 
 ## Checks
 
@@ -67,5 +68,9 @@ and the report link to each other on their artifact pages.
   that the beat sheet follows the music: always add a `beats` row.
 - Repos and plugins add check kinds with a `video_check` contribution (a class or function with
   `kind` and `run(ctx, item)`).
+
+Inside an eks edit or score, the same checks run as plan nodes: `e.expect.cut(at=t("beat:8"))`,
+`e.expect.text(...)`, `e.expect.derive()` and friends (skill `eks-harness:eks-checks`). Use `video check`
+for recordings and renders that were not made by a plan with expectations.
 
 Details and every parameter: `docs/video-review.md` in the eks-harness repo.

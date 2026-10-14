@@ -1,0 +1,18 @@
+export const ICONS = {
+  check: '✓',
+  cross: '✕',
+  warning: '⚠',
+  info: 'ℹ',
+  tap: '\u{1F446}',
+  star: '★',
+  plus: '+',
+  minus: '−',
+  lock: '\u{1F512}',
+  bell: '\u{1F514}',
+  'arrow-up': '↑',
+  'arrow-down': '↓',
+  'arrow-left': '←',
+  'arrow-right': '→',
+  search: '\u{1F50D}',
+  heart: '♥',
+}

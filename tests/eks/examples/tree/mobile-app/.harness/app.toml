@@ -1,0 +1,7 @@
+[app]
+name = "mobile-app"
+platforms = ["ios", "android"]
+
+[mobile]
+timezone = "Europe/Istanbul"
+locale = "tr-TR"

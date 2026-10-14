@@ -6,7 +6,7 @@ from fastapi import APIRouter, Body, Depends, Query, Request
 from starlette.concurrency import run_in_threadpool
 
 from eks_harness.api.deps import access_scope, current_principal, get_ctx, require_admin
-from eks_harness.api.errors import bad_request, not_found
+from eks_harness.api.errors import bad_request, conflict, not_found
 from eks_harness.api.schemas import (
     BackendDefinitionList,
     BackendEnsureRequest,
@@ -203,8 +203,11 @@ async def stop(backend_id: str, request: Request, body: BackendStopRequest | Non
     record = ctx.pools.backends.get(backend_id)
     if record is None:
         raise not_found(f"No backend {backend_id}.", error="backend_not_found")
-    await run_in_threadpool(ctx.pools.backends.stop_with_leases, backend_id, body.final or body.cleanup,
-                            body.reason or "requested")
+    try:
+        await run_in_threadpool(ctx.pools.backends.stop_checked, backend_id, body.final or body.cleanup,
+                                body.reason or "requested", body.force)
+    except BackendError as error:
+        raise conflict(str(error), error="backend_has_dependents") from error
     current = ctx.pools.backends.get(backend_id)
     if current is None:
         final = ctx.pools.backends.public(record)

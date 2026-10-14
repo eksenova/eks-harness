@@ -223,6 +223,8 @@ class Context:
             delta = round((measured - item.t) * self.fps)
             if ok is None:
                 ok = abs(delta) <= item.tolerance_frames
+        elif ok is None and measured is not None:
+            ok = True
         if status is None:
             status = "pass" if ok else "fail"
         return CheckResult(index=item.index, kind=item.kind, label=item.label, status=status, expected=item.t,

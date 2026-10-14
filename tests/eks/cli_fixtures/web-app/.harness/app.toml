@@ -1,0 +1,8 @@
+[app]
+name = "web-app"
+platforms = ["web"]
+
+[web]
+url = "http://localhost:3000"
+timezone = "Europe/Istanbul"
+locale = "tr-TR"

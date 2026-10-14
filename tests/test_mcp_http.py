@@ -15,7 +15,8 @@ def test_mcp_over_http_lists_and_calls_tools(app) -> None:
         assert init.status_code == 200, init.text
         listed = client.post("/mcp/", headers=headers, json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
         names = {tool["name"] for tool in listed.json()["result"]["tools"]}
-        assert {"list_projects", "list_plugins", "video_validate", "driver_act", "score_plan"} <= names
+        assert {"list_projects", "list_plugins", "video_validate", "eks_session_open", "score_plan"} <= names
+        assert "driver_act" not in names and "flow_run" not in names
 
 
 def rpc(client: TestClient, method: str, params: dict | None = None, **headers: str) -> dict:
@@ -49,7 +50,7 @@ def test_mcp_over_http_scopes_plugin_tools_and_tree_to_the_request(app, tmp_path
         assert response.status_code == 400
 
 
-def test_flow_run_over_http_needs_a_tree(app) -> None:
+def test_tree_tools_over_http_need_a_tree(app) -> None:
     with TestClient(app) as client:
-        called = rpc(client, "tools/call", {"name": "flow_run", "arguments": {"code": "result = 1"}})
+        called = rpc(client, "tools/call", {"name": "eks_flows", "arguments": {}})
         assert called["result"]["isError"] and "X-Eks-Harness-Tree" in called["result"]["content"][0]["text"]

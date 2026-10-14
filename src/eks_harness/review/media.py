@@ -91,7 +91,7 @@ class VideoInfo:
                 "duration": round(self.duration, 3), "frames": self.frames, "hasAudio": self.has_audio}
 
 
-def probe(path: Path) -> VideoInfo:
+def probe(path: Path, *, audio_only: bool = False, fps: float = 30.0) -> VideoInfo:
     path = Path(path)
     if not path.is_file():
         raise MediaError(f"{path} is not a file")
@@ -101,9 +101,13 @@ def probe(path: Path) -> VideoInfo:
     data = json.loads(out.stdout or "{}")
     streams = data.get("streams") or []
     video = next((s for s in streams if s.get("codec_type") == "video"), None)
+    audio = next((s for s in streams if s.get("codec_type") == "audio"), None)
+    if video is None and audio_only and audio is not None:
+        return VideoInfo(path=path, width=0, height=0, fps=fps,
+                         duration=float((data.get("format") or {}).get("duration") or 0.0), has_audio=True,
+                         sample_rate=int(audio.get("sample_rate") or 0))
     if video is None:
         raise MediaError(f"{path.name} has no video stream")
-    audio = next((s for s in streams if s.get("codec_type") == "audio"), None)
     fps = _rate(video.get("avg_frame_rate")) or _rate(video.get("r_frame_rate")) or 30.0
     times, video_start = _frame_times(path)
     format_start = float((data.get("format") or {}).get("start_time") or 0.0)

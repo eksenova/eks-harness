@@ -1,0 +1,9 @@
+node_modules/
+web-app/dist/
+ios-app/ios/
+ios-app/.expo/
+android-app/.gradle/
+android-app/.kotlin/
+android-app/build/
+android-app/app/build/
+android-app/local.properties

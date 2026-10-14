@@ -58,6 +58,18 @@ APP_EXECUTABLE = re.compile(r"/(?:Google Chrome(?: Beta| Dev| Canary| for Testin
                             r"(?: Beta| Dev| Canary)?|Brave Browser)\.app(?:\.bundle)?/Contents/MacOS/")
 
 
+
+HEADLESS_FLAGS = ("--headless",)
+
+
+def windowed_args(extra: object) -> list[str]:
+    args = [str(item) for item in extra] if isinstance(extra, list) else []
+    blocked = [arg for arg in args if arg.split("=", 1)[0] in HEADLESS_FLAGS]
+    if blocked:
+        raise PoolError(f"browser.extraArgs asks for {', '.join(blocked)}; pool browsers always run with a window")
+    return args
+
+
 def user_data_pattern(root: Path) -> re.Pattern[str]:
     return re.compile(re.escape(f"--user-data-dir={root}") + r"(?=\s|$)")
 
@@ -252,7 +264,7 @@ class BrowserPool(BrowserPoolBase):
                 "--disable-backgrounding-occluded-windows",
                 "--disable-features=CalculateNativeWinOcclusion,MacAppCodeSignClone",
                 "--disable-blink-features=AutomationControlled", "--password-store=basic",
-                "--window-size=1280,800", *[str(a) for a in self.config["browser.extraArgs"]], "about:blank",
+                "--window-size=1280,800", *windowed_args(self.config["browser.extraArgs"]), "about:blank",
             ]
             log_file = self.log_path(index)
             log_file.parent.mkdir(parents=True, exist_ok=True)

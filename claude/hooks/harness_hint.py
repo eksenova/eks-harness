@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _common import claude_config, context, enabled, payload, project_dir, state_file  # noqa: E402
 
-DEFAULT_WORDS = ("harness", "eks-harness", "ehx", "simulator", "emulator", "flow run")
+DEFAULT_WORDS = ("harness", "eks-harness", "ehx", "simulator", "emulator", "eks flow", "eks_run")
 
 
 def main() -> None:
@@ -27,8 +27,9 @@ def main() -> None:
     marker.write_text("1")
     extra = str(config.get("harness_hint") or "")
     context("UserPromptSubmit", "The user mentioned the harness. If they want an app run or verified, load the "
-                                "eks-harness:flows skill and drive it with a flow (one flow per question, read every "
-                                "screenshot and contact sheet it prints). If they talk about the harness itself, "
+                                "eks-harness:eks-flows skill, write an @eks.flow (one flow per question) and run it "
+                                "with 'eks-harness run <file>' or the eks_run MCP tool; look at every screenshot and "
+                                "recording in its report before you answer. If they talk about the harness itself, "
                                 "start nothing." + (f" {extra}" if extra else ""))
 
 

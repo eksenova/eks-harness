@@ -168,7 +168,7 @@ export function MachinesPage() {
                 { key: "state", label: "State", width: "minmax(0, 1fr)", render: (w) => <StateLine state={w.state ?? "running"} /> },
                 { key: "port", label: "Port", width: "80px", align: "end", render: (w) => <span className="num">{w.port}</span> },
               ]}
-              empty={<span>No driver workers. A flow starts one per lease: <span className="mono">eks-harness flow run</span>.</span>}
+              empty={<span>No driver workers. Each run starts one for its lease: <span className="mono">eks-harness run</span>.</span>}
             />
           )}
         </Section>

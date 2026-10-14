@@ -7,7 +7,7 @@
       {"hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/harness_hint.py\""}]}
     ],
     "PreToolUse": [
-      {"matcher": "mcp__.*eks-harness.*__driver_.*", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cheap_inspection_guard.py\""}]},
+      {"matcher": "mcp__.*eks-harness.*__eks_(session_do|run_control)", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cheap_inspection_guard.py\""}]},
       {"matcher": "Bash", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cheap_inspection_guard.py\"", "if": "Bash(eks-harness *)"}, {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cheap_inspection_guard.py\" ehx", "if": "Bash(ehx *)"}, {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pr_evidence_guard.py\"", "if": "Bash(gh pr *)"}]},
       {"matcher": "Edit|Write|MultiEdit|NotebookEdit", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/design_hint.py\""}]}
     ],

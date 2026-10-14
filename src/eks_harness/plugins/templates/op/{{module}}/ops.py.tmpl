@@ -1,0 +1,18 @@
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import Field
+
+import eks
+
+
+def greet(call: Any) -> dict[str, str]:
+    return {"greeting": f"{call.args.salutation} {call.args.name}"}
+
+
+@eks.op("{{module}}", name="greet", out="json", pure=True, executor=greet,
+        description="A greeting for a name, computed on the hub")
+class Greet(eks.Args):
+    name: str = Field(description="who to greet")
+    salutation: str = Field(default="Hello", description="the word before the name")

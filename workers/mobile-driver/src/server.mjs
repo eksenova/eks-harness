@@ -1,12 +1,17 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { captureDevice, heartbeatSids, leaseBackend, leaseReleased, linksOf, request as daemonRequest } from "../../kit/src/daemon-client.mjs";
 import { createBackendLink } from "../../kit/src/backend-link.mjs";
 import { createRunner, renderText } from "../../kit/src/script-runner.mjs";
 import { CLOSE_NEW_DEBUGGER, DevtoolsLink, HARNESS_BINDING, acceptWebSocket, frontendUrl, listPages, runtimePages } from "../../kit/src/devtools-link.mjs";
 import { loadWorkerConfig } from "../../kit/src/config.mjs";
 import { loadExtensions } from "../../kit/src/extensions.mjs";
+import { watchOwner } from "../../kit/src/lifetime.mjs";
+import { createOpRegistry, loadSchemas } from "../../kit/src/ops.mjs";
+import { createPace } from "../../kit/src/pace.mjs";
+import { defineMobileOps } from "./ops.mjs";
 
 export const BRIDGE_GLOBAL = "__ehxBridge";
 
@@ -18,7 +23,6 @@ const LOG_FILE = path.join(STATE_DIR, "app.log");
 const EVENT_FILE = path.join(STATE_DIR, "events.log");
 const opt = (name, fallback) => (CONFIG.options && CONFIG.options[name] !== undefined ? CONFIG.options[name] : fallback);
 let EXTENSIONS = [];
-const EXTENSION_ROUTES = {};
 fs.mkdirSync(STATE_DIR, { recursive: true });
 const PLATFORMS = ["ios", "android"];
 const SLOT_NAME = /^[a-z][a-z0-9_.-]{0,63}$/;
@@ -92,7 +96,7 @@ function json(res, code, payload) {
 }
 
 function resolveFixtureBase64(name) {
-  const candidates = [name, ...FIXTURE_DIRS.map((dir) => path.join(dir, name)), path.join(process.cwd(), name)];
+  const candidates = [name, ...FIXTURE_DIRS.map((dir) => path.join(dir, name)), path.join(MEDIA_DIR, name), path.join(process.cwd(), name)];
   for (const candidate of candidates) {
     try {
       if (candidate && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
@@ -232,6 +236,20 @@ function register(entry, info) {
   }
   clients[info.platform] = { platform: info.platform, session: info.session, info, entry, url: entry.url, title: entry.title, lastSeen: Date.now(), kickedAt: null };
   appendEvent(info.platform, "devtools.hello", { page: entry.title, url: entry.url, ...info });
+  if (CONFIG.now) void freezeClock(info.platform, info);
+}
+
+async function freezeClock(platform, info) {
+  if (!info.commands?.includes("clock")) {
+    appendEvent(platform, "clock.unsupported", { now: CONFIG.now, error: "the app's harness SDK has no clock command; update @eks-harness/react-native" });
+    return;
+  }
+  try {
+    const result = await bridgeCall("clock", { now: CONFIG.now }, { platform });
+    appendEvent(platform, "clock.frozen", result);
+  } catch (error) {
+    appendEvent(platform, "clock.failed", { now: CONFIG.now, error: error?.message ?? String(error) });
+  }
 }
 
 async function probeHello(entry) {
@@ -269,7 +287,14 @@ function onDevtoolsEvent(entry, method, params) {
     clearTimeout(pending.timer);
     if (clients[entry.platform]) clients[entry.platform].lastSeen = Date.now();
     if (message.ok) pending.resolve(message.value);
-    else pending.reject(new Error(`${pending.cmd}: ${message.error}`));
+    else {
+      const error = new Error(`${pending.cmd}: ${message.error}`);
+      if (message.code) {
+        error.code = message.code;
+        error.detail = message.detail ?? {};
+      }
+      pending.reject(error);
+    }
     return;
   }
   if (method === "Runtime.consoleAPICalled") {
@@ -392,51 +417,8 @@ function scriptSid(lane) {
   if (!lane.sid) throw new Error(`this script captures media: run it with the ${lane.platform} lease sid`);
   return lane.sid;
 }
-const PACE_DEFAULTS = { moveMs: 300, dwellMs: 400, typeMsPerChar: 40, holdMs: 700, screenHoldMs: 1500, mobilePressMs: 250 };
-const PACE_FAST = { moveMs: 0, dwellMs: 100, typeMsPerChar: 0, holdMs: 150, screenHoldMs: 400, mobilePressMs: 0 };
-const paceEnv = (name, fallback) => {
-  const raw = process.env[name];
-  if (raw === undefined || raw === "") return fallback;
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < 0) throw new Error(`${name} must be a non-negative integer of ms (got ${raw})`);
-  return value;
-};
-const PACE_ENV = {
-  moveMs: paceEnv("EHX_PACE_MOVE_MS", PACE_DEFAULTS.moveMs),
-  dwellMs: paceEnv("EHX_PACE_DWELL_MS", PACE_DEFAULTS.dwellMs),
-  typeMsPerChar: paceEnv("EHX_PACE_TYPE_MS_PER_CHAR", PACE_DEFAULTS.typeMsPerChar),
-  holdMs: paceEnv("EHX_PACE_HOLD_MS", PACE_DEFAULTS.holdMs),
-  screenHoldMs: paceEnv("EHX_PACE_SCREEN_HOLD_MS", PACE_DEFAULTS.screenHoldMs),
-  mobilePressMs: paceEnv("EHX_PACE_MOBILE_PRESS_MS", PACE_DEFAULTS.mobilePressMs),
-  ...(CONFIG.pace ?? {}),
-};
-const PACE_KEYS = [["moveMs", "move_ms"], ["dwellMs", "dwell_ms"], ["typeMsPerChar", "type_ms_per_char"],
-  ["holdMs", "hold_ms"], ["screenHoldMs", "screen_hold_ms"], ["mobilePressMs", "mobile_press_ms"]];
-function parsePace(spec) {
-  if (spec === undefined || spec === null || spec === "" || spec === "demo") return { name: "demo", ...PACE_ENV };
-  if (spec === "fast") return { name: "fast", ...PACE_FAST };
-  let object;
-  try {
-    object = typeof spec === "string" ? JSON.parse(spec) : spec;
-  } catch {
-    throw new Error(`--pace takes demo, fast or a JSON object (got ${JSON.stringify(spec)?.slice(0, 80)})`);
-  }
-  if (!object || typeof object !== "object" || Array.isArray(object)) {
-    throw new Error("--pace takes demo, fast or a JSON object");
-  }
-  const known = new Set(PACE_KEYS.flat());
-  for (const key of Object.keys(object)) {
-    if (!known.has(key)) throw new Error(`unknown pace key ${JSON.stringify(key)}`);
-  }
-  const merged = { ...PACE_ENV };
-  for (const [camel, snake] of PACE_KEYS) {
-    const value = object[camel] ?? object[snake];
-    if (value === undefined) continue;
-    if (!Number.isInteger(value) || value < 0) throw new Error(`pace.${camel} must be a non-negative integer of ms`);
-    merged[camel] = value;
-  }
-  return { name: typeof spec === "string" ? spec : "custom", ...merged };
-}
+const PACE = createPace(CONFIG.pace);
+const parsePace = PACE.parsePace;
 const paceSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const pressArgs = (lane) => (lane.rec?.pace ? { pressMs: lane.rec.pace.mobilePressMs } : {});
@@ -489,7 +471,7 @@ const TYPE_MARK_MS = 1000;
 function typingMs(lane, pace, { byDefault = false } = {}) {
   if (pace !== undefined && pace !== null && pace !== "") return parsePace(pace).typeMsPerChar;
   if (lane.rec?.typeByChar) return lane.rec.pace.typeMsPerChar;
-  return byDefault ? PACE_ENV.typeMsPerChar : 0;
+  return byDefault ? PACE.base.typeMsPerChar : 0;
 }
 
 async function typeByCharacter(lane, target, characters, perCharMs) {
@@ -732,20 +714,62 @@ function scriptHelpers(lane) {
     patch: async (target, change = {}) => bc("patch", { target, ...change }),
     unpatch: async (key) => bc("unpatch", { key }),
     inject: async (spec = {}) => bc("inject", spec),
-    reload: async () => {
-      const client = await linkedClient(lane.platform);
-      const before = client.session;
-      await client.entry.link.send("Page.reload", {}, { timeout: 10_000 });
-      const back = await until(() => {
-        const current = clients[client.platform];
-        return isLive(current) && current.session !== before;
-      }, 30_000);
-      if (!back) throw new Error("the app did not come back within 30s after Page.reload");
-      await bc("idle", {}, { timeout: 15_000 });
-      return "reloaded";
-    },
+    reload: () => reloadApp(lane),
     ...extensionHelpers(lane),
   };
+}
+
+async function reloadApp(lane) {
+  const client = await linkedClient(lane.platform);
+  const before = client.session;
+  await client.entry.link.send("Page.reload", {}, { timeout: 10_000 });
+  const back = await until(() => {
+    const current = clients[client.platform];
+    return isLive(current) && current.session !== before;
+  }, 30_000);
+  if (!back) throw new Error("the app did not come back within 30s after Page.reload");
+  await bridgeCall("idle", {}, { platform: lane.platform, timeout: 15_000 });
+  return "reloaded";
+}
+
+function newRecording(lane, { name, pace, noPointer = false, fromHere = true } = {}) {
+  const resolved = parsePace(pace);
+  return {
+    name: name ?? "recording", platform: lane.platform, startedAt: Date.now(),
+    pace: resolved, paceName: resolved.name, fromHere: Boolean(fromHere), noPointer: Boolean(noPointer),
+    typeByChar: pace !== undefined && pace !== null && pace !== "" && resolved.typeMsPerChar > 0,
+    steps: [], enrich: [],
+  };
+}
+
+const LOG_LINE = /^(\S+) \[(ios|android)\] \[(error)\]\s*(.*)$/;
+
+function appErrors(platform, since) {
+  let text = "";
+  try {
+    text = fs.readFileSync(LOG_FILE, "utf8");
+  } catch {
+    return [];
+  }
+  const found = [];
+  for (const line of text.split("\n")) {
+    const match = line.match(LOG_LINE);
+    if (!match || match[2] !== platform) continue;
+    if (Date.parse(match[1]) < since) continue;
+    found.push(match[4].slice(0, 300));
+  }
+  return found;
+}
+
+const MEDIA_DIR = path.join(STATE_DIR, "media");
+
+function stageMedia(media) {
+  fs.mkdirSync(MEDIA_DIR, { recursive: true });
+  const digest = createHash("sha256").update(fs.readFileSync(media.path)).digest("hex").slice(0, 16);
+  const name = `${digest}${path.extname(media.name || media.path) || ""}`;
+  const target = path.join(MEDIA_DIR, name);
+  if (!fs.existsSync(target)) fs.copyFileSync(media.path, target);
+  return name;
 }
 
 function logSize() {
@@ -865,7 +889,7 @@ const RUN_ROUTES = {
 };
 
 async function handleBridge(req, res, pathName, url) {
-  const route = RUN_ROUTES[pathName] ?? EXTENSION_ROUTES[pathName];
+  const route = RUN_ROUTES[pathName];
   if (route && req.method === "POST") {
     const body = await readBody(req);
     const asText = url.searchParams.get("format") === "text";
@@ -921,7 +945,9 @@ const beat = () => {
 beat();
 setInterval(beat, Number(opt("heartbeatMs", 20_000))).unref();
 
+let lifetime = null;
 const server = http.createServer((req, res) => {
+  lifetime?.touch();
   handle(req, res).catch((error) => {
     process.stdout.write(`request ${req.url} failed: ${error?.stack ?? error}\n`);
     if (!res.headersSent) json(res, 500, { error: error?.message ?? String(error) });
@@ -935,6 +961,7 @@ async function handle(req, res) {
   if (await handleBridge(req, res, pathName, url)) return;
 
   if (req.method === "GET" && pathName === "/events") return streamEvents(req, res);
+  if (req.method === "POST" && (pathName === "/op" || pathName === "/snapshot")) return opRoute(req, res, pathName);
 
   if (req.method === "GET" && pathName === "/state") {
     if (url.searchParams.get("all")) {
@@ -1001,7 +1028,7 @@ async function handle(req, res) {
       const status = lane.runner.status();
       return [lane.platform, { id: status.id, status: status.status, sid: lane.sid, recording: Boolean(lane.rec) }];
     }));
-    return json(res, 200, { ok: true, port: server.address().port, stateDir: STATE_DIR, lastAppContact, metroPort: METRO_PORT || null, devtools, runs, sids: SIDS, slots: [...FAKE_SLOTS], extensions: EXTENSIONS.map((ext) => ext.id) });
+    return json(res, 200, { ok: true, kind: "mobile", version: CONFIG.codeHash ?? null, platforms: PLATFORMS, ops: OPS.names(), pid: process.pid, startedAt: new Date(STARTED_AT).toISOString(), schemaHash: CONFIG.opsSchemaHash ?? null, port: server.address().port, stateDir: STATE_DIR, lastAppContact, metroPort: METRO_PORT || null, devtools, runs, sids: SIDS, slots: [...FAKE_SLOTS], extensions: EXTENSIONS.map((ext) => ext.id) });
   }
 
   if (req.method === "GET" && pathName === "/devtools") {
@@ -1052,8 +1079,46 @@ function streamEvents(req, res) {
   req.on("close", () => eventClients.delete(res));
 }
 
+const STARTED_AT = Date.now();
+
+const MOBILE = {
+  config: CONFIG,
+  startedAt: STARTED_AT,
+  log: (line) => process.stdout.write(`${line}\n`),
+  bridgeCall,
+  laneFor,
+  pacedBridge,
+  pressArgs,
+  fillInput,
+  typingMs,
+  readMs,
+  reload: reloadApp,
+  newRecording,
+  appErrors,
+  stageMedia,
+  armFake,
+  clearFakes,
+};
+
+const OPS = createOpRegistry({ platform: "mobile", schemas: loadSchemas(CONFIG.opsSchemaFile), log: MOBILE.log });
+const MOBILE_OPS = defineMobileOps(OPS.define, MOBILE);
+
+async function opRoute(req, res, pathName) {
+  const body = await readBody(req);
+  const started = Date.now();
+  try {
+    const result = pathName === "/op" ? await OPS.handle(body) : await MOBILE_OPS.snapshot(body);
+    if (pathName === "/op") process.stdout.write(`${body.op} ${body.phase ?? "run"} ${result.ok ? "ok" : `failed (${result.error?.code})`} ${Date.now() - started}ms\n`);
+    return json(res, 200, result);
+  } catch (error) {
+    return json(res, 200, { ok: false, error: { code: "driver_error", message: error?.message ?? String(error), detail: {}, retryable: true }, files: [] });
+  }
+}
+
 const KIT = {
   config: CONFIG,
+  defineOp: OPS.define,
+  mobile: MOBILE,
   stateDir: STATE_DIR,
   backend: (sid) => backendLinkFor(sid ?? leaseSids()[0]).get(),
   log: (line) => process.stdout.write(`${line}\n`),
@@ -1070,9 +1135,7 @@ const KIT = {
 
 EXTENSIONS = await loadExtensions(CONFIG.extensions ?? [], KIT, KIT.log);
 for (const ext of EXTENSIONS) {
-  for (const [route, fn] of Object.entries(ext.routes ?? {})) {
-    EXTENSION_ROUTES[route.startsWith("/") ? route : `/${route}`] = async (body) => fn(body ?? {});
-  }
+  if (typeof ext.ops === "function") await ext.ops(OPS.define, MOBILE);
 }
 
 function extensionHelpers(lane) {
@@ -1085,6 +1148,7 @@ function extensionHelpers(lane) {
 }
 
 server.listen(PORT, "127.0.0.1", () => {
+  lifetime = watchOwner();
   const bound = server.address().port;
   const ready = { ready: true, port: bound, pid: process.pid, metroPort: METRO_PORT || null, sids: SIDS, extensions: EXTENSIONS.map((ext) => ext.id) };
   fs.writeFileSync(path.join(STATE_DIR, "worker.json"), JSON.stringify(ready));

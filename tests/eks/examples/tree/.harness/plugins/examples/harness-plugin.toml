@@ -1,0 +1,7 @@
+[plugin]
+id = "examples"
+name = "Design examples"
+version = "1.0.0"
+api = "1"
+description = "Seed resource kinds used by the design examples"
+modules = ["example_resources"]

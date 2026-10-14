@@ -4,8 +4,6 @@ import hashlib
 import json
 import os
 import shutil
-import signal
-import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -13,15 +11,39 @@ from pathlib import Path
 from typing import Any
 
 from eks_harness.drivers.client import WorkerClient, WorkerError
+from eks_harness.drivers.procs import (
+    Owner,
+    ProcRegistry,
+    kill_group,
+    spawn_owned,
+    stop_record,
+)
 from eks_harness.paths import Paths
 
 WORKERS_ENV = "EKS_HARNESS_WORKERS_DIR"
 NODE_ENV = "EKS_HARNESS_NODE"
 SCRIPTS = {"web": "web-driver/src/server.mjs", "mobile": "mobile-driver/src/server.mjs"}
 KIT_FILES = ("kit/src/daemon-client.mjs", "kit/src/script-runner.mjs", "kit/src/devtools-link.mjs",
-             "kit/src/config.mjs", "kit/src/extensions.mjs", "kit/src/backend-link.mjs")
+             "kit/src/config.mjs", "kit/src/extensions.mjs", "kit/src/backend-link.mjs", "kit/src/ops.mjs",
+             "kit/src/schema.mjs", "kit/src/targets.mjs", "kit/src/lifetime.mjs", "kit/src/icons.mjs",
+             "kit/src/pace.mjs", "kit/src/boxmap.mjs", "web-driver/src/ops.mjs",
+             "mobile-driver/src/ops.mjs")
 UNHASHED_CONFIG = ("port", "stateDir", "backend")
 READY_TIMEOUT = 60.0
+IDLE_EXIT_MS = 30 * 60 * 1000
+WORKER_KIND_PREFIX = "worker."
+
+
+def hub_owner(paths: Paths) -> Owner:
+    try:
+        info = json.loads(paths.daemon_info_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        info = None
+    if isinstance(info, dict) and isinstance(info.get("pid"), int):
+        owner = Owner(int(info["pid"]), info.get("started") or None)
+        if owner.alive():
+            return owner
+    return Owner.current()
 
 
 def workers_root() -> Path:
@@ -29,11 +51,10 @@ def workers_root() -> Path:
     if override:
         return Path(override)
     here = Path(__file__).resolve()
-    packaged = here.parent.parent / "_workers"
-    if (packaged / SCRIPTS["web"]).is_file():
-        return packaged
     source = here.parents[3] / "workers"
-    return source
+    if (source / SCRIPTS["web"]).is_file():
+        return source
+    return here.parent.parent / "_workers"
 
 
 def node_binary() -> str:
@@ -100,10 +121,14 @@ class WorkerHandle:
 
 
 class WorkerManager:
-    def __init__(self, paths: Paths, *, root: Path | None = None, env: dict[str, str] | None = None) -> None:
+    def __init__(self, paths: Paths, *, root: Path | None = None, env: dict[str, str] | None = None,
+                 owner: Owner | None = None, idle_exit_ms: int = IDLE_EXIT_MS) -> None:
         self.paths = paths
         self.root = root or workers_root()
         self.env = env or {}
+        self.owner = owner
+        self.idle_exit_ms = idle_exit_ms
+        self.procs = ProcRegistry.for_paths(paths)
 
     def state_dir(self, kind: str, key: str) -> Path:
         safe = "".join(ch if ch.isalnum() or ch in "-_." else "-" for ch in key)[:80]
@@ -148,10 +173,10 @@ class WorkerManager:
         code = code_hash(kind, self.root)
         wanted = config_hash(config)
         current = self.get(kind, key)
-        if current and not restart and current.code == code and current.config_hash == wanted:
-            if current.client().alive(kind):
-                current.reused = True
-                return current
+        if (current and not restart and current.code == code and current.config_hash == wanted
+                and current.client().alive()):
+            current.reused = True
+            return current
         if current:
             self.stop(kind, key)
         return self._spawn(kind, key, config, code, wanted, timeout)
@@ -164,7 +189,7 @@ class WorkerManager:
         ready_file = state_dir / "worker.json"
         ready_file.unlink(missing_ok=True)
         config_file = state_dir / "config.json"
-        full = {**config, "port": 0, "stateDir": str(state_dir)}
+        full = {**config, "port": 0, "stateDir": str(state_dir), "codeHash": code}
         fd = os.open(config_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(full, handle)
@@ -174,25 +199,28 @@ class WorkerManager:
         script = self.root / SCRIPTS[kind]
         if not script.is_file():
             raise WorkerError(f"the {kind} driver worker is missing at {script}")
+        owner = self.owner or hub_owner(self.paths)
         with open(log_file, "ab") as log:
-            process = subprocess.Popen([node_binary(), str(script)], cwd=str(state_dir), env=env, stdout=log,
-                                       stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+            process, proc = spawn_owned([node_binary(), str(script)], kind=WORKER_KIND_PREFIX + kind,
+                                        registry=self.procs, owner=owner, cwd=state_dir, env=env, stdout=log,
+                                        install=str(self.root), key=key, idle_exit_ms=self.idle_exit_ms)
         deadline = time.time() + timeout
         ready: dict[str, Any] | None = None
         while time.time() < deadline:
             if process.poll() is not None:
+                self.procs.remove(proc.id)
                 raise WorkerError(f"the {kind} driver worker exited with {process.returncode}:\n{_tail(log_file)}")
             if ready_file.is_file():
                 try:
-                    ready = json.loads(ready_file.read_text(encoding="utf-8"))
-                    if ready.get("pid") == process.pid:
-                        break
+                    loaded = json.loads(ready_file.read_text(encoding="utf-8"))
                 except ValueError:
-                    pass
-                ready = None
+                    loaded = None
+                if isinstance(loaded, dict) and loaded.get("pid") == process.pid:
+                    ready = loaded
+                    break
             time.sleep(0.05)
         if not ready:
-            _kill(process.pid)
+            stop_record(self.procs, proc)
             raise WorkerError(f"the {kind} driver worker did not start within {timeout:.0f}s:\n{_tail(log_file)}")
         handle = WorkerHandle(kind=kind, key=key, pid=process.pid, port=int(ready["port"]), state_dir=state_dir,
                               log_file=log_file, code=code, config_hash=wanted, started_at=time.time(),
@@ -209,37 +237,17 @@ class WorkerManager:
             data = json.loads(file.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return False
-        stopped = _kill(int(data.get("pid") or 0))
+        pid = int(data.get("pid") or 0)
+        stopped = False
+        for proc in self.procs.records():
+            if proc.pid == pid:
+                stopped = stop_record(self.procs, proc) or stopped
+        stopped = kill_group(pid) or stopped
         file.unlink(missing_ok=True)
         return stopped
 
     def stop_all(self) -> int:
         return sum(1 for handle in self.list() if self.stop(handle.kind, handle.key))
-
-
-def _kill(pid: int, grace: float = 3.0) -> bool:
-    if not pid_alive(pid):
-        return False
-    try:
-        os.killpg(pid, signal.SIGTERM)
-    except (ProcessLookupError, PermissionError, OSError):
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except OSError:
-            return False
-    deadline = time.time() + grace
-    while time.time() < deadline and pid_alive(pid):
-        try:
-            os.waitpid(pid, os.WNOHANG)
-        except ChildProcessError:
-            pass
-        time.sleep(0.05)
-    if pid_alive(pid):
-        try:
-            os.killpg(pid, signal.SIGKILL)
-        except OSError:
-            pass
-    return True
 
 
 def _tail(path: Path, lines: int = 30) -> str:

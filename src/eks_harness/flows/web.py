@@ -44,8 +44,8 @@ class WebApp(App):
     def healthy(self) -> bool:
         if self.worker is None:
             return False
-        status, res = self.worker.post("/status", {}, 3)
-        return status == 200 and isinstance(res, dict) and not res.get("error")
+        status, res = self.worker.get("/health", 3)
+        return status == 200 and isinstance(res, dict) and res.get("kind") == "web"
 
     def goto(self, path: str) -> str:
         return self.call("goto", path)

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from eks_harness.pools import devices
+from eks_harness.pools.base import PoolError
 
 
 def make_jdk(home: Path) -> Path:
@@ -189,39 +190,43 @@ def bare_pool() -> devices.DevicePool:
     return pool
 
 
-def test_show_simulator_reports_a_failed_open(xcode: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_show_simulator_refuses_to_run_without_a_window(xcode: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hub = make_app(xcode.parent / "Applications" / "DeviceHub.app")
     shell = FakeShell({"xcode-select -p": (0, f"{xcode}\n"), "mdfind": (0, ""),
                        "open": (1, "LSOpenURLsWithRole() failed")})
     monkeypatch.setattr(devices, "sh", shell)
+    monkeypatch.setattr(devices, "SHOW_WAIT", 0.1)
     pool = bare_pool()
-    pool.show_simulator({"name": "Harness iOS 1"}, "UDID-1")
-    assert ["open", "-g", "-a", str(hub), "devices://device/open?id=UDID-1"] in shell.calls
-    assert len(pool.host.messages) == 1
-    assert pool.host.messages[0].startswith("warning: Harness iOS 1: could not open DeviceHub")
-    assert "LSOpenURLsWithRole() failed" in pool.host.messages[0]
+    with pytest.raises(PoolError) as refused:
+        pool.show_simulator({"name": "Harness iOS 1"}, "UDID-1")
+    opens = [call for call in shell.calls if call[0] == "open"]
+    assert opens == [["open", "-g", "-a", str(hub), "devices://device/open?id=UDID-1"]] * devices.SHOW_ATTEMPTS
+    assert "never runs a simulator without a window" in str(refused.value)
+    assert "LSOpenURLsWithRole() failed" in str(refused.value)
 
 
-def test_show_simulator_is_quiet_when_the_window_opens(xcode: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    make_app(xcode / "Applications" / "Simulator.app")
+def test_show_simulator_waits_for_the_window_app(xcode: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    app = make_app(xcode / "Applications" / "Simulator.app")
     monkeypatch.setattr(devices, "sh", FakeShell({"xcode-select -p": (0, f"{xcode}\n"), "open": (0, "")}))
+    monkeypatch.setattr(devices, "process_table", lambda: {7: (1, f"{app}/Contents/MacOS/Simulator")})
     pool = bare_pool()
     pool.show_simulator({"name": "Harness iOS 1"}, "UDID-1")
     assert pool.host.messages == []
 
 
-def test_show_simulator_warns_without_a_simulator_ui(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_show_simulator_fails_without_a_simulator_ui(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(devices, "sh", FakeShell({"xcode-select -p": (2, ""), "mdfind": (0, "")}))
     pool = bare_pool()
-    pool.show_simulator({"name": "Harness iOS 1"}, "UDID-1")
-    assert pool.host.messages and "neither Simulator.app nor DeviceHub.app" in pool.host.messages[0]
+    with pytest.raises(PoolError) as missing:
+        pool.show_simulator({"name": "Harness iOS 1"}, "UDID-1")
+    assert "neither Simulator.app nor DeviceHub.app" in str(missing.value)
 
 
 def test_quit_simulator_ui_only_quits_a_running_app(xcode: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hub = make_app(xcode.parent / "Applications" / "DeviceHub.app")
     shell = FakeShell({"xcode-select -p": (0, f"{xcode}\n"), "mdfind": (0, ""), "osascript": (0, "")})
     monkeypatch.setattr(devices, "sh", shell)
-    monkeypatch.setattr(devices, "process_table", lambda: {})
+    monkeypatch.setattr(devices, "process_table", dict)
     pool = bare_pool()
     pool.quit_simulator_ui()
     assert not any(call[0] == "osascript" for call in shell.calls)

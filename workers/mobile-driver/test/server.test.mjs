@@ -18,7 +18,6 @@ describe('mobile driver worker', () => {
     const ext = path.join(tempDir(), 'ext.mjs')
     fs.writeFileSync(ext, `export default function extend(kit) {
       return {
-        routes: { '/acme/ping': async (body) => ({ pong: body.n + 1, slots: kit.config.fakeSlots }) },
         helpers: (lane) => ({ whoami: async () => lane.platform }),
       }
     }`)
@@ -61,11 +60,10 @@ describe('mobile driver worker', () => {
     expect(event).toMatchObject({ source: 'ios', name: 'nfc.read', data: { ok: true } })
   })
 
-  it('reports health, mounts extension routes and heartbeats its leases', async () => {
+  it('reports health and heartbeats its leases', async () => {
     const health = await worker.get('/health')
     expect(health.body).toMatchObject({ ok: true, sids: { ios: 'sidios01' }, extensions: ['acme'] })
     expect(health.body.slots).toEqual(expect.arrayContaining(['nfc', 'boarding-pass']))
-    expect((await worker.post('/acme/ping', { n: 1 })).body).toEqual({ pong: 2, slots: ['nfc'] })
     await new Promise((resolve) => setTimeout(resolve, 600))
     expect(daemon.calls.filter((call) => call.path === '/api/leases/sidios01/heartbeat').length).toBeGreaterThan(1)
     const exec = await worker.post('/exec', { script: 'return 1' })

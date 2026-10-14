@@ -1,8 +1,8 @@
 {
   "name": "eks-harness",
   "displayName": "eks-harness",
-  "version": "0.3.0",
-  "description": "Drive browsers, simulators and emulators, run backends and flows, capture evidence, edit and render videos, and score synchronized Blender, web and device scenes with eks-harness.",
+  "version": "0.4.0",
+  "description": "Build plans with the eks Python API and run them on the eks-harness hub: flows that drive web, iOS and Android apps, seeds, network control, debugging, edits, motion graphics and audio mixes, with the eks_* MCP tools, evidence capture and review.",
   "author": {
     "name": "eks-harness maintainers"
   },
@@ -10,12 +10,12 @@
     "testing",
     "ui",
     "harness",
+    "dsl",
     "playwright",
     "ios",
     "android",
     "react-native",
     "video",
-    "blender",
     "mcp"
   ],
   "mcpServers": {

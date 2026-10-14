@@ -161,6 +161,32 @@ def motion(ctx: Context, item: Expectation) -> CheckResult:
                       data={"window": [a, b]})
 
 
+@check("motion_level")
+def motion_level(ctx: Context, item: Expectation) -> CheckResult:
+    low, high = item.params.get("min"), item.params.get("max")
+    if low is None and high is None:
+        raise ExpectationError("motion_level needs min or max")
+    d = ctx.diffs()
+    if item.params.get("window") is not None:
+        a, b = ctx.window(item)
+    else:
+        a, b = 0.0, ctx.info.duration
+    first, last = _frame_range(ctx, a, b)
+    values = d[max(1, first): last + 1]
+    if values.size == 0:
+        return ctx.result(item, ok=False, detail=f"no frame pairs in {a:.2f}-{b:.2f}s", data={"window": [a, b]})
+    mean = float(values.mean())
+    problems = []
+    if low is not None and mean < float(low):
+        problems.append(f"mean motion {mean:.4f} is below {float(low):g}")
+    if high is not None and mean > float(high):
+        problems.append(f"mean motion {mean:.4f} is above {float(high):g}")
+    detail = "; ".join(problems) or f"mean motion {mean:.4f} in {a:.2f}-{b:.2f}s"
+    return ctx.result(item, ok=not problems, detail=detail,
+                      data={"mean": round(mean, 5), "peak": round(float(values.max()), 5), "window": [a, b],
+                            "pairs": int(values.size)})
+
+
 def _spans(mask: np.ndarray) -> list[tuple[int, int]]:
     spans = []
     start = None
@@ -181,8 +207,14 @@ def _allowed(ctx: Context, item: Expectation) -> list[tuple[float, float]]:
 
 def _span_result(ctx: Context, item: Expectation, spans: list[tuple[int, int]], limit: int, what: str) -> CheckResult:
     allowed = _allowed(ctx, item)
+    window = item.params.get("window")
     rows = []
     for start, end in spans:
+        if window is not None:
+            low, high = ctx.info.frame_at(float(window[0])), ctx.info.frame_at(float(window[1]))
+            start, end = max(start, low), min(end, high)
+            if end < start:
+                continue
         frames = end - start + 1
         t0, t1 = ctx.info.time_of(start), ctx.info.time_of(end)
         if frames <= limit or any(a - 1e-6 <= t0 and t1 <= b + 1e-6 for a, b in allowed):

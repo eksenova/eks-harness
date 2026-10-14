@@ -1,0 +1,7 @@
+[plugin]
+id = "reference"
+name = "Reference apps"
+version = "1.0.0"
+api = "1"
+description = "App runtimes, backends and seed resource kinds of the reference apps the driver and data checks run against"
+modules = ["reference_apps", "reference_backend"]

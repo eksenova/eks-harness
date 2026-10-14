@@ -13,7 +13,7 @@ from eks_harness.drivers.profile import (
     pace_from_config,
     web_worker_config,
 )
-from eks_harness.drivers.registry import driver_extensions, driver_for, flow_helpers
+from eks_harness.drivers.registry import driver_extensions, flow_helpers
 from eks_harness.plugins import PluginHost
 
 
@@ -69,7 +69,7 @@ def test_profiles_expand_env_and_build_worker_configs(tmp_path: Path, config: Co
         web_worker_config(load_profile(tmp_path / "nourl/.harness"), sid="s", extensions=[], pace={})
 
 
-def test_extensions_helpers_and_builtin_drivers_come_from_plugins(tmp_path: Path, config: Config) -> None:
+def test_extensions_and_helpers_come_from_plugins(tmp_path: Path, config: Config) -> None:
     tree = tmp_path / "repo"
     plugin = tree / ".harness/plugins/acme"
     write(plugin / "harness-plugin.toml", """
@@ -104,9 +104,6 @@ def test_extensions_helpers_and_builtin_drivers_come_from_plugins(tmp_path: Path
     assert [e["id"] for e in driver_extensions(host, "android", tree)] == ["acme.app:fakes"]
     helpers = flow_helpers(host, "web", tree)
     assert [h.__name__ for h in helpers] == ["WebHelpers"] and flow_helpers(host, "ios", tree) == []
-    driver = driver_for(host, "ios", tree)
-    assert driver.platform == "ios" and "patch" in driver.capabilities()["act"]
-    assert driver_for(host, "web").capabilities()["lease"] == "browser"
 
 
 def test_profile_extends_another_app(tmp_path: Path) -> None:
@@ -118,7 +115,7 @@ def test_profile_extends_another_app(tmp_path: Path) -> None:
         bundle_id = "com.acme.mobile"
         metro = { port = 8081, reset = false }
     """)
-    write(tmp_path / "apps/mobile/.harness/app.py", "from eks_harness.flows import MobileApp\n\n\nclass App(MobileApp):\n    pass\n")
+    write(tmp_path / "apps/mobile/.harness/app.py", "class App:\n    pass\n")
     write(tmp_path / "ads/.harness/app.toml", """
         [app]
         extends = "../apps/mobile"
@@ -134,7 +131,7 @@ def test_profile_extends_another_app(tmp_path: Path) -> None:
     assert profile.app_file == (tmp_path / "apps/mobile/.harness/app.py").resolve()
     assert "extends" not in profile.raw["app"]
 
-    write(tmp_path / "ads/.harness/app.py", "from eks_harness.flows import MobileApp\n\n\nclass App(MobileApp):\n    pass\n")
+    write(tmp_path / "ads/.harness/app.py", "class App:\n    pass\n")
     assert load_profile(tmp_path / "ads/.harness").app_file == tmp_path / "ads/.harness/app.py"
 
 

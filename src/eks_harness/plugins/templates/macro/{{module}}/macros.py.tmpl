@@ -1,0 +1,13 @@
+from __future__ import annotations
+
+import eks
+from eks import by
+
+
+@eks.macro(platforms=("web",), description="Signs in through the login form and waits for the dashboard")
+def sign_in(s: eks.Session, email: str, password: str) -> None:
+    s.ui.nav("/login")
+    s.ui.fill(by.label("Email"), email)
+    s.ui.fill(by.label("Password"), password)
+    s.ui.tap(by.role("button", "Sign in"))
+    s.ui.wait_for(by.test_id("dashboard"))

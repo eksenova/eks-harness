@@ -43,8 +43,8 @@ class WorkerClient:
     def get(self, route: str, timeout: float = 10) -> tuple[int, Any]:
         return self.request("GET", route, None, timeout)
 
-    def alive(self, kind: str) -> bool:
-        status, _ = self.post("/status", {}, 5) if kind == "web" else self.get("/health", 5)
+    def alive(self) -> bool:
+        status, _ = self.get("/health", 5)
         return status == 200
 
     def exec(self, script: str, *, sid: str | None = None, platform: str | None = None,

@@ -1,0 +1,5 @@
+[project]
+id = "examples/design"
+
+[plugins]
+trust = ["examples"]

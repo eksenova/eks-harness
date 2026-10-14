@@ -1,0 +1,7 @@
+[plugin]
+id = "cookbook"
+name = "DSL cookbook"
+version = "1.0.0"
+api = "1"
+description = "Seed resource kinds and extensions used by the DSL examples"
+modules = ["cookbook_resources", "cookbook_extensions"]

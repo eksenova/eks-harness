@@ -1,0 +1,8 @@
+[app]
+name = "reference-android"
+platforms = ["android"]
+
+[mobile]
+bridge = false
+android_package = "com.eksenova.reference"
+locale = "tr-TR"

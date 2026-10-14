@@ -7,7 +7,7 @@ name = "eks-harness"
 dynamic = ["version"]
 description = "Plugin-driven harness for driving, capturing and editing apps: browser and device pools, backends, an artifact store, a video engine with Blender and web scenes, synchronized scores and a web UI"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -38,6 +38,9 @@ video = [
     "pillow>=10.0",
     "websockets>=13",
     "psutil>=5.9",
+    "scipy>=1.13",
+    "skia-python>=144",
+    "PyOpenGL>=3.1.7",
     "pynvml>=11; platform_system != 'Darwin'",
     "wmi>=1.5; platform_system == 'Windows'",
     "pywin32>=306; sys_platform == 'win32'",
@@ -179,7 +182,7 @@ exclude = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/eks_harness"]
+packages = ["src/eks_harness", "src/eks"]
 artifacts = [
     "src/eks_harness/web_dist/**",
     "src/eks_harness/assets/**",

@@ -10,22 +10,16 @@ MANIFEST_NAME = "harness-plugin.toml"
 API_VERSION = "1"
 PLUGIN_ID = re.compile(r"[a-z0-9][a-z0-9_-]*(?:\.[a-z0-9][a-z0-9_-]*)*")
 CONTRIBUTION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]*")
+MODULE_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*")
+RESERVED_PLUGIN_IDS = frozenset({"eks", "project"})
 
 CONTRIBUTION_TYPES: dict[str, str] = {
-    "driver": "controls a target (browser, simulator, emulator, device, desktop app)",
-    "driver_extension": "a JS module loaded into a driver worker that adds script helpers (login, app navigation)",
+    "driver_extension": "a JS module loaded into a driver worker that registers typed ops with defineOp",
     "flow_helpers": "a Python class mixed into flow apps for a platform (app menus, login screens)",
-    "platform": "a kind of target and its device pool",
-    "device_pool": "a pool of devices or browsers for a platform",
-    "app_profile": "how to build, install, launch and identify an app",
     "backend": "a service stack an app talks to",
     "backend_policy": "picks a backend for a tree (local, staging, ...)",
     "seeder": "fills a backend with a scenario",
     "credentials": "personas and secrets for logins",
-    "login": "logs a driver session in as a persona",
-    "fake": "fake inputs a driver can arm (camera, NFC, documents, location)",
-    "capture": "a capture kind (screenshot, recording, dump)",
-    "annotator": "draws annotations into captures",
     "viewer": "an artifact viewer for the UI",
     "effect": "a video effect",
     "transition": "a video transition",
@@ -41,18 +35,13 @@ CONTRIBUTION_TYPES: dict[str, str] = {
     "node_capability": "a capability a node can offer",
     "node_job": "a job kind nodes can run (frame ranges, scene previews, builds)",
     "mcp_tools": "MCP tools",
-    "mcp_resources": "MCP resources",
     "cli": "CLI commands",
     "api": "HTTP routes mounted under /api/plugins/<plugin>",
     "ui": "a UI module for a slot",
-    "skill": "a Claude Code skill",
-    "hook": "a Claude Code hook",
-    "agent": "a Claude Code agent",
-    "template": "a plugin scaffold",
 }
 
-ENTRY_TYPES = frozenset(CONTRIBUTION_TYPES) - {"ui", "skill", "hook", "agent", "template", "viewer", "driver_extension"}
-PATH_TYPES = frozenset({"skill", "hook", "agent", "template", "driver_extension"})
+ENTRY_TYPES = frozenset(CONTRIBUTION_TYPES) - {"ui", "viewer", "driver_extension"}
+PATH_TYPES = frozenset({"driver_extension"})
 UI_SLOTS = frozenset({
     "nav.section", "route", "project.tab", "session.panel", "artifact.viewer", "device.controls",
     "backend.inspector", "node.inspector", "score.track", "score.inspector", "settings.page", "command",
@@ -143,6 +132,7 @@ class Manifest:
     python_paths: tuple[str, ...] = (".", "src")
     contributions: tuple[Contribution, ...] = ()
     settings: tuple[SettingSpec, ...] = ()
+    modules: tuple[str, ...] = ()
     raw: dict[str, Any] = field(default_factory=dict, compare=False, repr=False)
 
     @property
@@ -164,7 +154,7 @@ class Manifest:
             counts[c.type] = counts.get(c.type, 0) + 1
         return {"id": self.id, "name": self.name, "version": self.version, "api": self.api,
                 "description": self.description, "enabledByDefault": self.enabled_by_default,
-                "contributes": counts}
+                "contributes": counts, "modules": list(self.modules)}
 
 
 def _str_list(value: Any, where: str) -> tuple[str, ...]:
@@ -198,12 +188,27 @@ def _contribution(plugin_id: str, kind: str, index: int, item: Any) -> Contribut
         if not isinstance(path, str) or not path:
             raise ManifestError(f"{where}.path is required")
         cid = cid or Path(path).name
-    if kind in ENTRY_TYPES:
-        if not isinstance(entry, str) or ":" not in entry:
-            raise ManifestError(f"{where}.entry must be 'module:attribute'")
+    if kind in ENTRY_TYPES and (not isinstance(entry, str) or ":" not in entry):
+        raise ManifestError(f"{where}.entry must be 'module:attribute'")
     if not isinstance(cid, str) or not CONTRIBUTION_ID.fullmatch(cid):
         raise ManifestError(f"{where}.id is missing or invalid")
     return Contribution(plugin_id=plugin_id, type=kind, id=cid, entry=entry, path=path, data=data)
+
+
+def _modules(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ManifestError("plugin.modules must be a list of dotted module names (for example ['acme.ops'])")
+    names: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str) or not MODULE_NAME.fullmatch(item):
+            raise ManifestError(
+                f"plugin.modules[{index}] {item!r} is not a dotted module name (for example 'acme.ops')")
+        if item in names:
+            raise ManifestError(f"plugin.modules lists {item!r} twice")
+        names.append(item)
+    return tuple(names)
 
 
 def _settings(raw: Any) -> tuple[SettingSpec, ...]:
@@ -233,6 +238,10 @@ def parse_manifest(data: dict[str, Any], root: Path) -> Manifest:
     pid = plugin.get("id")
     if not isinstance(pid, str) or not PLUGIN_ID.fullmatch(pid):
         raise ManifestError("plugin.id must be lower case, dot separated (for example 'acme.backend')")
+    if pid in RESERVED_PLUGIN_IDS:
+        raise ManifestError(
+            f"plugin.id {pid!r} is reserved for {'the harness' if pid == 'eks' else 'project code'}; "
+            "choose an id of your own (for example 'acme.backend')")
     api = str(plugin.get("api", API_VERSION))
     if api.split(".", 1)[0] != API_VERSION:
         raise ManifestError(f"plugin.api {api} is not supported (this harness speaks {API_VERSION})")
@@ -272,6 +281,7 @@ def parse_manifest(data: dict[str, Any], root: Path) -> Manifest:
         python_paths=python_paths,
         contributions=tuple(items),
         settings=_settings(data.get("config")),
+        modules=_modules(plugin.get("modules")),
         raw=data,
     )
 

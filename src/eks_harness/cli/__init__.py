@@ -50,7 +50,13 @@ COMMAND_MODULES = (
     "studio_cmds",
     "score_cmds",
     "queue_cmds",
-    "flow_cmds",
+    "plan_cmds",
+    "ops_cmds",
+    "schema_cmds",
+    "docs_cmds",
+    "run_cmds",
+    "seed_cmds",
+    "reap_cmds",
     "driver_cmds",
     "doctor_cmd",
     "migrate_cmds",
@@ -71,7 +77,8 @@ message naming the flag to pass, and confirmations need --yes.
 
 Exit codes: 0 ok, 1 error, 2 usage, 3 daemon unreachable, 4 not logged in, 5 forbidden,
 6 not found, 7 gone (released sid), 8 conflict, 10 no credentials and no terminal,
-11 nothing selected or cancelled, 130 interrupted.
+11 nothing selected or cancelled, 12 run paused (attach with eks-harness debug),
+13 run aborted, 130 interrupted.
 
 Run 'eks-harness help <command> [<subcommand>]' for the help of one command."""
 

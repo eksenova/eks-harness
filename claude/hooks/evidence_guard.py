@@ -6,56 +6,80 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _common import claude_config, enabled, iter_transcript, payload, project_dir, text_of  # noqa: E402
 
-RAW_LINK = re.compile(r"/raw/([0-9A-HJKMNP-TV-Z]{26})/([^\s\"'?,)\]]+)")
+ULID = r"[0-9A-HJKMNP-TV-Z]{26}"
+RAW_LINK = re.compile(rf"/raw/({ULID})/([^\s\"'?,)\]]+)")
+ANY_ID = re.compile(rf"\b({ULID})\b")
 IMAGE = re.compile(r"\.(?:png|jpe?g|webp)$", re.IGNORECASE)
 VIDEO = re.compile(r"\.(?:mp4|webm|mov)$", re.IGNORECASE)
-FLOW_COMMAND = re.compile(r"\b(eks-harness|ehx)\s+(?:--\S+\s+)*flow\s+run\b")
-CAPTURE_COMMAND = re.compile(r"\b(eks-harness|ehx)\s+(?:--\S+\s+)*(capture|upload)\b")
-DOWNLOAD_COMMAND = re.compile(r"\b(eks-harness|ehx)\s+(?:--\S+\s+)*artifacts\s+download\b")
-FLOW_HEAD = re.compile(r"^(screenshot|video) (\S+)")
-CAPTURE_TOOLS = ("flow_run", "driver_capture")
+CLI = r"\b(?:eks-harness|ehx)\s+(?:--\S+\s+)*"
+RUN_COMMAND = re.compile(CLI + r"(?:run|do|debug|runs\s+(?:show|replay|control))\b")
+CAPTURE_COMMAND = re.compile(CLI + r"(?:capture|upload|annotate)\b")
+DOWNLOAD_COMMAND = re.compile(CLI + r"artifacts\s+download\b")
+SHEET_COMMAND = re.compile(CLI + r"video\s+(?:sheet|check)\b")
+REPORT_LINE = re.compile(r"^\s*(screenshot|video)\b(.*)$")
+RUN_TOOLS = ("__eks_run", "__eks_do", "__eks_session_do", "__eks_run_status", "__eks_run_control")
+SHOT_KINDS = ("screenshot",)
+VIDEO_KINDS = ("video",)
+SKIPPED_KEYS = frozenset({"pause", "snapshots"})
 
 
-def flow_captures(output: str) -> list[dict]:
-    try:
-        report = json.loads(output)
-    except ValueError:
-        report = None
-    if isinstance(report, dict) and isinstance(report.get("artifacts"), list):
-        found = []
-        for art in report["artifacts"]:
-            raw = str(art.get("raw") or "")
+def _walk_artifacts(value: Any, found: list[dict[str, Any]]) -> None:
+    if isinstance(value, dict):
+        kind = value.get("kind")
+        ident = value.get("id")
+        if isinstance(kind, str) and isinstance(ident, str) and re.fullmatch(ULID, ident) \
+                and kind in (*SHOT_KINDS, *VIDEO_KINDS):
+            raw = str(value.get("rawUrl") or value.get("raw_url") or "")
             match = RAW_LINK.search(raw)
-            if art.get("kind") in ("screenshot", "video") and match:
-                found.append({"kind": art["kind"], "name": art.get("name"), "id": match.group(1),
-                              "local": art.get("local"), "sheet": art.get("sheet")})
+            found.append({"kind": kind, "id": ident, "name": value.get("name") or ident,
+                          "file": match.group(2) if match else value.get("name")})
+        for key, item in value.items():
+            if key not in SKIPPED_KEYS:
+                _walk_artifacts(item, found)
+    elif isinstance(value, list):
+        for item in value:
+            _walk_artifacts(item, found)
+
+
+def run_captures(output: str) -> list[dict[str, Any]]:
+    try:
+        data = json.loads(output)
+    except ValueError:
+        data = None
+    if isinstance(data, (dict, list)):
+        found: list[dict[str, Any]] = []
+        _walk_artifacts(data, found)
         return found
-    blocks: list[dict] = []
-    current = None
+    found = []
     for line in output.splitlines():
-        head = FLOW_HEAD.match(line)
-        if head:
-            current = {"kind": head.group(1), "name": head.group(2)}
-            blocks.append(current)
+        head = REPORT_LINE.match(line)
+        if not head:
             continue
-        if current is None or not line.startswith("  "):
-            current = None
+        kind, rest = head.group(1), head.group(2)
+        raw = RAW_LINK.search(rest)
+        ident = raw.group(1) if raw else (ANY_ID.search(rest).group(1) if ANY_ID.search(rest) else None)
+        if ident is None:
             continue
-        key, _, value = line.strip().partition(": ")
-        if key == "direct":
-            match = RAW_LINK.search(value)
-            if match:
-                current["id"] = match.group(1)
-        elif key == "local":
-            current["local"] = value.strip()
-        elif key == "contact sheet":
-            current["sheet"] = value.strip()
-    return [b for b in blocks if b.get("id")]
+        words = rest.split()
+        name = words[0] if words and "://" not in words[0] else ident
+        found.append({"kind": kind, "id": ident, "name": name, "file": raw.group(2) if raw else None})
+    return found
+
+
+def capture_links(output: str) -> list[dict[str, Any]]:
+    found = []
+    for ident, filename in RAW_LINK.findall(output):
+        if IMAGE.search(filename):
+            found.append({"kind": "screenshot", "id": ident, "name": filename, "file": filename})
+        elif VIDEO.search(filename):
+            found.append({"kind": "video", "id": ident, "name": filename, "file": filename})
+    return found
 
 
 def main() -> None:
@@ -84,48 +108,57 @@ def main() -> None:
     def later(line: int, predicate) -> bool:
         return any(other > line and predicate(name, given) for other, _, name, given in events)
 
-    def read_later(line: int, needle: str | None) -> bool:
-        return bool(needle) and later(line, lambda n, i: n == "Read" and needle in (i.get("file_path") or ""))
+    def command_of(given: dict) -> str:
+        return str(given.get("command") or "")
 
-    def frames_later(line: int, needle: str) -> bool:
-        return later(line, lambda n, i: n == "Bash" and "ffmpeg" in (i.get("command") or "")
-                     and needle in (i.get("command") or ""))
+    def read_later(line: int, needle: str | None) -> bool:
+        return bool(needle) and later(line, lambda n, i: n == "Read" and needle in str(i.get("file_path") or ""))
+
+    def downloaded_later(line: int, ident: str) -> bool:
+        return later(line, lambda n, i: n == "Bash" and ident in command_of(i)
+                     and bool(DOWNLOAD_COMMAND.search(command_of(i))))
+
+    def image_fetched_later(line: int, ident: str) -> bool:
+        return later(line, lambda n, i: n.endswith("__get_artifact") and str(i.get("artifact_id") or "") == ident
+                     and str(i.get("image") or "none") == "full")
+
+    def sheet_later(line: int, ident: str) -> bool:
+        if later(line, lambda n, i: (n.endswith("__video_sheet") and str(i.get("artifact_id") or "") == ident
+                                     and i.get("images", True) is not False)
+                 or (n.endswith("__video_check") and str(i.get("artifact_id") or "") == ident)):
+            return True
+        sheets = [other for other, _, n, i in events
+                  if other > line and n == "Bash" and ident in command_of(i) and SHEET_COMMAND.search(command_of(i))]
+        return any(later(sheet, lambda n, i: n == "Read") for sheet in sheets)
+
+    def frames_later(line: int, ident: str) -> bool:
+        return later(line, lambda n, i: n == "Bash" and "ffmpeg" in command_of(i) and ident in command_of(i))
 
     owed: list[str] = []
     seen: set[str] = set()
     for line, tool_id, name, given in events:
         output = results.get(tool_id, "")
-        command = given.get("command", "") if name == "Bash" else ""
-        is_flow = (name == "Bash" and FLOW_COMMAND.search(command)) or name.endswith("__flow_run")
-        is_capture = (name == "Bash" and CAPTURE_COMMAND.search(command)) or name.endswith("__driver_capture")
-        if is_flow:
-            for block in flow_captures(output):
-                if block["id"] in seen:
-                    continue
-                seen.add(block["id"])
-                opened = read_later(line, block.get("local")) or read_later(line, block["id"])
-                if block["kind"] == "screenshot" and not opened:
-                    where = block.get("local") or (f"a local copy whose path contains {block['id']} "
-                                                   f"(eks-harness artifacts download {block['id']})")
-                    owed.append(f"screenshot {block['name']}: Read {where}")
-                if block["kind"] == "video" and not (opened or read_later(line, block.get("sheet"))
-                                                     or frames_later(line, block["id"])):
-                    owed.append(f"video {block['name']}: Read its contact sheet {block.get('sheet') or ''}".rstrip())
+        command = command_of(given) if name == "Bash" else ""
+        if (name == "Bash" and RUN_COMMAND.search(command)) or name.endswith(RUN_TOOLS):
+            captures = run_captures(output)
+        elif name == "Bash" and CAPTURE_COMMAND.search(command):
+            captures = capture_links(output)
+        else:
             continue
-        if not is_capture:
-            continue
-        for artifact_id, filename in RAW_LINK.findall(output):
-            if artifact_id in seen or not (IMAGE.search(filename) or VIDEO.search(filename)):
+        for capture in captures:
+            ident = capture["id"]
+            if ident in seen:
                 continue
-            seen.add(artifact_id)
-            downloaded = later(line, lambda n, i: n == "Bash" and artifact_id in (i.get("command") or "")
-                               and DOWNLOAD_COMMAND.search(i.get("command") or ""))
-            if IMAGE.search(filename) and not (downloaded and read_later(line, artifact_id)):
-                owed.append(f"screenshot {artifact_id} ({filename}): eks-harness artifacts download {artifact_id}, "
-                            f"then Read the file")
-            if VIDEO.search(filename) and not (downloaded and (frames_later(line, artifact_id)
-                                                               or read_later(line, artifact_id))):
-                owed.append(f"video {artifact_id} ({filename}): download it, extract frames with ffmpeg and Read them")
+            seen.add(ident)
+            opened = read_later(line, ident) or image_fetched_later(line, ident) or (
+                downloaded_later(line, ident) and read_later(line, capture.get("file")))
+            if capture["kind"] in SHOT_KINDS and not opened:
+                owed.append(f"screenshot {capture['name']}: eks-harness artifacts download {ident} -o <dir>, then "
+                            f"Read the file (or get_artifact(artifact_id='{ident}', image='full'))")
+            if capture["kind"] in VIDEO_KINDS and not (opened or sheet_later(line, ident)
+                                                       or frames_later(line, ident)):
+                owed.append(f"video {capture['name']}: eks-harness video sheet {ident}, then Read the sheet "
+                            f"(or video_sheet(artifact_id='{ident}'))")
     if not owed:
         return
     sys.stderr.write("You captured evidence you have not looked at. Open each item and note what is really on "

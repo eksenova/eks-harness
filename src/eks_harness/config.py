@@ -53,6 +53,7 @@ GROUPS: dict[str, str] = {
     "update": "Updates",
     "nodes": "Nodes",
     "render": "Rendering",
+    "engine": "Engine",
 }
 
 _SETTINGS: list[Setting] = [
@@ -137,6 +138,18 @@ _SETTINGS: list[Setting] = [
             choices=("presentation", "off")),
     Setting("video.workspace", "", "str", "folder holding the studio's video projects (empty: <data dir>/video)"),
     Setting("video.mediaLibrary", "", "str", "folder offered to video projects as the media library (empty: none)"),
+    Setting("engine.maxRuns", 4, "int", "runs that execute at once; later runs wait queued", minimum=1),
+    Setting("engine.parallelism", 4, "int", "nodes of one run that execute at once unless the run asks for another number", minimum=1, maximum=64),
+    Setting("engine.retries", 2, "int", "automatic retries of an idempotent node after a retryable failure", minimum=0, maximum=10),
+    Setting("engine.nodeTimeoutSeconds", 120, "int", "seconds a node without its own timeout may run", minimum=1),
+    Setting("engine.apiTimeoutSeconds", 30, "int", "seconds an api.* request may take", minimum=1),
+    Setting("engine.pauseTimeoutSeconds", 1800, "int", "abort a run that stays paused in the debugger this long", minimum=10),
+    Setting("engine.sessionTimeoutSeconds", 1800, "int", "end an interactive session (eks_session_open) idle this long", minimum=10),
+    Setting("engine.sandboxTimeoutSeconds", 30, "int", "wall clock limit of a dynamic function", minimum=1),
+    Setting("engine.sandboxMemoryMb", 1024, "int", "memory limit of a dynamic function", minimum=64),
+    Setting("engine.runRetentionDays", 30, "int", "delete the journals of finished runs older than this many days", minimum=1),
+    Setting("engine.cacheMaxGb", 20, "int", "evict the least recently used cache entries above this size in GB", minimum=1),
+    Setting("engine.cacheMaxAgeDays", 30, "int", "evict cache entries unused for this many days", minimum=1),
 ]
 
 LABELS: dict[str, str] = {
@@ -219,6 +232,18 @@ LABELS: dict[str, str] = {
     "capture.pointer": "Video pointer",
     "video.workspace": "Video project folder",
     "video.mediaLibrary": "Media library folder",
+    "engine.maxRuns": "Runs at once",
+    "engine.parallelism": "Nodes at once per run",
+    "engine.retries": "Retries of idempotent nodes",
+    "engine.nodeTimeoutSeconds": "Default node timeout",
+    "engine.apiTimeoutSeconds": "API request timeout",
+    "engine.pauseTimeoutSeconds": "Debugger pause timeout",
+    "engine.sessionTimeoutSeconds": "Interactive session idle timeout",
+    "engine.sandboxTimeoutSeconds": "Dynamic function time limit",
+    "engine.sandboxMemoryMb": "Dynamic function memory limit",
+    "engine.runRetentionDays": "Run journal retention",
+    "engine.cacheMaxGb": "Cache size limit",
+    "engine.cacheMaxAgeDays": "Cache entry lifetime",
 }
 
 SETTINGS: dict[str, Setting] = {s.key: s for s in _SETTINGS}
@@ -304,7 +329,7 @@ def coerce(key: str, value: Any) -> Any:
         if not isinstance(value, str):
             raise ConfigError(f"{key} must be a string")
         value = value.strip()
-    if kind in ("int", "float"):
+    if kind in ("int", "float") and isinstance(value, int | float):
         if setting.minimum is not None and value < setting.minimum:
             raise ConfigError(f"{key} must be at least {setting.minimum:g}")
         if setting.maximum is not None and value > setting.maximum:
@@ -387,7 +412,7 @@ class Config:
     def file(self) -> Path:
         return self.paths.config_file
 
-    def reload(self) -> "Config":
+    def reload(self) -> Config:
         env = os.environ if self._env is None else self._env
         values = dict(DEFAULTS)
         sources = {key: "default" for key in DEFAULTS}

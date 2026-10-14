@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import platform
 import re
 import shutil
 import subprocess
@@ -26,6 +27,7 @@ class OcrError(RuntimeError):
 class Line:
     text: str
     confidence: float = 1.0
+    box: tuple[float, float, float, float] | None = None
 
 
 def normalize(text: str) -> str:
@@ -47,6 +49,12 @@ class Engine:
     def read(self, images: list[Path], languages: list[str]) -> list[list[Line]]:
         raise NotImplementedError
 
+    def read_boxes(self, images: list[Path], languages: list[str]) -> list[list[Line]]:
+        return self.read(images, languages)
+
+    def version(self) -> str:
+        return "unknown"
+
 
 class VisionEngine(Engine):
     name = "vision"
@@ -66,9 +74,13 @@ class VisionEngine(Engine):
                 data = json.loads(row)
             except ValueError:
                 continue
-            found[data["file"]] = [Line(str(x.get("text") or ""), float(x.get("confidence") or 0))
+            found[data["file"]] = [Line(str(x.get("text") or ""), float(x.get("confidence") or 0), _box(x.get("box")))
                                    for x in data.get("lines") or []]
         return [found.get(str(path), []) for path in images]
+
+    def version(self) -> str:
+        digest = hashlib.sha256(SOURCE.read_bytes()).hexdigest()[:12]
+        return f"macos-{platform.mac_ver()[0] or 'unknown'}+{digest}"
 
 
 class TesseractEngine(Engine):
@@ -89,6 +101,58 @@ class TesseractEngine(Engine):
                 raise OcrError(f"tesseract failed: {result.stderr.strip()[-400:]}")
             out.append([Line(line) for line in result.stdout.splitlines() if line.strip()])
         return out
+
+    def read_boxes(self, images: list[Path], languages: list[str]) -> list[list[Line]]:
+        from PIL import Image
+
+        codes = [c for c in (_tesseract_language(code) for code in languages) if c in self.available] or ["eng"]
+        out = []
+        for image in images:
+            with Image.open(image) as opened:
+                width, height = opened.size
+            result = subprocess.run([self.binary, str(image), "stdout", "-l", "+".join(codes), "--psm", "11", "tsv"],
+                                    capture_output=True, text=True, timeout=120)
+            if result.returncode != 0:
+                raise OcrError(f"tesseract failed: {result.stderr.strip()[-400:]}")
+            out.append(_tsv_lines(result.stdout, width, height))
+        return out
+
+    def version(self) -> str:
+        listed = subprocess.run([self.binary, "--version"], capture_output=True, text=True, timeout=60)
+        first = (listed.stdout or listed.stderr).strip().splitlines()
+        return first[0].removeprefix("tesseract ").strip() if first else "unknown"
+
+
+def _box(value: Any) -> tuple[float, float, float, float] | None:
+    if not isinstance(value, list) or len(value) != 4:
+        return None
+    x, y, w, h = (float(v) for v in value)
+    return x, y, w, h
+
+
+def _tsv_lines(text: str, width: int, height: int) -> list[Line]:
+    groups: dict[tuple[str, str, str], list[tuple[str, float, int, int, int, int]]] = {}
+    for row in text.splitlines()[1:]:
+        cells = row.split("\t")
+        if len(cells) < 12 or cells[0] != "5":
+            continue
+        word = cells[11].strip()
+        confidence = float(cells[10])
+        if not word or confidence < 0:
+            continue
+        left, top, w, h = (int(cells[i]) for i in range(6, 10))
+        groups.setdefault((cells[2], cells[3], cells[4]), []).append((word, confidence, left, top, w, h))
+    lines = []
+    for words in groups.values():
+        x0 = min(item[2] for item in words)
+        y0 = min(item[3] for item in words)
+        x1 = max(item[2] + item[4] for item in words)
+        y1 = max(item[3] + item[5] for item in words)
+        lines.append(Line(" ".join(item[0] for item in words),
+                          sum(item[1] for item in words) / len(words) / 100.0,
+                          (x0 / max(1, width), y0 / max(1, height), (x1 - x0) / max(1, width),
+                           (y1 - y0) / max(1, height))))
+    return lines
 
 
 def _vision_language(code: str) -> str:
@@ -149,7 +213,8 @@ def engine(name: str = "auto") -> Engine:
         return chosen
 
 
-def read_images(images: list[Any], *, languages: list[str] | None = None, name: str = "auto") -> list[list[Line]]:
+def read_images(images: list[Any], *, languages: list[str] | None = None, name: str = "auto",
+                boxes: bool = False) -> list[list[Line]]:
     languages = languages or ["tr-TR", "en-US"]
     with tempfile.TemporaryDirectory(prefix="ehx-ocr-") as tmp:
         paths = []
@@ -157,4 +222,5 @@ def read_images(images: list[Any], *, languages: list[str] | None = None, name: 
             path = Path(tmp) / f"{index:04d}.png"
             image.save(path)
             paths.append(path)
-        return engine(name).read(paths, languages)
+        chosen = engine(name)
+        return chosen.read_boxes(paths, languages) if boxes else chosen.read(paths, languages)

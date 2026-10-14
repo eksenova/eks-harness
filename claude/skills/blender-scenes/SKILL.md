@@ -3,6 +3,8 @@ name: blender-scenes
 description: "Write Blender scene scripts for the video engine and scores: BlenderScene media, the eks_harness.blender timing API (frames of beats and markers, score inputs, emitting events), textures from other tracks, engines and devices, the frame cache and node rendering. Use when creating or debugging Blender content synced to a timeline."
 ---
 
+> The eks API (`@eks.scene(kind="blender")`, skill `eks-harness:eks-scenes`) plans Blender scenes now, and edits are written with `eks-harness:eks-edit`; Blender renders under `eks-harness run` wait for the scene graph executor. Until then this skill's script API renders Blender media through the earlier video engine.
+
 # Blender scenes
 
 Blender is optional: enable the `eks.blender` plugin per project (`[plugins] enable = ["eks.blender"]`).

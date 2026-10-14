@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from eks_harness.cli.client import download_artifacts
 from eks_harness.drivers.client import WorkerClient
 from eks_harness.drivers.profile import AppProfile, load_profile
 from eks_harness.flows.client import (
@@ -19,7 +20,6 @@ from eks_harness.flows.client import (
     Timer,
     artifact_of,
     contact_sheet,
-    download,
     stored_sheet,
 )
 
@@ -250,7 +250,7 @@ class App:
         if not fetch or self.harness is None:
             return
         ids = [a.id for a in self.artifacts if a.id and not a.local]
-        found = download(self.harness, [i for i in ids if i], self.out)
+        found = download_artifacts(self.harness, [i for i in ids if i], self.out)
         for art in self.artifacts:
             if art.id and art.id in found:
                 art.local = str(found[art.id])

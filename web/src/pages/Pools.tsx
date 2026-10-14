@@ -17,7 +17,7 @@ import { formatAgoShort, formatClock, formatFull, formatIdle, formatWaiting, plu
 import { useMinute, useTitle } from "../lib/hooks";
 import { localPath, sessionUrl, useSearchParams, useSetParams } from "../lib/url";
 import { LiveFrame } from "../viewers/LiveFrame";
-import { ToolRail } from "../features/ToolRail";
+import { PluginSlot } from "../shell/plugins";
 import { eventSentence, isMachineActor, leaseStateWords } from "./Session";
 
 const STATUS_WORDS: Record<string, string> = {
@@ -467,15 +467,20 @@ function LeaseConfirms({ mode, lease, session, name, onClose }: { mode: "release
   );
 }
 
-function DetailLayout({ title, crumbs, sentence, actions, live, rail, lease, queue, tab, basePath, activity, history, activityEmpty, error }: { title: string; crumbs: { label: string; to: string }[]; sentence: ReactNode; actions: ReactNode; live: ReactNode; rail?: ReactNode; lease: ReactNode; queue: LeaseOut[]; tab: string; basePath: string; activity: EventOut[]; history: LeaseOut[]; activityEmpty: string; error?: string }) {
+function DeviceControls({ sid, platform, device }: { sid: string | null; platform: "web" | "ios" | "android"; device?: { kind: string; index: number } }) {
+  if (!sid) return null;
+  return <PluginSlot slot="device.controls" props={{ device: { kind: device?.kind ?? platform, index: device?.index ?? 0, sid, platform } }} />;
+}
+
+function DetailLayout({ title, crumbs, sentence, actions, live, controls, lease, queue, tab, basePath, activity, history, activityEmpty, error }: { title: string; crumbs: { label: string; to: string }[]; sentence: ReactNode; actions: ReactNode; live: ReactNode; controls?: ReactNode; lease: ReactNode; queue: LeaseOut[]; tab: string; basePath: string; activity: EventOut[]; history: LeaseOut[]; activityEmpty: string; error?: string }) {
   return (
     <div className="page">
       <PageHeader crumbs={crumbs} title={title} actions={<div className="action-row">{actions}</div>} meta={<p>{sentence}</p>} />
       {error ? <Notice variant="error">{error}</Notice> : null}
       <div className="pool-split">
         <div className="pool-live">{live}</div>
-        {rail}
         <div className="pool-info">
+          {controls}
           <section className="section">
             <h2 className="section-title">Current lease</h2>
             {lease}
@@ -544,7 +549,7 @@ export function DeviceDetailPage({ kind, index }: { kind: string; index: string 
           </Button>
         ))}
         live={<LiveFrame src={d.liveUrl ? localPath(d.liveUrl) : `/api/devices/${d.kind}/${d.index}/live`} name={name} running={running && d.status !== "booting"} aspect={screenAspect(d, d.kind === "ios" ? "9 / 19.5" : "9 / 20")} viewers={d.liveViewers} onStart={() => setAction("start")} />}
-        rail={<ToolRail sid={d.lease?.sid ?? null} platform={d.kind === "ios" ? "ios" : "android"} device={{ kind: d.kind, index: d.index }} />}
+        controls={<DeviceControls sid={d.lease?.sid ?? null} platform={d.kind === "ios" ? "ios" : "android"} device={{ kind: d.kind, index: d.index }} />}
         lease={<CurrentLease lease={d.lease} session={d.session} onRelease={() => setLeaseMode("release")} onBreak={() => setLeaseMode("break")} />}
         queue={d.queue}
         tab={params.tab ?? "activity"}
@@ -768,7 +773,7 @@ export function ProfileDetailPage({ id }: { id: string }) {
           </Button>
         ))}
         live={<LiveFrame src={p.liveUrl ? localPath(p.liveUrl) : `/api/profiles/${encodeSegment(p.id)}/live`} name={name} running={running} aspect={screenAspect(p, "16 / 10")} viewers={p.liveViewers} onStart={() => setAction("start")} />}
-        rail={<ToolRail sid={p.lease?.sid ?? null} platform="web" />}
+        controls={<DeviceControls sid={p.lease?.sid ?? null} platform="web" />}
         lease={<CurrentLease lease={p.lease} session={p.session} onRelease={() => setLeaseMode("release")} onBreak={() => setLeaseMode("break")} />}
         queue={p.queue}
         tab={params.tab ?? "activity"}

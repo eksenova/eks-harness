@@ -10,10 +10,16 @@
     "./devtools-link": "./src/devtools-link.mjs",
     "./config": "./src/config.mjs",
     "./extensions": "./src/extensions.mjs",
-    "./backend-link": "./src/backend-link.mjs"
+    "./backend-link": "./src/backend-link.mjs",
+    "./ops": "./src/ops.mjs",
+    "./schema": "./src/schema.mjs",
+    "./targets": "./src/targets.mjs",
+    "./boxmap": "./src/boxmap.mjs",
+    "./lifetime": "./src/lifetime.mjs",
+    "./pace": "./src/pace.mjs"
   },
   "scripts": {
-    "typecheck": "node --check src/daemon-client.mjs && node --check src/script-runner.mjs && node --check src/devtools-link.mjs && node --check src/config.mjs && node --check src/extensions.mjs && node --check src/backend-link.mjs",
+    "typecheck": "node --check src/daemon-client.mjs && node --check src/script-runner.mjs && node --check src/devtools-link.mjs && node --check src/config.mjs && node --check src/extensions.mjs && node --check src/backend-link.mjs && node --check src/ops.mjs && node --check src/schema.mjs && node --check src/targets.mjs && node --check src/lifetime.mjs && node --check src/icons.mjs && node --check src/boxmap.mjs && node --check src/pace.mjs",
     "test": "vitest run"
   },
   "devDependencies": {

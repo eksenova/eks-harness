@@ -1,0 +1,9 @@
+from eks_harness.ir.registry import default_registry
+
+import {{module}}.macros  # noqa: F401
+
+
+def test_sign_in_is_registered_for_web() -> None:
+    found = [spec for spec in default_registry().macros() if spec.short == "sign_in"]
+    assert found, "sign_in is not registered"
+    assert "web" in (found[0].platforms or ())

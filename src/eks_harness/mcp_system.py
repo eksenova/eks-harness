@@ -10,7 +10,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from eks_harness.mcp_context import harness_instance, required_tree, working_dir
+from eks_harness.mcp_context import harness_instance, working_dir
 from eks_harness.mcp_context import resolve_tree as _tree
 
 if TYPE_CHECKING:
@@ -129,15 +129,6 @@ def register_system_tools(server: MCPServer, tools: HarnessTools) -> None:
     def list_backends() -> dict[str, Any]:
         return tools.call("GET", "/api/backends")
 
-    @server.tool(description="Older entry point: start a backend for an identity (or keep it) with a time-limited "
-                             "hold. Prefer backend_acquire, which returns a lease you renew and release.",
-                 annotations=WRITE)
-    def ensure_backend(definition: str, instance: Annotated[str, Field(description="Identity of the instance, "
-                                                                       "for example tree:<path>")],
-                       tree: TreeArg = None) -> dict[str, Any]:
-        return tools.call("POST", "/api/backends/ensure", json={"definition": definition, "instance": instance,
-                                                                "tree": _tree(tree)}, timeout=300)
-
     register_backend_lease_tools(server, tools)
 
     @server.tool(description="Contact sheet of a video artifact: one image with evenly spaced frames labelled by "
@@ -187,16 +178,6 @@ def register_system_tools(server: MCPServer, tools: HarnessTools) -> None:
     def render_queue() -> dict[str, Any]:
         return tools.call("GET", "/api/render-queue")
 
-    @server.tool(description="Seed a running backend with a scenario from the seeder plugins.", annotations=WRITE)
-    def seed_backend(backend_id: str, scenario: str | None = None, seeder: str | None = None) -> dict[str, Any]:
-        return tools.call("POST", f"/api/backends/{quote(backend_id, safe='@:')}/seed",
-                          json={"scenario": scenario, "seeder": seeder}, timeout=3600)
-
-    @server.tool(description="Personas (logins) the credentials plugins offer for a target such as local or "
-                             "staging. Secrets are never returned.", annotations=READ_ONLY)
-    def list_personas(tree: TreeArg = None, target: str = "local") -> dict[str, Any]:
-        return tools.call("GET", "/api/backends/personas", params=_tree_params(tree, target=target))
-
     @server.tool(description="Validate a score (score.json or a Python DSL file that defines `score`) and return "
                              "its tracks, rules and clock.", annotations=READ_ONLY)
     def score_validate(path: Annotated[str, Field(description="Path to score.json or score.py")]) -> dict[str, Any]:
@@ -224,7 +205,7 @@ def register_system_tools(server: MCPServer, tools: HarnessTools) -> None:
     @server.tool(description="Write a score built with the Python DSL (score.py defining `score`) to JSON IR.",
                  annotations=WRITE)
     def score_export(path: str, out: str | None = None) -> dict[str, Any]:
-        score, base = _load_score(path)
+        score, _base = _load_score(path)
         built = score.build() if hasattr(score, "build") else score
         target = Path(out).expanduser() if out else Path(path).with_suffix(".json")
         built.save(target)
@@ -360,25 +341,7 @@ def register_backend_lease_tools(server: MCPServer, tools: HarnessTools) -> None
         return tools.call("GET", f"/api/leases/{quote(sid)}/backend", params={"secrets": str(secrets).lower()})
 
 
-def _worker_session(sid: str) -> Any:
-    from eks_harness.drivers.sessions import WorkerSession
-    from eks_harness.drivers.workers import WorkerManager
-    from eks_harness.paths import resolve_paths
-
-    manager = WorkerManager(resolve_paths())
-    for kind, platform in (("web", "web"), ("mobile", None)):
-        handle = manager.get(kind, sid)
-        if handle is not None:
-            if platform is None:
-                platform = str((handle.extra or {}).get("platform") or "ios")
-            return WorkerSession(handle.client(), platform=platform, sid=sid)
-    raise ToolError(f"no driver worker runs for lease {sid}; start one with flow_run (or eks-harness flow run) first")
-
-
 def register_driver_tools(server: MCPServer, tools: HarnessTools) -> None:
-    import subprocess
-    import sys
-
     @server.tool(description="Driver workers running on this machine (one per leased browser profile or device), "
                              "with their lease sid, kind and port.", annotations=READ_ONLY)
     def driver_workers() -> dict[str, Any]:
@@ -386,84 +349,6 @@ def register_driver_tools(server: MCPServer, tools: HarnessTools) -> None:
         from eks_harness.paths import resolve_paths
 
         return {"items": [h.as_dict() for h in WorkerManager(resolve_paths()).list()]}
-
-    @server.tool(description="Act on a leased browser or device through its driver worker: press/click/tap, fill, "
-                             "type, key, scroll, navigate, back, reload, evaluate, dispatch (app store action), "
-                             "patch/unpatch/inject (React Native live UI), arm (fakes such as camera or NFC), emit. "
-                             "Targets use the driver grammar: #testId, text=..., role=button:Save, label=..., css=....",
-                 annotations=WRITE)
-    def driver_act(sid: Annotated[str, Field(description="Lease sid")],
-                   action: Annotated[str, Field(description="Action name")],
-                   params: Annotated[dict[str, Any] | None, Field(description="Action parameters, e.g. "
-                                                                  "{\"target\": \"#save\"}")] = None) -> dict[str, Any]:
-        try:
-            return _worker_session(sid).act(action, **(params or {}))
-        except ToolError:
-            raise
-        except Exception as error:
-            raise ToolError(f"{action} failed: {error}") from None
-
-    @server.tool(description="Read state cheaply before paying for images: tree (accessibility or element tree), "
-                             "text, exists, visible, count, value, url or route, state (app store), logs.",
-                 annotations=READ_ONLY)
-    def driver_observe(sid: Annotated[str, Field(description="Lease sid")],
-                       query: Annotated[str, Field(description="tree, text, exists, url, route, state, logs, ...")],
-                       target: str | None = None) -> dict[str, Any]:
-        try:
-            return _worker_session(sid).observe(query, **({"target": target} if target else {}))
-        except ToolError:
-            raise
-        except Exception as error:
-            raise ToolError(f"{query} failed: {error}") from None
-
-    @server.tool(description="Capture evidence into the artifact store: screenshot, video.start, video.stop, dom, "
-                             "mhtml, a11y, har.start, har.stop. Returns artifact links; open what you capture.",
-                 annotations=WRITE)
-    def driver_capture(sid: Annotated[str, Field(description="Lease sid")],
-                       kind: Annotated[str, Field(description="Capture kind")],
-                       params: dict[str, Any] | None = None) -> dict[str, Any]:
-        try:
-            return _worker_session(sid).capture(kind, **(params or {}))
-        except ToolError:
-            raise
-        except Exception as error:
-            raise ToolError(f"{kind} failed: {error}") from None
-
-    @server.tool(description="Run a Python flow (flow(app) in <app>/.harness/flows/*.py) or inline code against a "
-                             "leased browser or device and return its report: checkpoints, failures, screenshots, "
-                             "videos and contact sheets with local paths to Read.", annotations=WRITE)
-    def flow_run(flow: Annotated[str | None, Field(description="Path to a flow file")] = None,
-                 code: Annotated[str | None, Field(description="Inline Python with `app` in scope")] = None,
-                 platform: Annotated[str | None, Field(description="web, ios or android")] = None,
-                 params: Annotated[dict[str, str] | None, Field(description="Values for app.params")] = None,
-                 release: bool = False, tree: TreeArg = None,
-                 backend: Annotated[str | None, Field(description="Backend to link to the lease: a backend lease "
-                                                      "id, a backend id or a definition; none links nothing")] = None,
-                 backend_tree: str | None = None, instance: InstanceArg = None) -> dict[str, Any]:
-        if not flow and not code:
-            raise ToolError("pass a flow path or inline code")
-        argv = [sys.executable, "-m", "eks_harness.cli", "flow", "run", "--json"]
-        if flow:
-            argv.append(flow)
-        if code:
-            argv += ["-e", code]
-        if platform:
-            argv += ["--platform", platform]
-        for key, value in (params or {}).items():
-            argv += ["--set", f"{key}={value}"]
-        if release:
-            argv.append("--release")
-        if backend:
-            argv += ["--backend", backend]
-        if backend_tree:
-            argv += ["--backend-tree", backend_tree]
-        if instance:
-            argv += ["--instance", instance]
-        out = subprocess.run(argv, cwd=required_tree(tree), capture_output=True, text=True, timeout=3600)
-        try:
-            return json.loads(out.stdout)
-        except ValueError:
-            raise ToolError((out.stderr or out.stdout).strip()[-3000:] or f"flow exited {out.returncode}") from None
 
 
 def register_plugin_tools(server: MCPServer, tools: HarnessTools) -> list[str]:

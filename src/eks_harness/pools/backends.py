@@ -21,7 +21,16 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from eks_harness.backends.registry import is_plugin_path, plugin_definitions, runner_command
+from eks_harness.backends.eks_defs import (
+    eks_definitions,
+    eks_runner_command,
+    is_eks_path,
+)
+from eks_harness.backends.registry import (
+    is_plugin_path,
+    plugin_definitions,
+    runner_command,
+)
 from eks_harness.paths import Paths
 from eks_harness.pools.backend_info import default_info, merge_info, resolve_template
 from eks_harness.pools.base import BackendError, PoolHost, iso_now
@@ -198,31 +207,30 @@ def file_lock(path: Path) -> Iterator[None]:
     path.parent.mkdir(parents=True, exist_ok=True)
     with _THREAD_LOCKS_GUARD:
         thread_lock = _THREAD_LOCKS.setdefault(str(path), threading.RLock())
-    with thread_lock:
-        with open(path, "a+") as handle:
-            if WINDOWS:
-                import msvcrt
+    with thread_lock, open(path, "a+") as handle:
+        if WINDOWS:
+            import msvcrt
 
+            handle.seek(0)
+            while True:
+                try:
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+                    break
+                except OSError:
+                    time.sleep(0.1)
+            try:
+                yield
+            finally:
                 handle.seek(0)
-                while True:
-                    try:
-                        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-                        break
-                    except OSError:
-                        time.sleep(0.1)
-                try:
-                    yield
-                finally:
-                    handle.seek(0)
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                import fcntl
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
 
-                fcntl.flock(handle, fcntl.LOCK_EX)
-                try:
-                    yield
-                finally:
-                    fcntl.flock(handle, fcntl.LOCK_UN)
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 @dataclass
@@ -442,6 +450,7 @@ class InstanceRegistry:
 
 
 SECRET_STEPS = ("start", "info")
+SEED_HOOKS = ("reset", "seed_phase", "snapshot", "restore", "migrations", "drop_snapshot")
 LEGACY_STEPS = frozenset({"describe", "fingerprint", "prepare", "spec", "teardown", "seed", "snapshot", "restore"})
 READY_TIMEOUT = 300.0
 
@@ -452,6 +461,7 @@ class BackendManager(BackendManagerBase):
         self.repo_root = repo_cache_root(host.paths)
         self.registry = ProcessRegistry(self.repo_root)
         self.instances = InstanceRegistry(self.repo_root)
+        self.clashes: set[tuple[str, str | None]] = set()
 
     def emit(self, record: dict, **detail) -> None:
         self.host.emit("backend.status", resource=f"backend:{record['id']}",
@@ -479,7 +489,21 @@ class BackendManager(BackendManagerBase):
             if item["name"] not in seen:
                 seen.add(item["name"])
                 found.append(item)
+        for item in eks_definitions(tree):
+            if item["name"] in seen:
+                self.report_clash(item["name"], tree)
+                continue
+            seen.add(item["name"])
+            found.append(item)
         return found
+
+    def report_clash(self, name: str, tree: str | None) -> None:
+        key = (name, tree)
+        if key in self.clashes:
+            return
+        self.clashes.add(key)
+        self.host.log(f"backend definition {name}: an @eks.backend of {tree} has the name of a script or plugin "
+                      "definition, which wins")
 
     def find_definition(self, name: str, tree: str | None) -> Path:
         if not name or not DEFINITION_NAME.fullmatch(name):
@@ -490,6 +514,9 @@ class BackendManager(BackendManagerBase):
                 if candidate.is_file():
                     return candidate
         for item in plugin_definitions(self.host.plugin_host(), tree):
+            if item["name"] == name:
+                return Path(item["path"])
+        for item in eks_definitions(tree):
             if item["name"] == name:
                 return Path(item["path"])
         raise BackendError(f"no backend definition '{name}' in {', '.join(str(p) for _, p in places)}")
@@ -515,12 +542,14 @@ class BackendManager(BackendManagerBase):
             "tree": record.get("tree"), "slot": instance.get("slot"), "stateDir": str(self.state_dir(record)),
             "ports": record.get("ports", {}), "captured": record.get("captured") or {},
             "exports": record.get("exports") or {}, "generation": int(record.get("generation") or 0),
-            "daemonUrl": self.host.url,
+            "daemonUrl": self.host.url, "dependencies": self.dependency_context(record),
         }
 
     def command_for(self, script: Path) -> list[str]:
         if is_plugin_path(script):
             return runner_command(script)
+        if is_eks_path(script):
+            return eks_runner_command(script)
         if script.suffix == ".py":
             return [uv_binary(), "run", "--quiet", "--script", str(script)]
         return [str(script)]
@@ -670,8 +699,24 @@ class BackendManager(BackendManagerBase):
             pass
         self.run_cleanup(record, final=True)
 
-    def json_of(self, record: dict, command: str, timeout: float = 120) -> dict:
-        out = self.run(record, command, timeout=timeout).strip()
+    def step(self, backend_id: str, step: str, *, name: str | None = None, phase: str | None = None,
+             timeout: float = 3600) -> dict:
+        record = self.records.get(backend_id)
+        if record is None:
+            raise BackendError(f"no backend {backend_id}")
+        if step not in SEED_HOOKS:
+            raise BackendError(f"{step} is not a seed hook ({', '.join(SEED_HOOKS)})")
+        if not self.implements(record, step):
+            return {"missing": True}
+        args: list[str] = []
+        if name is not None:
+            args += ["--name", name]
+        if phase is not None:
+            args += ["--phase", phase]
+        return self.json_of(record, step, *args, timeout=timeout)
+
+    def json_of(self, record: dict, command: str, *args: str, timeout: float = 120) -> dict:
+        out = self.run(record, command, *args, timeout=timeout).strip()
         shown = "" if command in SECRET_STEPS else f": {out[-300:]}"
         try:
             value = json.loads(out.splitlines()[-1] if out else "{}")
@@ -817,6 +862,7 @@ class BackendManager(BackendManagerBase):
                     record["ports"] = self.allocate_ports(record, [str(p) for p in described.get("ports") or []])
                     self.resolve_idle_timeout(record, described)
                     self.host.save()
+                self.acquire_dependencies(record)
                 if self.implements(record, "prepare"):
                     self.host.log(f"backend {backend_id}: prepare")
                     self.run(record, "prepare", timeout=3600, stream=True)
@@ -1005,6 +1051,7 @@ class BackendManager(BackendManagerBase):
 
     def run_cleanup(self, record: dict, final: bool) -> None:
         if not record.get("definitionPath") or not (is_plugin_path(record["definitionPath"])
+                                                   or is_eks_path(record["definitionPath"])
                                                    or Path(record["definitionPath"]).is_file()):
             return
         steps: list[tuple[str, list[str], float]] = []
@@ -1032,6 +1079,8 @@ class BackendManager(BackendManagerBase):
                 self.registry.stop(entry)
         if not skip_teardown:
             self.run_cleanup(record, final)
+        if final and not (bool(record.get("resume")) and bool(record.get("leases"))):
+            self.release_dependencies(record, reason)
         with self.host.lock:
             keep = bool(record.get("resume")) and bool(record.get("leases"))
             record["status"] = "stopped"

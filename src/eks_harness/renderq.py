@@ -48,7 +48,7 @@ def concurrency() -> int:
         from eks_harness.paths import resolve_paths
 
         return max(1, int(Config(resolve_paths())["render.concurrency"] or 1))
-    except Exception:
+    except (ValueError, TypeError, OSError):
         return 1
 
 
@@ -157,6 +157,46 @@ def attach_lease(sid: str | None, ticket_id: str | None = None) -> bool:
     return True
 
 
+def _new_ticket(kind: str, label: str, session: str | None) -> Ticket:
+    return Ticket(id=f"{time.time_ns()}-{os.getpid()}-{secrets.token_hex(3)}", kind=kind, label=label[:200],
+                  session=session, pid=os.getpid(), host=socket.gethostname(), queued_at=time.time())
+
+
+def claim(kind: str, label: str, *, session: str | None = None, cancel: Callable[[], bool] | None = None,
+          on_wait: Callable[[int, Ticket], None] | None = None) -> Ticket:
+    folder = queue_dir()
+    ticket = _new_ticket(kind, label, session)
+    _write(folder, ticket)
+    reported: int | None = None
+    try:
+        while True:
+            if cancel is not None and cancel():
+                raise RuntimeError("cancelled")
+            with _locked(folder):
+                items = tickets(folder)
+                running = [t for t in items if t.started_at is not None]
+                waiting = [t for t in items if t.started_at is None]
+                position = next((i for i, t in enumerate(waiting) if t.id == ticket.id), 0)
+                if len(running) + position < concurrency():
+                    ticket.started_at = time.time()
+                    _write(folder, ticket)
+                    return ticket
+            if position != reported:
+                reported = position
+                _LOG.info("render queue: %s %s waits at position %d", kind, label, position + 1)
+                if on_wait is not None:
+                    on_wait(position + 1, ticket)
+            time.sleep(POLL_SECONDS)
+    except BaseException:
+        drop(ticket)
+        raise
+
+
+def drop(ticket: Ticket | str) -> None:
+    ticket_id = ticket.id if isinstance(ticket, Ticket) else ticket
+    (queue_dir() / f"{ticket_id}.json").unlink(missing_ok=True)
+
+
 @contextlib.contextmanager
 def render_slot(kind: str, label: str, *, session: str | None = None, inherit: str | None = None,
                 on_wait: Callable[[int, Ticket], None] | None = None) -> Iterator[Ticket | None]:
@@ -168,33 +208,14 @@ def render_slot(kind: str, label: str, *, session: str | None = None, inherit: s
         finally:
             _LOCAL.depth -= 1
         return
-    folder = queue_dir()
-    current = tickets(folder)
+    current = tickets(queue_dir())
     if _held_by_parent(current) or holding(inherit, current):
         yield None
         return
-    ticket = Ticket(id=f"{time.time_ns()}-{os.getpid()}-{secrets.token_hex(3)}", kind=kind, label=label[:200],
-                    session=session or os.environ.get("EKS_HARNESS_SESSION") or os.environ.get("EKS_HARNESS_SID"),
-                    pid=os.getpid(), host=socket.gethostname(), queued_at=time.time())
-    _write(folder, ticket)
-    reported = None
+    ticket = claim(kind, label,
+                   session=session or os.environ.get("EKS_HARNESS_SESSION") or os.environ.get("EKS_HARNESS_SID"),
+                   on_wait=on_wait)
     try:
-        while True:
-            with _locked(folder):
-                items = tickets(folder)
-                running = [t for t in items if t.started_at is not None]
-                waiting = [t for t in items if t.started_at is None]
-                position = next((i for i, t in enumerate(waiting) if t.id == ticket.id), 0)
-                if len(running) + position < concurrency():
-                    ticket.started_at = time.time()
-                    _write(folder, ticket)
-                    break
-            if position != reported:
-                reported = position
-                _LOG.info("render queue: %s %s waits at position %d", kind, label, position + 1)
-                if on_wait is not None:
-                    on_wait(position + 1, ticket)
-            time.sleep(POLL_SECONDS)
         _LOCAL.depth = 1
         previous = os.environ.get(HOLDER_ENV)
         os.environ[HOLDER_ENV] = ticket.id
@@ -207,4 +228,4 @@ def render_slot(kind: str, label: str, *, session: str | None = None, inherit: s
             else:
                 os.environ[HOLDER_ENV] = previous
     finally:
-        (folder / f"{ticket.id}.json").unlink(missing_ok=True)
+        drop(ticket)

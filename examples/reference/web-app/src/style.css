@@ -1,0 +1,12 @@
+body { font-family: system-ui, sans-serif; margin: 0; background: #f6f5f1; color: #1c1c1c; }
+main { max-width: 760px; margin: 0 auto; padding: 24px; }
+header { display: flex; justify-content: space-between; align-items: baseline; }
+ul { list-style: none; padding: 0; }
+li { display: grid; grid-template-columns: 1fr 140px 110px 70px; gap: 8px; align-items: center; padding: 10px 12px; background: #fff; border-radius: 8px; margin-bottom: 8px; }
+.status.sent { color: #2e7d32; } .status.draft { color: #8d6e63; }
+section { background: #fff; padding: 16px; border-radius: 8px; display: grid; gap: 10px; }
+label { display: grid; gap: 4px; }
+input, select, button { font: inherit; padding: 6px 8px; }
+.error { color: #c62828; margin: 0; }
+.dialog { position: fixed; inset: 30% 25% auto; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #263238; color: #fff; padding: 10px 16px; border-radius: 8px; }
